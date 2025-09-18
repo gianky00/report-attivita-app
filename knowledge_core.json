@@ -1,0 +1,111 @@
+{
+    "valvola": {
+        "display_name": "Valvola",
+        "questions": [
+            {
+                "id": "tipo",
+                "text": "Di che tipo di valvola si tratta?",
+                "options": {
+                    "regolazione": "Di Regolazione",
+                    "intercetto": "Di Intercetto / Radice",
+                    "sicurezza": "Di Sicurezza (PSV)"
+                }
+            }
+        ],
+        "paths": {
+            "regolazione": {
+                "questions": [
+                    {
+                        "id": "sintomo",
+                        "text": "Qual era il sintomo principale?",
+                        "options": {
+                            "non_regolava": "Non regolava correttamente",
+                            "oscillava": "Oscillava intorno al setpoint",
+                            "perdeva": "Perdeva / Trafilava"
+                        }
+                    },
+                    {
+                        "id": "componente",
+                        "text": "Su quale componente principale sei intervenuto?",
+                        "options": {
+                            "posizionatore": "Posizionatore (I/P Converter)",
+                            "filtro_riduttore": "Filtro riduttore",
+                            "membrana": "Membrana attuatore",
+                            "taratura": "Nessuno, solo taratura"
+                        }
+                    }
+                ]
+            },
+            "intercetto": {
+                "questions": [
+                    {
+                        "id": "sintomo",
+                        "text": "Qual era il problema principale?",
+                        "options": {
+                            "bloccata": "Bloccata (non apriva/chiudeva)",
+                            "perde_premistoppa": "Perdeva dal premistoppa",
+                            "non_teneva": "Non teneva in chiusura"
+                        }
+                    },
+                    {
+                        "id": "azione",
+                        "text": "Quale azione hai eseguito?",
+                        "options": {
+                            "sbloccaggio": "Sbloccaggio / Manovra forzata",
+                            "sost_baderna": "Sostituzione baderna / premistoppa",
+                            "lappatura": "Lappatura sede"
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "pompa": {
+        "display_name": "Pompa",
+        "questions": [
+            {
+                "id": "tipo",
+                "text": "Di che tipo di pompa si tratta?",
+                "options": {
+                    "centrifuga": "Centrifuga",
+                    "volumetrica": "Volumetrica"
+                }
+            },
+            {
+                "id": "sintomo",
+                "text": "Qual era il sintomo principale?",
+                "options": {
+                    "rumorosa": "Rumorosità anomala",
+                    "perdita": "Perdita dalla tenuta",
+                    "bassa_prevalenza": "Bassa pressione / prevalenza"
+                }
+            }
+        ]
+    },
+    "strumento_misura": {
+        "display_name": "Strumento di Misura",
+        "questions": [
+            {
+                "id": "tipo_misura",
+                "text": "Che tipo di misura rileva?",
+                "options": {
+                    "livello": "Livello",
+                    "pressione": "Pressione",
+                    "temperatura": "Temperatura",
+                    "portata": "Portata"
+                }
+            },
+            {
+                "id": "azione_eseguita",
+                "text": "Quale azione principale hai eseguito?",
+                "options": {
+                    "taratura": "Taratura / Calibrazione",
+                    "sostituzione": "Sostituzione completa",
+                    "pulizia_impulsi": "Pulizia prese d'impulso",
+                    "riparazione": "Riparazione (es. elettronica)"
+                }
+            }
+        ],
+        "paths": {}
+    }
+}
