@@ -11,6 +11,7 @@ import requests
 import google.generativeai as genai
 import win32com.client as win32
 import pythoncom # Necessario per la gestione di Outlook in un thread
+import learning_module
 
 # --- CONFIGURAZIONE ---
 path_giornaliera_base = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
@@ -381,25 +382,38 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
     # La funzione 'handle_submit' è definita QUI DENTRO
     def handle_submit(report_text, stato, answers_dict=None):
         if report_text.strip():
+            # Logica per l'apprendimento
+            if answers_dict and 'equipment' in answers_dict and answers_dict['equipment'].startswith("Altro:"):
+                report_lines = {k: v for k, v in answers_dict.items() if k != 'equipment'}
+                learning_module.add_new_entry(
+                    pdl=task['pdl'],
+                    attivita=task['attivita'],
+                    report_lines=report_lines,
+                    tecnico=utente
+                )
+                st.info("💡 La tua segnalazione per 'Altro' è stata registrata e sarà usata per migliorare il sistema.")
+
             dati = {
-                'descrizione': f"PdL {task['pdl']} - {task['attivita']}", 
-                'report': report_text, 
+                'descrizione': f"PdL {task['pdl']} - {task['attivita']}",
+                'report': report_text,
                 'stato': stato,
-                'storico': task.get('storico', []) # <-- QUESTA È LA MODIFICA CHIAVE
+                'storico': task.get('storico', [])
             }
             row_idx = scrivi_o_aggiorna_risposta(client_google, dati, utente, data_riferimento, row_index=task.get('row_index'))
             if row_idx:
                 completed_task_data = {**task, 'report': report_text, 'stato': stato, 'row_index': row_idx, 'answers': answers_dict}
                 
-                completed_list = st.session_state[f"completed_tasks_{section_key}"]
+                completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
                 completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
                 completed_list.append(completed_task_data)
                 st.session_state[f"completed_tasks_{section_key}"] = completed_list
 
-                st.success("Report inviato con successo!"); 
-                del st.session_state.debriefing_task; 
-                if 'answers' in st.session_state: del st.session_state.answers
-                st.balloons(); st.rerun()
+                st.success("Report inviato con successo!")
+                del st.session_state.debriefing_task
+                if 'answers' in st.session_state:
+                    del st.session_state.answers
+                st.balloons()
+                st.rerun()
         else:
             st.warning("Il report non può essere vuoto.")
 
@@ -730,7 +744,62 @@ def main_app(nome_utente_autenticato, ruolo):
         if len(tabs) > 4 and ruolo == "Amministratore":
             with tabs[4]:
                 st.subheader("Dashboard Amministratore")
-                st.info("Sezione in costruzione.")
+
+                admin_tabs = st.tabs(["Revisione Conoscenze", "Altro"])
+
+                with admin_tabs[0]:
+                    st.markdown("### 🧠 Revisione Voci del Knowledge Core")
+                    unreviewed_entries = learning_module.load_unreviewed_knowledge()
+                    pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
+
+                    if not pending_entries:
+                        st.success("🎉 Nessuna nuova voce da revisionare!")
+                    else:
+                        st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
+
+                    for i, entry in enumerate(pending_entries):
+                        with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
+                            st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
+                            st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
+
+                            st.write("**Dettagli del report compilato:**")
+                            st.json(entry['dettagli_report'])
+
+                            st.markdown("---")
+                            st.markdown("**Azione di Integrazione**")
+
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
+                                new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
+                            with col2:
+                                if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
+                                    if new_equipment_key and new_display_name:
+                                        # Qui si potrebbe costruire una domanda iniziale basata sui dati
+                                        first_question = {
+                                            "id": "sintomo_iniziale",
+                                            "text": "Qual era il sintomo principale?",
+                                            "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}
+                                        }
+
+                                        details = {
+                                            "equipment_key": new_equipment_key,
+                                            "display_name": new_display_name,
+                                            "new_question": first_question
+                                        }
+                                        result = learning_module.integrate_knowledge(entry['id'], details)
+                                        if result.get("success"):
+                                            st.success(f"Voce '{entry['id']}' integrata con successo!")
+                                            st.cache_data.clear() # Pulisce la cache per ricaricare il KC
+                                            st.rerun()
+                                        else:
+                                            st.error(f"Errore integrazione: {result.get('error')}")
+                                    else:
+                                        st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
+
+                with admin_tabs[1]:
+                    st.info("Altre funzionalità amministrative future.")
+
 
 # --- GESTIONE LOGIN ---
 if 'authenticated_user' not in st.session_state:
