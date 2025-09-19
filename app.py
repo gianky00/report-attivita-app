@@ -949,10 +949,17 @@ cookie_manager = get_cookie_manager()
 
 # Check cookie for authentication
 if not st.session_state.authenticated_user:
-    user_cookie = cookie_manager.get('user_info')
-    if user_cookie and isinstance(user_cookie, dict):
-        st.session_state.authenticated_user = user_cookie.get('nome')
-        st.session_state.ruolo = user_cookie.get('ruolo')
+    # The library returns a string, so we need to parse it
+    user_cookie_str = cookie_manager.get('user_info')
+    if user_cookie_str:
+        try:
+            user_cookie = json.loads(user_cookie_str)
+            if isinstance(user_cookie, dict):
+                st.session_state.authenticated_user = user_cookie.get('nome')
+                st.session_state.ruolo = user_cookie.get('ruolo')
+        except json.JSONDecodeError:
+            # Handle case where cookie is not valid JSON
+            pass
 
 # Main application logic
 if st.session_state.authenticated_user:
@@ -974,8 +981,10 @@ else:
             if nome:
                 st.session_state.authenticated_user = nome
                 st.session_state.ruolo = ruolo
-                # Set cookie for persistent login (expires in 30 days)
-                cookie_manager.set('user_info', {'nome': nome, 'ruolo': ruolo}, expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
+                # Set cookie using dictionary-style assignment. The value must be a string.
+                user_info_str = json.dumps({'nome': nome, 'ruolo': ruolo})
+                cookie_manager['user_info'] = user_info_str
+                cookie_manager.save() # Explicitly save the cookie
                 st.rerun()
             else:
                 st.error("Credenziali non valide.")
