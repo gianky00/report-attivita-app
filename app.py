@@ -10,6 +10,7 @@ from collections import defaultdict
 import requests
 import google.generativeai as genai
 import win32com.client as win32
+import matplotlib.pyplot as plt
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
 
@@ -554,78 +555,6 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
         if 'answers' in st.session_state: del st.session_state.answers
         st.rerun()
 
-    st.title("✍️ Debriefing Guidato (IA)")
-    st.subheader(f"PdL `{task['pdl']}` - {task['attivita']}")
-
-    if 'answers' not in st.session_state:
-        st.session_state.answers = task.get('answers', {}) if is_editing else {}
-        if not st.session_state.answers:
-            for key in knowledge_core:
-                if key.replace("_", " ") in task['attivita'].lower():
-                    st.session_state.answers['equipment'] = knowledge_core[key]['display_name']; break
-    
-    answers = st.session_state.answers
-    
-    if 'equipment' not in answers:
-        st.markdown("#### 1. Attrezzatura gestita?")
-        cols = st.columns(len(knowledge_core))
-        for i, (key, value) in enumerate(knowledge_core.items()):
-            if cols[i].button(value['display_name'], key=f"eq_{key}"):
-                answers['equipment'] = value['display_name']; st.rerun()
-        other_input = st.text_input("Altra attrezzatura (specificare)", key="eq_other")
-        if st.button("Conferma Altro", key="conf_eq_other") and other_input:
-            answers['equipment'] = f"Altro: {other_input}"; st.rerun()
-        if st.button("Torna alla lista attività"):
-            del st.session_state.debriefing_task; st.rerun()
-        return
-
-    equipment_name = answers['equipment'].split(': ')[-1]
-    equipment_key = next((k for k, v in knowledge_core.items() if v['display_name'] == equipment_name), None)
-    
-    final_report_text = ""
-    
-    if not equipment_key:
-        st.info(f"Hai specificato un'attrezzatura non standard: **{equipment_name}**")
-        final_report_text = st.text_area("Descrivi l'intervento eseguito:", value=answers.get('report_text', ''), height=150, key="other_equip_report")
-    else:
-        equipment = knowledge_core[equipment_key]
-        path_key = answers.get('Tipo', 'root')
-        questions = equipment.get('questions', []) + equipment.get('paths', {}).get(path_key.lower().replace(" / ", "_").split(' ')[0], {}).get('questions', [])
-        
-        for i, q in enumerate(questions):
-            q_id = q['id']
-            if q_id.capitalize() not in answers:
-                st.markdown(f"#### {i + 2}. {q['text']}")
-                options = list(q['options'].values())
-                cols = st.columns(len(options))
-                for j, opt_val in enumerate(options):
-                    if cols[j].button(opt_val, key=f"{q_id}_{j}"):
-                        answers[q_id.capitalize()] = opt_val; st.rerun()
-                other_input = st.text_input("Altro (specificare e confermare)", key=f"{q_id}_other")
-                if st.button("Conferma Altro", key=f"conf_{q_id}") and other_input:
-                    answers[q_id.capitalize()] = f"Altro: {other_input}"; st.rerun()
-                if st.button("Torna alla lista attività"):
-                    del st.session_state.debriefing_task; st.rerun()
-                return
-        
-        st.success("Tutte le domande completate!")
-        final_report_lines = [f"- **{k}:** {v}" for k, v in answers.items() if k != 'equipment']
-        final_report_text = "\n".join(final_report_lines)
-        st.markdown("---"); st.subheader("Riepilogo Report Generato")
-        st.markdown(f"**Attrezzatura:** {answers['equipment']}\n{final_report_text}")
-
-    stato_options = ["TERMINATA", "SOSPESA", "IN CORSO", "NON SVOLTA"]
-    stato_index = stato_options.index(task.get('stato')) if task.get('stato') in stato_options else 0
-    stato = st.selectbox("Stato Finale", stato_options, index=stato_index)
-    
-    col1, col2 = st.columns(2)
-    if col1.button("✅ Invia Report", type="primary"):
-        full_report_str = f"Attrezzatura: {answers.get('equipment', 'N/D')}\n{final_report_text}"
-        handle_submit(full_report_str, stato, answers)
-    if col2.button("Annulla"):
-            del st.session_state.debriefing_task;
-        if 'answers' in st.session_state: del st.session_state.answers
-        st.rerun()
 
 def render_technician_detail_view():
     """Mostra la vista di dettaglio per un singolo tecnico."""
@@ -667,14 +596,43 @@ def render_technician_detail_view():
         st.warning("Nessun intervento trovato per questo tecnico nel periodo selezionato.")
         return
 
-    st.markdown("### Elenco Interventi")
-    st.dataframe(technician_interventions[['Data_Riferimento', 'PdL', 'Descrizione', 'Stato', 'Report']])
+    st.markdown("### Riepilogo Interventi")
+    # Formatta la colonna della data prima di visualizzarla
+    technician_interventions['Data'] = technician_interventions['Data_Riferimento_dt'].dt.strftime('%d/%m/%Y')
+    st.dataframe(technician_interventions[['Data', 'PdL', 'Descrizione', 'Stato', 'Report']])
 
-    st.markdown("### Andamento Attività nel Tempo")
-    # Crea un grafico a barre del numero di interventi per giorno
-    interventions_by_day = technician_interventions.groupby(technician_interventions['Data_Riferimento_dt'].dt.date).size().reset_index(name='conteggio')
-    interventions_by_day.rename(columns={'Data_Riferimento_dt': 'Data'}, inplace=True)
-    st.bar_chart(interventions_by_day.set_index('Data'))
+    # --- ANALISI AVANZATA ---
+    st.markdown("---")
+    st.markdown("### Analisi Avanzata")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### Ripartizione Esiti")
+        status_counts = technician_interventions['Stato'].value_counts()
+        if not status_counts.empty:
+            fig, ax = plt.subplots()
+            ax.pie(status_counts, labels=status_counts.index, autopct='%1.1f%%', startangle=90)
+            ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+            st.pyplot(fig)
+        else:
+            st.info("Nessun dato sullo stato disponibile per creare il grafico.")
+
+    with col2:
+        st.markdown("#### Andamento Attività nel Tempo")
+        interventions_by_day = technician_interventions.groupby(technician_interventions['Data_Riferimento_dt'].dt.date).size()
+        interventions_by_day.index.name = 'Data'
+        st.bar_chart(interventions_by_day)
+
+    # Sezione per i report sbrigativi
+    st.markdown("#### Analisi Qualitativa: Report Sbrigativi")
+    rushed_reports_df = technician_interventions[technician_interventions['Report'].str.len() < 20]
+    if not rushed_reports_df.empty:
+        st.warning(f"Trovati {len(rushed_reports_df)} report potenzialmente sbrigativi:")
+        for _, row in rushed_reports_df.iterrows():
+            st.info(f"**Data:** {row['Data']} - **PdL:** {row['PdL']} - **Report:** *'{row['Report']}'*")
+    else:
+        st.success("Nessun report sbrigativo trovato in questo periodo.")
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
@@ -866,37 +824,40 @@ def main_app(nome_utente_autenticato, ruolo):
                         end_datetime = pd.to_datetime(end_date)
 
                         if st.button("📊 Calcola Performance", type="primary"):
-                            # Calcola e visualizza le performance
+                            # Calcola le performance e le salva in sessione
                             performance_df = calculate_technician_performance(archivio_df_perf, start_datetime, end_datetime)
-                            st.session_state['performance_df'] = performance_df # Salva in sessione per dopo
+                            st.session_state['performance_df'] = performance_df
+                            st.session_state['performance_start_date'] = start_datetime
+                            st.session_state['performance_end_date'] = end_datetime
 
-                            if 'performance_df' in st.session_state and not st.session_state['performance_df'].empty:
-                                st.markdown("---")
-                                st.markdown("### Riepilogo Performance del Team")
+                        # Mostra i risultati se sono presenti in sessione
+                        if 'performance_df' in st.session_state and not st.session_state['performance_df'].empty:
+                            st.markdown("---")
+                            st.markdown("### Riepilogo Performance del Team")
 
-                                # Card riassuntive
-                                total_interventions_team = st.session_state['performance_df']['Totale Interventi'].sum()
-                                total_rushed_reports_team = st.session_state['performance_df']['Report Sbrigativi'].sum()
+                            # Card riassuntive
+                            total_interventions_team = st.session_state['performance_df']['Totale Interventi'].sum()
+                            total_rushed_reports_team = st.session_state['performance_df']['Report Sbrigativi'].sum()
 
-                                # Calcolo del tasso di completamento medio pesato
-                                total_completed_interventions = (st.session_state['performance_df']['Tasso Completamento (%)'].astype(float) / 100) * st.session_state['performance_df']['Totale Interventi']
-                                avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
+                            total_completed_interventions = (st.session_state['performance_df']['Tasso Completamento (%)'].astype(float) / 100) * st.session_state['performance_df']['Totale Interventi']
+                            avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
 
-                                c1, c2, c3 = st.columns(3)
-                                c1.metric("Totale Interventi", f"{total_interventions_team}")
-                                c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
-                                c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+                            c1, c2, c3 = st.columns(3)
+                            c1.metric("Totale Interventi", f"{total_interventions_team}")
+                            c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
+                            c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
 
-                                # Tabella delle performance
-                                st.markdown("#### Dettaglio Performance per Tecnico")
-                                for index, row in st.session_state['performance_df'].iterrows():
-                                    st.write(f"**Tecnico:** {index}")
-                                    st.dataframe(row.to_frame().T)
-                                    if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                        st.session_state['detail_technician'] = index
-                                        st.session_state['detail_start_date'] = start_datetime
-                                        st.session_state['detail_end_date'] = end_datetime
-                                        st.rerun()
+                            # Tabella delle performance
+                            st.markdown("#### Dettaglio Performance per Tecnico")
+                            for index, row in st.session_state['performance_df'].iterrows():
+                                st.write(f"**Tecnico:** {index}")
+                                st.dataframe(row.to_frame().T)
+                                if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
+                                    st.session_state['detail_technician'] = index
+                                    # Usa le date salvate in sessione per coerenza
+                                    st.session_state['detail_start_date'] = st.session_state['performance_start_date']
+                                    st.session_state['detail_end_date'] = st.session_state['performance_end_date']
+                                    st.rerun()
 
                 with admin_tabs[1]:
                     st.markdown("### 🧠 Revisione Voci del Knowledge Core")
