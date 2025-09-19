@@ -682,7 +682,7 @@ def render_notification_center(notifications_df, gestionale_data):
                             st.rerun()
                 st.divider()
 
-def render_turni_list(df_turni, gestionale, nome_utente_autenticato, key_suffix):
+def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_suffix):
     """
     Renderizza una lista di turni, con la logica per la prenotazione, cancellazione e sostituzione.
     """
@@ -718,6 +718,12 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, key_suffix)
                     st.write(f"- {p['Nome Cognome']} (*{p['RuoloOccupato']}*)")
 
             st.markdown("---")
+
+            if ruolo == "Amministratore":
+                if st.button("✏️ Modifica Turno", key=f"edit_{turno['ID_Turno']}_{key_suffix}"):
+                    st.session_state['editing_turno_id'] = turno['ID_Turno']
+                    st.rerun()
+                st.markdown("---")
 
             prenotazione_utente = prenotazioni_turno[prenotazioni_turno['Nome Cognome'] == nome_utente_autenticato]
 
@@ -836,15 +842,142 @@ def render_technician_detail_view():
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
+def render_edit_shift_form(gestionale_data):
+    turno_id = st.session_state['editing_turno_id']
+    df_turni = gestionale_data['turni']
+
+    try:
+        turno_data = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]
+    except (IndexError, KeyError):
+        st.error("Errore: Turno non trovato o dati corrotti.")
+        if 'editing_turno_id' in st.session_state:
+            del st.session_state['editing_turno_id']
+        st.rerun()
+
+    st.title(f"Modifica Turno: {turno_data.get('Descrizione', 'N/D')}")
+
+    with st.form("edit_shift_form"):
+        st.subheader("Dettagli Turno")
+
+        # Pre-fill form with existing data
+        tipi_turno = ["Assistenza", "Straordinario"]
+        try:
+            tipo_turno_index = tipi_turno.index(turno_data.get('Tipo', 'Assistenza'))
+        except ValueError:
+            tipo_turno_index = 0 # Default to Assistenza if value is invalid
+
+        tipo_turno = st.selectbox("Tipo Turno", tipi_turno, index=tipo_turno_index)
+
+        desc_turno = st.text_input("Descrizione Turno", value=turno_data.get('Descrizione', ''))
+
+        try:
+            default_date = pd.to_datetime(turno_data['Data']).date()
+        except (ValueError, TypeError):
+            default_date = datetime.date.today()
+        data_turno = st.date_input("Data Turno", value=default_date)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            try:
+                default_start_time = datetime.datetime.strptime(str(turno_data['OrarioInizio']), '%H:%M').time()
+            except (ValueError, TypeError):
+                default_start_time = datetime.time(8, 0)
+            ora_inizio = st.time_input("Orario Inizio", value=default_start_time)
+        with col2:
+            try:
+                default_end_time = datetime.datetime.strptime(str(turno_data['OrarioFine']), '%H:%M').time()
+            except (ValueError, TypeError):
+                default_end_time = datetime.time(17, 0)
+            ora_fine = st.time_input("Orario Fine", value=default_end_time)
+
+        col3, col4 = st.columns(2)
+        with col3:
+            posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1, value=int(turno_data.get('PostiTecnico', 0)))
+        with col4:
+            posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1, value=int(turno_data.get('PostiAiutante', 0)))
+
+        st.subheader("Gestione Personale")
+
+        df_prenotazioni = gestionale_data['prenotazioni']
+        df_contatti = gestionale_data['contatti']
+
+        personale_nel_turno = df_prenotazioni[df_prenotazioni['ID_Turno'] == turno_id]
+        tecnici_nel_turno = personale_nel_turno[personale_nel_turno['RuoloOccupato'] == 'Tecnico']['Nome Cognome'].tolist()
+        aiutanti_nel_turno = personale_nel_turno[personale_nel_turno['RuoloOccupato'] == 'Aiutante']['Nome Cognome'].tolist()
+
+        tutti_i_contatti = df_contatti['Nome Cognome'].tolist()
+
+        tecnici_selezionati = st.multiselect("Seleziona Tecnici Assegnati", options=tutti_i_contatti, default=tecnici_nel_turno, key="edit_tecnici")
+        aiutanti_selezionati = st.multiselect("Seleziona Aiutanti Assegnati", options=tutti_i_contatti, default=aiutanti_nel_turno, key="edit_aiutanti")
+
+        # Form submission buttons
+        col_submit, col_cancel = st.columns(2)
+        with col_submit:
+            submitted = st.form_submit_button("Salva Modifiche")
+        with col_cancel:
+            if st.form_submit_button("Annulla", type="secondary"):
+                del st.session_state['editing_turno_id']
+                st.rerun()
+
+    if submitted:
+        # --- LOGICA DI AGGIORNAMENTO ---
+
+        # 1. Aggiorna i dettagli del turno nel DataFrame dei turni
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Descrizione'] = desc_turno
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Data'] = pd.to_datetime(data_turno)
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'OrarioInizio'] = ora_inizio.strftime('%H:%M')
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'OrarioFine'] = ora_fine.strftime('%H:%M')
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'PostiTecnico'] = posti_tech
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'PostiAiutante'] = posti_aiut
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Tipo'] = tipo_turno
+
+        # 2. Calcola le modifiche al personale
+        personale_originale = set(personale_nel_turno['Nome Cognome'].tolist())
+        personale_nuovo = set(tecnici_selezionati + aiutanti_selezionati)
+
+        personale_rimosso = personale_originale - personale_nuovo
+
+        # 3. Aggiorna le prenotazioni
+        # Rimuovi tutte le vecchie prenotazioni per questo turno
+        gestionale_data['prenotazioni'] = gestionale_data['prenotazioni'][gestionale_data['prenotazioni']['ID_Turno'] != turno_id]
+
+        # Aggiungi le nuove prenotazioni aggiornate
+        nuove_prenotazioni_list = []
+        for utente in tecnici_selezionati:
+            nuove_prenotazioni_list.append({'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}_{utente.replace(' ', '')}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()})
+        for utente in aiutanti_selezionati:
+             nuove_prenotazioni_list.append({'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}_{utente.replace(' ', '')}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Aiutante', 'Timestamp': datetime.datetime.now()})
+
+        if nuove_prenotazioni_list:
+            df_nuove_prenotazioni = pd.DataFrame(nuove_prenotazioni_list)
+            gestionale_data['prenotazioni'] = pd.concat([gestionale_data['prenotazioni'], df_nuove_prenotazioni], ignore_index=True)
+
+        # 4. Invia notifiche per il personale rimosso
+        for utente in personale_rimosso:
+            messaggio = f"Sei stato rimosso dal turno '{desc_turno}' del {data_turno.strftime('%d/%m/%Y')} dall'amministratore."
+            crea_notifica(gestionale_data, utente, messaggio)
+
+        # 5. Salva le modifiche e termina la modalità di modifica
+        if salva_gestionale(gestionale_data):
+            st.success("Turno aggiornato con successo!")
+            st.toast("Le modifiche sono state salvate.")
+            del st.session_state['editing_turno_id']
+            st.rerun()
+        else:
+            st.error("Si è verificato un errore durante il salvataggio delle modifiche.")
+
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
 
-    if st.session_state.get('debriefing_task'):
+    gestionale_data = carica_gestionale()
+
+    if st.session_state.get('editing_turno_id'):
+        render_edit_shift_form(gestionale_data)
+    elif st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
             render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today(), autorizza_google())
     else:
-        gestionale_data = carica_gestionale()
         col1, col2 = st.columns([5, 1])
         with col1:
             st.title(f"Report Attività")
@@ -936,11 +1069,11 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     with assistenza_tab:
                         df_assistenza = df_turni_totale[df_turni_totale['Tipo'] == 'Assistenza']
-                        render_turni_list(df_assistenza, gestionale_data, nome_utente_autenticato, "assistenza")
+                        render_turni_list(df_assistenza, gestionale_data, nome_utente_autenticato, ruolo, "assistenza")
 
                     with straordinario_tab:
                         df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
-                        render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, "straordinario")
+                        render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
 
                 with sostituzioni_tab:
                     st.subheader("Richieste di Sostituzione")
