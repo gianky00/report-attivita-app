@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit_browser_storage as sbs
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
@@ -1001,21 +1000,10 @@ def main_app(nome_utente_autenticato, ruolo):
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
         with col2:
-            col_notif, col_logout = st.columns([1, 1])
-            with col_notif:
-                st.write("") # Spacer
-                st.write("") # Spacer
-                user_notifications = leggi_notifiche(gestionale_data, nome_utente_autenticato)
-                render_notification_center(user_notifications, gestionale_data)
-            with col_logout:
-                st.write("") # Spacer
-                st.write("") # Spacer
-                if st.button("Logout", key="logout_button"):
-                    sbs.delete_item("user_info", session_storage=False)
-                    # Clear all session state keys for a clean logout
-                    for key in st.session_state.keys():
-                        del st.session_state[key]
-                    st.rerun()
+            st.write("") # Spacer
+            st.write("") # Spacer
+            user_notifications = leggi_notifiche(gestionale_data, nome_utente_autenticato)
+            render_notification_center(user_notifications, gestionale_data)
 
         oggi = datetime.date.today()
         giorno_precedente = oggi - datetime.timedelta(days=1)
@@ -1303,39 +1291,24 @@ def main_app(nome_utente_autenticato, ruolo):
 
 
 # --- GESTIONE LOGIN ---
-
-# Initialize session state keys if they don't exist
 if 'authenticated_user' not in st.session_state:
     st.session_state.authenticated_user = None
-if 'ruolo' not in st.session_state:
     st.session_state.ruolo = None
-if 'debriefing_task' not in st.session_state:
     st.session_state.debriefing_task = None
+    st.session_state.editing_turno_id = None
+    st.session_state.sostituzione_turno_id = None
+    st.session_state.detail_technician = None
+    st.session_state.shift_form_submitted = False
 
-# Attempt to load user info from browser storage
-try:
-    user_info = sbs.get_item("user_info", session_storage=False)
-except Exception as e:
-    # This can happen on the first run if the component is not ready
-    user_info = None
 
-# If we found user_info in storage and the session is not yet authenticated,
-# update the session and rerun. This is the core of persistent login.
-if user_info and isinstance(user_info, dict) and not st.session_state.authenticated_user:
-    st.session_state.authenticated_user = user_info.get("nome")
-    st.session_state.ruolo = user_info.get("ruolo")
-    st.rerun()
-
-# Main application logic
 if st.session_state.authenticated_user:
     main_app(st.session_state.authenticated_user, st.session_state.ruolo)
 else:
-    # Login Page
     st.set_page_config(layout="centered", page_title="Login")
     st.title("Accesso Area Report")
     utente_url = st.query_params.get("user")
     if not utente_url:
-        st.error("ERRORE: Link non valido o sessione scaduta. Usa il link fornito.")
+        st.error("ERRORE: Link non valido.")
         st.stop()
     
     password_inserita = st.text_input(f"Password per {utente_url}", type="password")
@@ -1344,10 +1317,8 @@ else:
         if gestionale and 'contatti' in gestionale:
             nome, ruolo = verifica_password(utente_url, password_inserita, gestionale['contatti'])
             if nome:
-                # On successful login, set session state and local storage
                 st.session_state.authenticated_user = nome
                 st.session_state.ruolo = ruolo
-                sbs.set_item("user_info", {"nome": nome, "ruolo": ruolo}, session_storage=False)
                 st.rerun()
             else:
                 st.error("Credenziali non valide.")
