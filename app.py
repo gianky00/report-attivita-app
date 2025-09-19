@@ -89,6 +89,19 @@ def carica_gestionale():
         else:
             data['notifiche'] = pd.DataFrame(columns=required_notification_cols)
 
+        # Aggiunto per la bacheca turni
+        required_bacheca_cols = ['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']
+        if 'TurniInBacheca' in xls.sheet_names:
+            df_bacheca = pd.read_excel(xls, sheet_name='TurniInBacheca')
+            df_bacheca.columns = df_bacheca.columns.str.strip()
+            for col in required_bacheca_cols:
+                if col not in df_bacheca.columns:
+                    df_bacheca[col] = pd.NA
+            data['bacheca'] = df_bacheca
+        else:
+            data['bacheca'] = pd.DataFrame(columns=required_bacheca_cols)
+
+
         return data
     except Exception as e:
         st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
@@ -103,6 +116,8 @@ def salva_gestionale(data):
             data['sostituzioni'].to_excel(writer, sheet_name='SostituzioniPendenti', index=False)
             if 'notifiche' in data:
                 data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
+            if 'bacheca' in data:
+                data['bacheca'].to_excel(writer, sheet_name='TurniInBacheca', index=False)
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -369,6 +384,110 @@ def rispondi_sostituzione_logic(gestionale_data, id_richiesta, utente_che_rispon
 
     st.error("Errore: la prenotazione originale del richiedente non è stata trovata per lo scambio.")
     return False
+
+def pubblica_turno_in_bacheca_logic(gestionale_data, utente_richiedente, turno_id):
+    df_prenotazioni = gestionale_data['prenotazioni']
+
+    # Trova la prenotazione dell'utente per il turno specificato
+    idx_prenotazione = df_prenotazioni[(df_prenotazioni['Nome Cognome'] == utente_richiedente) & (df_prenotazioni['ID_Turno'] == turno_id)].index
+
+    if idx_prenotazione.empty:
+        st.error("Errore: Prenotazione non trovata per pubblicare in bacheca.")
+        return False
+
+    # Ottieni i dettagli della prenotazione prima di rimuoverla
+    prenotazione_rimossa = df_prenotazioni.loc[idx_prenotazione].iloc[0]
+    ruolo_originale = prenotazione_rimossa['RuoloOccupato']
+
+    # Rimuovi la vecchia prenotazione
+    gestionale_data['prenotazioni'].drop(idx_prenotazione, inplace=True)
+
+    # Aggiungi il turno alla bacheca
+    df_bacheca = gestionale_data['bacheca']
+    nuovo_id_bacheca = f"B_{int(datetime.datetime.now().timestamp())}"
+    nuova_voce_bacheca = pd.DataFrame([{
+        'ID_Bacheca': nuovo_id_bacheca,
+        'ID_Turno': turno_id,
+        'Tecnico_Originale': utente_richiedente,
+        'Ruolo_Originale': ruolo_originale,
+        'Timestamp_Pubblicazione': datetime.datetime.now(),
+        'Stato': 'Disponibile',
+        'Tecnico_Subentrante': None,
+        'Timestamp_Assegnazione': None
+    }])
+    gestionale_data['bacheca'] = pd.concat([df_bacheca, nuova_voce_bacheca], ignore_index=True)
+
+    # Invia notifica a tutti gli altri utenti
+    df_turni = gestionale_data['turni']
+    desc_turno = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]['Descrizione']
+    data_turno = pd.to_datetime(df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]['Data']).strftime('%d/%m')
+
+    messaggio = f"📢 Turno libero in bacheca: '{desc_turno}' del {data_turno} ({ruolo_originale})."
+
+    utenti_da_notificare = gestionale_data['contatti']['Nome Cognome'].tolist()
+    for utente in utenti_da_notificare:
+        if utente != utente_richiedente:
+            crea_notifica(gestionale_data, utente, messaggio)
+
+    st.success("Il tuo turno è stato pubblicato in bacheca con successo!")
+    st.toast("Tutti i colleghi sono stati notificati.")
+    return True
+
+
+def prendi_turno_da_bacheca_logic(gestionale_data, utente_subentrante, ruolo_utente, id_bacheca):
+    df_bacheca = gestionale_data['bacheca']
+
+    # Trova la voce in bacheca
+    idx_bacheca = df_bacheca[df_bacheca['ID_Bacheca'] == id_bacheca].index
+    if idx_bacheca.empty:
+        st.error("Questo turno non è più disponibile in bacheca.")
+        return False
+
+    voce_bacheca = df_bacheca.loc[idx_bacheca.iloc[0]]
+
+    if voce_bacheca['Stato'] != 'Disponibile':
+        st.warning("Qualcuno è stato più veloce! Questo turno è già stato assegnato.")
+        return False
+
+    ruolo_richiesto = voce_bacheca['Ruolo_Originale']
+
+    # Controlla l'idoneità del ruolo
+    if ruolo_richiesto == 'Tecnico' and ruolo_utente == 'Aiutante':
+        st.error(f"Non sei idoneo per questo turno. È richiesto il ruolo 'Tecnico'.")
+        return False
+
+    # Assegna il turno
+    df_bacheca.loc[idx_bacheca, 'Stato'] = 'Assegnato'
+    df_bacheca.loc[idx_bacheca, 'Tecnico_Subentrante'] = utente_subentrante
+    df_bacheca.loc[idx_bacheca, 'Timestamp_Assegnazione'] = datetime.datetime.now()
+
+    # Aggiungi la nuova prenotazione
+    df_prenotazioni = gestionale_data['prenotazioni']
+    nuova_prenotazione = pd.DataFrame([{
+        'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}",
+        'ID_Turno': voce_bacheca['ID_Turno'],
+        'Nome Cognome': utente_subentrante,
+        'RuoloOccupato': ruolo_richiesto, # L'utente prende il ruolo che si è liberato
+        'Timestamp': datetime.datetime.now()
+    }])
+    gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, nuova_prenotazione], ignore_index=True)
+
+    # Invia notifiche di conferma
+    tecnico_originale = voce_bacheca['Tecnico_Originale']
+    df_turni = gestionale_data['turni']
+    turno_info = df_turni[df_turni['ID_Turno'] == voce_bacheca['ID_Turno']].iloc[0]
+    desc_turno = turno_info['Descrizione']
+    data_turno = pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')
+
+    messaggio_subentrante = f"Hai preso con successo il turno '{desc_turno}' del {data_turno} dalla bacheca."
+    crea_notifica(gestionale_data, utente_subentrante, messaggio_subentrante)
+
+    messaggio_originale = f"Il tuo turno '{desc_turno}' del {data_turno} è stato preso da {utente_subentrante}."
+    crea_notifica(gestionale_data, tecnico_originale, messaggio_originale)
+
+    st.success(f"Ti sei prenotato con successo per il turno come {ruolo_richiesto}!")
+    st.balloons()
+    return True
 
 # --- FUNZIONI DI ANALISI IA ---
 @st.cache_data(show_spinner=False)
@@ -873,13 +992,17 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
 
             if not prenotazione_utente.empty:
                 st.success("Sei prenotato per questo turno.")
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}"):
+                    if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}", help="Rimuove la tua prenotazione dal turno."):
                         if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
                             salva_gestionale(gestionale); st.rerun()
                 with col2:
-                    if st.button("Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}"):
+                    if st.button("📢 Pubblica in Bacheca", key=f"pub_{turno['ID_Turno']}_{key_suffix}", help="Rilascia il tuo turno e rendilo disponibile a tutti in bacheca."):
+                        if pubblica_turno_in_bacheca_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
+                            salva_gestionale(gestionale); st.rerun()
+                with col3:
+                    if st.button("🔄 Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}", help="Chiedi a un collega specifico di sostituirti."):
                         st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
             else:
                 opzioni = []
@@ -1092,7 +1215,7 @@ def main_app(nome_utente_autenticato, ruolo):
             st.subheader("Gestione Turni Personale")
             # The 'gestionale_data' is already loaded at the top of main_app.
             # No need to load it again here.
-            turni_disponibili_tab, sostituzioni_tab = st.tabs(["📅 Turni Disponibili", "🔄 Gestione Sostituzioni"])
+            turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni Disponibili", "📢 Bacheca", "🔄 Gestione Sostituzioni"])
 
             with turni_disponibili_tab:
                 assistenza_tab, straordinario_tab = st.tabs(["Turni Assistenza", "Turni Straordinario"])
@@ -1106,6 +1229,37 @@ def main_app(nome_utente_autenticato, ruolo):
                 with straordinario_tab:
                     df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
                     render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
+
+            with bacheca_tab:
+                st.subheader("Turni Liberi in Bacheca")
+                df_bacheca = gestionale_data.get('bacheca', pd.DataFrame())
+                turni_disponibili_bacheca = df_bacheca[df_bacheca['Stato'] == 'Disponibile'].sort_values(by='Timestamp_Pubblicazione', ascending=False)
+
+                if turni_disponibili_bacheca.empty:
+                    st.info("Al momento non ci sono turni liberi in bacheca.")
+                else:
+                    df_turni = gestionale_data['turni']
+                    for _, bacheca_entry in turni_disponibili_bacheca.iterrows():
+                        try:
+                            turno_details = df_turni[df_turni['ID_Turno'] == bacheca_entry['ID_Turno']].iloc[0]
+                            with st.container(border=True):
+                                st.markdown(f"**{turno_details['Descrizione']}** ({bacheca_entry['Ruolo_Originale']})")
+                                st.caption(f"Data: {pd.to_datetime(turno_details['Data']).strftime('%d/%m/%Y')} | Orario: {turno_details['OrarioInizio']} - {turno_details['OrarioFine']}")
+                                st.write(f"Pubblicato da: {bacheca_entry['Tecnico_Originale']} il {pd.to_datetime(bacheca_entry['Timestamp_Pubblicazione']).strftime('%d/%m %H:%M')}")
+
+                                ruolo_richiesto = bacheca_entry['Ruolo_Originale']
+                                is_eligible = not (ruolo_richiesto == 'Tecnico' and ruolo == 'Aiutante')
+
+                                if is_eligible:
+                                    if st.button("Prendi questo turno", key=f"take_{bacheca_entry['ID_Bacheca']}"):
+                                        if prendi_turno_da_bacheca_logic(gestionale_data, nome_utente_autenticato, ruolo, bacheca_entry['ID_Bacheca']):
+                                            salva_gestionale(gestionale_data)
+                                            st.rerun()
+                                else:
+                                    st.info("Non hai il ruolo richiesto per questo turno.")
+                        except IndexError:
+                            st.warning(f"Dettagli non trovati per il turno ID {bacheca_entry['ID_Turno']}. Potrebbe essere stato rimosso.")
+
 
             with sostituzioni_tab:
                 st.subheader("Richieste di Sostituzione")
