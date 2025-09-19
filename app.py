@@ -13,6 +13,8 @@ import win32com.client as win32
 import matplotlib.pyplot as plt
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
+import ui_components
+import offline_manager
 
 # --- CONFIGURAZIONE ---
 path_giornaliera_base = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
@@ -425,15 +427,22 @@ def disegna_sezione_attivita(lista_attivita, section_key):
                         st.session_state.report_mode = 'manual'
                         st.rerun()
 
-def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google):
+def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google, online_status):
     task = st.session_state.debriefing_task
     section_key = task['section_key']
     is_editing = 'row_index' in task
 
     # La funzione 'handle_submit' è definita QUI DENTRO
     def handle_submit(report_text, stato, answers_dict=None):
-        if report_text.strip():
-            # Logica per l'apprendimento
+        if not report_text.strip():
+            st.warning("Il report non può essere vuoto.")
+            return
+
+        # This dictionary represents the final state of the task, whether online or offline
+        task_to_save = {**task, 'report': report_text, 'stato': stato, 'answers': answers_dict}
+
+        if online_status == 'online':
+            # Logica per l'apprendimento (solo online)
             if answers_dict and 'equipment' in answers_dict and answers_dict['equipment'].startswith("Altro:"):
                 report_lines = {k: v for k, v in answers_dict.items() if k != 'equipment'}
                 learning_module.add_new_entry(
@@ -444,29 +453,46 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
                 )
                 st.info("💡 La tua segnalazione per 'Altro' è stata registrata e sarà usata per migliorare il sistema.")
 
-            dati = {
+            dati_da_inviare = {
                 'descrizione': f"PdL {task['pdl']} - {task['attivita']}",
                 'report': report_text,
                 'stato': stato,
                 'storico': task.get('storico', [])
             }
-            row_idx = scrivi_o_aggiorna_risposta(client_google, dati, utente, data_riferimento, row_index=task.get('row_index'))
+            row_idx = scrivi_o_aggiorna_risposta(client_google, dati_da_inviare, utente, data_riferimento, row_index=task.get('row_index'))
+
             if row_idx:
-                completed_task_data = {**task, 'report': report_text, 'stato': stato, 'row_index': row_idx, 'answers': answers_dict}
+                completed_task_data = {**task_to_save, 'row_index': row_idx}
                 
+                # Update session state
                 completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
                 completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
                 completed_list.append(completed_task_data)
                 st.session_state[f"completed_tasks_{section_key}"] = completed_list
 
                 st.success("Report inviato con successo!")
-                del st.session_state.debriefing_task
-                if 'answers' in st.session_state:
-                    del st.session_state.answers
                 st.balloons()
-                st.rerun()
-        else:
-            st.warning("Il report non può essere vuoto.")
+            else:
+                st.error("Errore durante l'invio del report. Riprova.")
+                return # Stop execution if submission fails
+
+        else: # We are OFFLINE
+            offline_manager.save_report_offline(task_to_save)
+
+            # Update session state to reflect the change in the UI immediately
+            completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
+            completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
+            completed_list.append(task_to_save) # task_to_save doesn't have a row_index, which is correct
+            st.session_state[f"completed_tasks_{section_key}"] = completed_list
+
+            st.info("Sei offline. Il report è stato salvato e sarà inviato automaticamente appena tornerai online.")
+
+        # Common cleanup and rerun logic
+        del st.session_state.debriefing_task
+        if 'answers' in st.session_state:
+            del st.session_state.answers
+        st.rerun()
+
 
     # Il resto della funzione 'render_debriefing_ui' continua da qui...
     if st.session_state.report_mode == 'manual':
@@ -639,6 +665,66 @@ def render_technician_detail_view():
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
 
+def run_synchronization(nome_utente_autenticato):
+    """
+    Handles the synchronization of offline reports when the app comes back online.
+    """
+    with st.spinner("Sincronizzazione in corso..."):
+        offline_reports = offline_manager.get_offline_reports()
+
+        if not offline_reports:
+            st.toast("Nessun report offline da sincronizzare.", icon="✅")
+            return
+
+        today = datetime.date.today()
+        giorno_precedente = today - datetime.timedelta(days=1)
+        if today.weekday() == 0: giorno_precedente = today - datetime.timedelta(days=3)
+        elif today.weekday() == 6: giorno_precedente = today - datetime.timedelta(days=2)
+
+        date_map = {'today': today, 'yesterday': giorno_precedente}
+
+        valid_tasks = {}
+        for key, date_obj in date_map.items():
+            tasks = trova_attivita(nome_utente_autenticato, date_obj.day, date_obj.month, date_obj.year)
+            valid_tasks[key] = {(task['pdl'], task['attivita']) for task in tasks}
+
+        client_google = autorizza_google()
+        reports_sent = 0
+        reports_discarded = 0
+
+        for report in list(offline_reports): # Iterate over a copy
+            section_key = report.get('section_key')
+            report_pdl = report.get('pdl')
+            report_attivita = report.get('attivita')
+
+            if section_key in valid_tasks and (report_pdl, report_attivita) in valid_tasks[section_key]:
+                dati_da_inviare = {
+                    'descrizione': f"PdL {report_pdl} - {report_attivita}",
+                    'report': report.get('report', ''),
+                    'stato': report.get('stato', 'N/D'),
+                }
+                report_date = date_map.get(section_key, today)
+                row_index_to_update = report.get('row_index')
+
+                row_idx = scrivi_o_aggiorna_risposta(client_google, dati_da_inviare, nome_utente_autenticato, report_date, row_index=row_index_to_update)
+
+                if row_idx:
+                    offline_manager.remove_report_from_offline(report_pdl)
+                    reports_sent += 1
+                else:
+                    st.warning(f"Impossibile inviare il report per PdL {report_pdl}. Riproverò più tardi.")
+            else:
+                offline_manager.remove_report_from_offline(report_pdl)
+                reports_discarded += 1
+
+    if reports_sent > 0:
+        st.success(f"Sincronizzazione completata! {reports_sent} report sono stati inviati.")
+    if reports_discarded > 0:
+        st.warning(f"{reports_discarded} report offline sono stati scartati perché le attività non sono più valide.")
+
+    if reports_sent > 0 or reports_discarded > 0:
+        st.rerun()
+
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
@@ -646,9 +732,20 @@ def main_app(nome_utente_autenticato, ruolo):
     if st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
-            render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today(), autorizza_google())
+            # Note: We need the online_status here as well.
+            online_status = ui_components.render_status_indicator()
+            render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today(), autorizza_google(), online_status)
     else:
         st.title(f"Report Attività")
+        online_status = ui_components.render_status_indicator()
+
+        # --- Synchronization Logic ---
+        previous_status = st.session_state.get('online_status', 'online')
+        if online_status == 'online' and previous_status == 'offline':
+            run_synchronization(nome_utente_autenticato)
+        st.session_state['online_status'] = online_status
+        # --- End Synchronization Logic ---
+
         st.header(f"Ciao, {nome_utente_autenticato}!")
         st.caption(f"Ruolo: {ruolo}")
         
