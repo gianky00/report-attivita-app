@@ -45,7 +45,18 @@ def leggi_dati_da_google(client):
     print(f"\nLeggo i dati dal foglio '{NOME_FOGLIO_RISPOSTE}'...")
     try:
         sheet = client.open(NOME_FOGLIO_RISPOSTE).sheet1
-        records = sheet.get_all_records()
+        all_values = sheet.get_all_values()
+        if len(all_values) < 2:
+            print("🟡 Il foglio non contiene dati.")
+            return None
+
+        headers = all_values[0]
+        records = []
+        for i, row in enumerate(all_values[1:]):
+            record = dict(zip(headers, row))
+            record['GSheet_Row_Index'] = i + 2
+            records.append(record)
+
         df = pd.DataFrame(records)
         if df.empty: return None
         print(f"✅ Letti {len(df)} record.")
@@ -61,7 +72,7 @@ def carica_database_esistente(percorso_completo):
             return pd.read_excel(percorso_completo)
         except Exception as e:
             print(f"⚠️ Errore nel caricamento del database: {e}. Creo un nuovo database...")
-    return pd.DataFrame(columns=['PdL', 'Descrizione', 'Stato', 'Tecnico', 'Report', 'Data_Compilazione', 'Data_Riferimento'])
+    return pd.DataFrame(columns=['PdL', 'Descrizione', 'Stato', 'Tecnico', 'Report', 'Data_Compilazione', 'Data_Riferimento', 'GSheet_Row_Index'])
 
 def processa_dati(df_grezzo):
     print("\nProcesso i dati grezzi riga per riga...")
@@ -99,7 +110,8 @@ def processa_dati(df_grezzo):
             'PdL': pdl, 'Descrizione': descrizione_pulita, 'Stato': riga[COLONNA_STATO],
             'Tecnico': riga[COLONNA_UTENTE], 'Report': riga[COLONNA_REPORT],
             'Data_Compilazione': riga[COLONNA_TIMESTAMP],
-            'Data_Riferimento': data_riferimento
+            'Data_Riferimento': data_riferimento,
+            'GSheet_Row_Index': riga['GSheet_Row_Index']
         }
         lista_attivita_pulite.append(nuova_riga)
         
