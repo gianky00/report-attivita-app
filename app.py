@@ -65,50 +65,50 @@ def carica_gestionale():
     with EXCEL_LOCK:
         try:
             xls = pd.ExcelFile(PATH_GESTIONALE)
-        data = {
-            'contatti': pd.read_excel(xls, sheet_name='Contatti'),
-            'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
-            'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
-            'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
-        }
+            data = {
+                'contatti': pd.read_excel(xls, sheet_name='Contatti'),
+                'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
+                'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
+                'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
+            }
 
-        # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
-        if 'Tipo' not in data['turni'].columns:
-            data['turni']['Tipo'] = 'Assistenza'
-        data['turni']['Tipo'].fillna('Assistenza', inplace=True)
+            # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
+            if 'Tipo' not in data['turni'].columns:
+                data['turni']['Tipo'] = 'Assistenza'
+            data['turni']['Tipo'].fillna('Assistenza', inplace=True)
 
-        required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
+            required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
 
-        if 'Notifiche' in xls.sheet_names:
-            df = pd.read_excel(xls, sheet_name='Notifiche')
-            # Sanitize column names to remove leading/trailing whitespace
-            df.columns = df.columns.str.strip()
+            if 'Notifiche' in xls.sheet_names:
+                df = pd.read_excel(xls, sheet_name='Notifiche')
+                # Sanitize column names to remove leading/trailing whitespace
+                df.columns = df.columns.str.strip()
 
-            # Check for missing columns and add them if necessary
-            for col in required_notification_cols:
-                if col not in df.columns:
-                    df[col] = pd.NA
-            data['notifiche'] = df
-        else:
-            data['notifiche'] = pd.DataFrame(columns=required_notification_cols)
+                # Check for missing columns and add them if necessary
+                for col in required_notification_cols:
+                    if col not in df.columns:
+                        df[col] = pd.NA
+                data['notifiche'] = df
+            else:
+                data['notifiche'] = pd.DataFrame(columns=required_notification_cols)
 
-        # Aggiunto per la bacheca turni
-        required_bacheca_cols = ['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']
-        if 'TurniInBacheca' in xls.sheet_names:
-            df_bacheca = pd.read_excel(xls, sheet_name='TurniInBacheca')
-            df_bacheca.columns = df_bacheca.columns.str.strip()
-            for col in required_bacheca_cols:
-                if col not in df_bacheca.columns:
-                    df_bacheca[col] = pd.NA
-            data['bacheca'] = df_bacheca
-        else:
-            data['bacheca'] = pd.DataFrame(columns=required_bacheca_cols)
+            # Aggiunto per la bacheca turni
+            required_bacheca_cols = ['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']
+            if 'TurniInBacheca' in xls.sheet_names:
+                df_bacheca = pd.read_excel(xls, sheet_name='TurniInBacheca')
+                df_bacheca.columns = df_bacheca.columns.str.strip()
+                for col in required_bacheca_cols:
+                    if col not in df_bacheca.columns:
+                        df_bacheca[col] = pd.NA
+                data['bacheca'] = df_bacheca
+            else:
+                data['bacheca'] = pd.DataFrame(columns=required_bacheca_cols)
 
 
-        return data
-    except Exception as e:
-        st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
-        return None
+            return data
+        except Exception as e:
+            st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
+            return None
 
 def _save_to_excel_backend(data):
     """Questa funzione è sicura per essere eseguita in un thread separato."""
@@ -1198,6 +1198,77 @@ def render_technician_detail_view():
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
 
+def render_guida_tab():
+    st.title("❓ Guida & Istruzioni")
+    st.write("Benvenuto nella guida utente! Qui troverai le istruzioni per usare al meglio l'applicazione.")
+    st.info("Usa i menù a tendina qui sotto per esplorare le diverse sezioni e funzionalità dell'app.")
+
+    # Sezione Attività
+    with st.expander("📝 Le Tue Attività (Oggi e Giorno Precedente)", expanded=True):
+        st.subheader("Compilare un Report")
+        st.markdown("""
+        In questa sezione vedi le attività che ti sono state assegnate per la giornata.
+        - Per ogni attività, vedrai il codice **PdL** e una breve descrizione.
+        - Se lavori in **Team**, vedrai i nomi dei tuoi colleghi, il loro ruolo e gli orari di lavoro per quell'attività.
+        - Puoi scegliere tra due modalità di compilazione:
+            - **✍️ Compila Report Guidato (IA)**: Una procedura a domande che ti aiuta a scrivere un report completo e standardizzato.
+            - **📝 Compila Report Manuale**: Un campo di testo libero dove puoi scrivere il report come preferisci.
+        - **Importante per gli Aiutanti**: Se fai parte di un team con più persone, solo un **Tecnico** può compilare il report. Potrai vedere l'attività e il report una volta compilato, ma non potrai inviarlo. Se lavori da solo, puoi compilare il report normalmente.
+        """)
+        st.subheader("Vedere lo Storico")
+        st.markdown("Sotto ogni attività, puoi espandere la sezione 'Mostra cronologia interventi' per vedere tutti i report passati relativi a quel PdL. Questo è utile per capire i problemi ricorrenti.")
+
+    # Sezione Gestione Turni
+    with st.expander("📅 Gestione Turni"):
+        st.subheader("Prenotare un Turno")
+        st.markdown("""
+        Nella sotto-sezione "Turni Disponibili", puoi vedere tutti i turni di assistenza o straordinario a cui puoi partecipare.
+        1.  Trova un turno con posti liberi (indicato da ✅).
+        2.  Seleziona il ruolo che vuoi occupare ("Tecnico" o "Aiutante").
+        3.  Clicca su **"Conferma Prenotazione"**.
+        """)
+
+        st.subheader("Cedere un Turno: Le 3 Opzioni")
+        st.markdown("Se sei già prenotato per un turno e non puoi più partecipare, hai 3 opzioni:")
+        st.markdown("""
+        1.  **Cancella Prenotazione**: L'opzione più semplice. La tua prenotazione viene rimossa e il posto torna disponibile per tutti. Usala se non hai bisogno di essere sostituito.
+        2.  **📢 Pubblica in Bacheca**: Questa è l'opzione migliore se vuoi che qualcun altro prenda il tuo posto. Il tuo turno viene messo in una "bacheca" pubblica visibile a tutti. Il primo collega idoneo che lo accetta prenderà automaticamente il tuo posto e tu riceverai una notifica di conferma.
+        3.  **🔄 Chiedi Sostituzione**: Usala se vuoi chiedere a un collega specifico di sostituirti. Seleziona il nome del collega e invia la richiesta. Riceverai una notifica se accetta o rifiuta.
+        """)
+
+        st.subheader("La Bacheca dei Turni Liberi (📢 Bacheca)")
+        st.markdown("""
+        Questa sotto-sezione è una bacheca pubblica dove trovi i turni che i tuoi colleghi hanno messo a disposizione.
+        - Se vedi un turno che ti interessa e hai il ruolo richiesto, puoi cliccare su **"Prendi questo turno"**.
+        - La regola è: **"primo che arriva, primo servito"**. Se sarai il più veloce, il turno sarà tuo!
+        - Il sistema aggiornerà automaticamente il calendario e invierà le notifiche di conferma.
+        """)
+
+    # Sezione Notifiche
+    with st.expander("🔔 Notifiche"):
+        st.subheader("Come Funzionano")
+        st.markdown("""
+        L'icona della campanella in alto a destra ti mostra se hai nuove notifiche. Un numero rosso indica i messaggi non letti.
+        - Clicca sulla campanella per aprire il centro notifiche.
+        - Riceverai notifiche per:
+            - Nuovi turni disponibili.
+            - Richieste di sostituzione ricevute.
+            - Risposte alle tue richieste di sostituzione.
+            - Conferme quando un tuo turno in bacheca viene preso da un collega.
+        - Clicca sul pulsante **"letto"** per marcare una notifica come letta e farla sparire dal conteggio.
+        """)
+
+    # Sezione Archivio
+    with st.expander("🗂️ Ricerca nell'Archivio"):
+        st.subheader("Trovare Vecchi Report")
+        st.markdown("Usa questa sezione per cercare tra tutti i report compilati in passato. Puoi filtrare per:")
+        st.markdown("""
+        - **PdL**: Per vedere tutti gli interventi su un punto specifico.
+        - **Descrizione**: Per cercare parole chiave nell'attività.
+        - **Tecnico**: Per vedere tutti i report compilati da uno o più colleghi.
+        """)
+
+
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
@@ -1248,7 +1319,7 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Gestione Turni"]
+        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Gestione Turni", "❓ Guida & Istruzioni"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
         
@@ -1376,8 +1447,11 @@ def main_app(nome_utente_autenticato, ruolo):
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
         
-        if len(tabs) > 4 and ruolo == "Amministratore":
-            with tabs[4]:
+        with tabs[4]:
+            render_guida_tab()
+
+        if len(tabs) > 5 and ruolo == "Amministratore":
+            with tabs[5]:
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
