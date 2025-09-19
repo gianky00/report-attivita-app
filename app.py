@@ -13,8 +13,6 @@ import win32com.client as win32
 import matplotlib.pyplot as plt
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
-import ui_components
-import offline_manager
 
 # --- CONFIGURAZIONE ---
 path_giornaliera_base = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
@@ -60,12 +58,17 @@ def carica_knowledge_core():
 def carica_gestionale():
     try:
         xls = pd.ExcelFile(PATH_GESTIONALE)
-        return {
+        data = {
             'contatti': pd.read_excel(xls, sheet_name='Contatti'),
             'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
             'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
             'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
         }
+        if 'Notifiche' in xls.sheet_names:
+            data['notifiche'] = pd.read_excel(xls, sheet_name='Notifiche')
+        else:
+            data['notifiche'] = pd.DataFrame(columns=['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione'])
+        return data
     except Exception as e:
         st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
         return None
@@ -77,17 +80,56 @@ def salva_gestionale(data):
             data['turni'].to_excel(writer, sheet_name='TurniDisponibili', index=False)
             data['prenotazioni'].to_excel(writer, sheet_name='Prenotazioni', index=False)
             data['sostituzioni'].to_excel(writer, sheet_name='SostituzioniPendenti', index=False)
+            if 'notifiche' in data:
+                data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
         st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Errore durante il salvataggio del file gestionale: {e}")
         return False
 
+def leggi_notifiche(gestionale_data, utente):
+    if 'notifiche' not in gestionale_data or gestionale_data['notifiche'].empty:
+        return pd.DataFrame()
+    df_notifiche = gestionale_data['notifiche']
+    user_notifiche = df_notifiche[df_notifiche['Destinatario'] == utente].copy()
+    user_notifiche['Timestamp'] = pd.to_datetime(user_notifiche['Timestamp'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+    return user_notifiche.sort_values(by='Timestamp', ascending=False)
+
+def crea_notifica(gestionale_data, destinatario, messaggio, link_azione=""):
+    if 'notifiche' not in gestionale_data:
+        gestionale_data['notifiche'] = pd.DataFrame(columns=['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione'])
+
+    new_id = f"N_{int(datetime.datetime.now().timestamp())}"
+    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+    nuova_notifica = pd.DataFrame([{
+        'ID_Notifica': new_id,
+        'Timestamp': timestamp,
+        'Destinatario': destinatario,
+        'Messaggio': messaggio,
+        'Stato': 'non letta',
+        'Link_Azione': link_azione
+    }])
+
+    gestionale_data['notifiche'] = pd.concat([gestionale_data['notifiche'], nuova_notifica], ignore_index=True)
+    return True
+
+def segna_notifica_letta(gestionale_data, id_notifica):
+    if 'notifiche' not in gestionale_data or gestionale_data['notifiche'].empty:
+        return False
+
+    df_notifiche = gestionale_data['notifiche']
+    idx = df_notifiche[df_notifiche['ID_Notifica'] == id_notifica].index
+
+    if not idx.empty:
+        df_notifiche.loc[idx, 'Stato'] = 'letta'
+        return True
+    return False
+
 def carica_archivio_completo():
     try:
         df = pd.read_excel(path_storico_db)
-        if 'GSheet_Row_Index' not in df.columns:
-            df['GSheet_Row_Index'] = pd.NA
         df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce')
         df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
         df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
@@ -255,23 +297,50 @@ def cancella_prenotazione_logic(gestionale_data, utente, turno_id):
 def richiedi_sostituzione_logic(gestionale_data, richiedente, ricevente, turno_id):
     nuova_richiesta = pd.DataFrame([{'ID_Richiesta': f"S_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Richiedente': richiedente, 'Ricevente': ricevente, 'Timestamp': datetime.datetime.now()}])
     gestionale_data['sostituzioni'] = pd.concat([gestionale_data['sostituzioni'], nuova_richiesta], ignore_index=True)
-    st.success(f"Richiesta di sostituzione inviata a {ricevente}."); return True
+
+    messaggio = f"Hai una nuova richiesta di sostituzione da {richiedente} per il turno {turno_id}."
+    crea_notifica(gestionale_data, ricevente, messaggio)
+
+    st.success(f"Richiesta di sostituzione inviata a {ricevente}.")
+    st.toast("Richiesta inviata! Il collega riceverà una notifica.")
+    return True
 
 def rispondi_sostituzione_logic(gestionale_data, id_richiesta, utente_che_risponde, accettata):
     sostituzioni_df = gestionale_data['sostituzioni']
     richiesta_index = sostituzioni_df[sostituzioni_df['ID_Richiesta'] == id_richiesta].index
-    if richiesta_index.empty: st.error("Richiesta non più valida."); return False
+    if richiesta_index.empty:
+        st.error("Richiesta non più valida.")
+        return False
+
     richiesta = sostituzioni_df.loc[richiesta_index[0]]
+    richiedente = richiesta['Richiedente']
+    turno_id = richiesta['ID_Turno']
+
+    if accettata:
+        messaggio = f"{utente_che_risponde} ha ACCETTATO la tua richiesta di cambio per il turno {turno_id}."
+    else:
+        messaggio = f"{utente_che_risponde} ha RIFIUTATO la tua richiesta di cambio per il turno {turno_id}."
+    crea_notifica(gestionale_data, richiedente, messaggio)
+
     gestionale_data['sostituzioni'].drop(richiesta_index, inplace=True)
-    if not accettata: st.info("Hai rifiutato la richiesta."); return True
     
+    if not accettata:
+        st.info("Hai rifiutato la richiesta.")
+        st.toast("Risposta inviata. Il richiedente è stato notificato.")
+        return True
+
+    # Logic for accepted request
     prenotazioni_df = gestionale_data['prenotazioni']
-    richiedente, turno_id = richiesta['Richiedente'], richiesta['ID_Turno']
-    idx_accettante = prenotazioni_df[(prenotazioni_df['ID_Turno'] == turno_id) & (prenotazioni_df['Nome Cognome'] == utente_che_risponde)].index
-    if not idx_accettante.empty:
-        prenotazioni_df.loc[idx_accettante, 'Nome Cognome'] = richiedente
-        st.success("Sostituzione (subentro) effettuata con successo!"); return True
-    st.error("Errore: la tua prenotazione originale non è stata trovata per lo scambio."); return False
+    idx_richiedente_originale = prenotazioni_df[(prenotazioni_df['ID_Turno'] == turno_id) & (prenotazioni_df['Nome Cognome'] == richiedente)].index
+
+    if not idx_richiedente_originale.empty:
+        prenotazioni_df.loc[idx_richiedente_originale, 'Nome Cognome'] = utente_che_risponde
+        st.success("Sostituzione (subentro) effettuata con successo!")
+        st.toast("Sostituzione effettuata! Il richiedente è stato notificato.")
+        return True
+
+    st.error("Errore: la prenotazione originale del richiedente non è stata trovata per lo scambio.")
+    return False
 
 # --- FUNZIONI DI ANALISI IA ---
 @st.cache_data(show_spinner=False)
@@ -427,22 +496,15 @@ def disegna_sezione_attivita(lista_attivita, section_key):
                         st.session_state.report_mode = 'manual'
                         st.rerun()
 
-def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google, online_status):
+def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google):
     task = st.session_state.debriefing_task
     section_key = task['section_key']
     is_editing = 'row_index' in task
 
     # La funzione 'handle_submit' è definita QUI DENTRO
     def handle_submit(report_text, stato, answers_dict=None):
-        if not report_text.strip():
-            st.warning("Il report non può essere vuoto.")
-            return
-
-        # This dictionary represents the final state of the task, whether online or offline
-        task_to_save = {**task, 'report': report_text, 'stato': stato, 'answers': answers_dict}
-
-        if online_status == 'online':
-            # Logica per l'apprendimento (solo online)
+        if report_text.strip():
+            # Logica per l'apprendimento
             if answers_dict and 'equipment' in answers_dict and answers_dict['equipment'].startswith("Altro:"):
                 report_lines = {k: v for k, v in answers_dict.items() if k != 'equipment'}
                 learning_module.add_new_entry(
@@ -453,46 +515,29 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
                 )
                 st.info("💡 La tua segnalazione per 'Altro' è stata registrata e sarà usata per migliorare il sistema.")
 
-            dati_da_inviare = {
+            dati = {
                 'descrizione': f"PdL {task['pdl']} - {task['attivita']}",
                 'report': report_text,
                 'stato': stato,
                 'storico': task.get('storico', [])
             }
-            row_idx = scrivi_o_aggiorna_risposta(client_google, dati_da_inviare, utente, data_riferimento, row_index=task.get('row_index'))
-
+            row_idx = scrivi_o_aggiorna_risposta(client_google, dati, utente, data_riferimento, row_index=task.get('row_index'))
             if row_idx:
-                completed_task_data = {**task_to_save, 'row_index': row_idx}
+                completed_task_data = {**task, 'report': report_text, 'stato': stato, 'row_index': row_idx, 'answers': answers_dict}
                 
-                # Update session state
                 completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
                 completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
                 completed_list.append(completed_task_data)
                 st.session_state[f"completed_tasks_{section_key}"] = completed_list
 
                 st.success("Report inviato con successo!")
+                del st.session_state.debriefing_task
+                if 'answers' in st.session_state:
+                    del st.session_state.answers
                 st.balloons()
-            else:
-                st.error("Errore durante l'invio del report. Riprova.")
-                return # Stop execution if submission fails
-
-        else: # We are OFFLINE
-            offline_manager.save_report_offline(task_to_save)
-
-            # Update session state to reflect the change in the UI immediately
-            completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
-            completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
-            completed_list.append(task_to_save) # task_to_save doesn't have a row_index, which is correct
-            st.session_state[f"completed_tasks_{section_key}"] = completed_list
-
-            st.info("Sei offline. Il report è stato salvato e sarà inviato automaticamente appena tornerai online.")
-
-        # Common cleanup and rerun logic
-        del st.session_state.debriefing_task
-        if 'answers' in st.session_state:
-            del st.session_state.answers
-        st.rerun()
-
+                st.rerun()
+        else:
+            st.warning("Il report non può essere vuoto.")
 
     # Il resto della funzione 'render_debriefing_ui' continua da qui...
     if st.session_state.report_mode == 'manual':
@@ -584,6 +629,35 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
         st.rerun()
 
 
+def render_notification_center(notifications_df, gestionale_data):
+    unread_count = len(notifications_df[notifications_df['Stato'] == 'non letta'])
+    icon_label = f"🔔 {unread_count}" if unread_count > 0 else "🔔"
+
+    with st.popover(icon_label):
+        st.subheader("Notifiche")
+        if notifications_df.empty:
+            st.write("Nessuna notifica.")
+        else:
+            for _, notifica in notifications_df.iterrows():
+                notifica_id = notifica['ID_Notifica']
+                is_unread = notifica['Stato'] == 'non letta'
+
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    if is_unread:
+                        st.markdown(f"**{notifica['Messaggio']}**")
+                    else:
+                        st.markdown(f"<span style='color: grey;'>{notifica['Messaggio']}</span>", unsafe_allow_html=True)
+                    st.caption(notifica['Timestamp'].strftime('%d/%m/%Y %H:%M'))
+
+                with col2:
+                    if is_unread:
+                        if st.button(" letto", key=f"read_{notifica_id}", help="Segna come letto"):
+                            segna_notifica_letta(gestionale_data, notifica_id)
+                            salva_gestionale(gestionale_data)
+                            st.rerun()
+                st.divider()
+
 def render_technician_detail_view():
     """Mostra la vista di dettaglio per un singolo tecnico."""
     tecnico = st.session_state['detail_technician']
@@ -665,66 +739,6 @@ def render_technician_detail_view():
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
 
-def run_synchronization(nome_utente_autenticato):
-    """
-    Handles the synchronization of offline reports when the app comes back online.
-    """
-    with st.spinner("Sincronizzazione in corso..."):
-        offline_reports = offline_manager.get_offline_reports()
-
-        if not offline_reports:
-            st.toast("Nessun report offline da sincronizzare.", icon="✅")
-            return
-
-        today = datetime.date.today()
-        giorno_precedente = today - datetime.timedelta(days=1)
-        if today.weekday() == 0: giorno_precedente = today - datetime.timedelta(days=3)
-        elif today.weekday() == 6: giorno_precedente = today - datetime.timedelta(days=2)
-
-        date_map = {'today': today, 'yesterday': giorno_precedente}
-
-        valid_tasks = {}
-        for key, date_obj in date_map.items():
-            tasks = trova_attivita(nome_utente_autenticato, date_obj.day, date_obj.month, date_obj.year)
-            valid_tasks[key] = {(task['pdl'], task['attivita']) for task in tasks}
-
-        client_google = autorizza_google()
-        reports_sent = 0
-        reports_discarded = 0
-
-        for report in list(offline_reports): # Iterate over a copy
-            section_key = report.get('section_key')
-            report_pdl = report.get('pdl')
-            report_attivita = report.get('attivita')
-
-            if section_key in valid_tasks and (report_pdl, report_attivita) in valid_tasks[section_key]:
-                dati_da_inviare = {
-                    'descrizione': f"PdL {report_pdl} - {report_attivita}",
-                    'report': report.get('report', ''),
-                    'stato': report.get('stato', 'N/D'),
-                }
-                report_date = date_map.get(section_key, today)
-                row_index_to_update = report.get('row_index')
-
-                row_idx = scrivi_o_aggiorna_risposta(client_google, dati_da_inviare, nome_utente_autenticato, report_date, row_index=row_index_to_update)
-
-                if row_idx:
-                    offline_manager.remove_report_from_offline(report_pdl)
-                    reports_sent += 1
-                else:
-                    st.warning(f"Impossibile inviare il report per PdL {report_pdl}. Riproverò più tardi.")
-            else:
-                offline_manager.remove_report_from_offline(report_pdl)
-                reports_discarded += 1
-
-    if reports_sent > 0:
-        st.success(f"Sincronizzazione completata! {reports_sent} report sono stati inviati.")
-    if reports_discarded > 0:
-        st.warning(f"{reports_discarded} report offline sono stati scartati perché le attività non sono più valide.")
-
-    if reports_sent > 0 or reports_discarded > 0:
-        st.rerun()
-
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
@@ -732,23 +746,20 @@ def main_app(nome_utente_autenticato, ruolo):
     if st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
-            # Note: We need the online_status here as well.
-            online_status = ui_components.render_status_indicator()
-            render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today(), autorizza_google(), online_status)
+            render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today(), autorizza_google())
     else:
-        st.title(f"Report Attività")
-        online_status = ui_components.render_status_indicator()
+        gestionale_data = carica_gestionale()
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.title(f"Report Attività")
+            st.header(f"Ciao, {nome_utente_autenticato}!")
+            st.caption(f"Ruolo: {ruolo}")
+        with col2:
+            st.write("") # Spacer
+            st.write("") # Spacer
+            user_notifications = leggi_notifiche(gestionale_data, nome_utente_autenticato)
+            render_notification_center(user_notifications, gestionale_data)
 
-        # --- Synchronization Logic ---
-        previous_status = st.session_state.get('online_status', 'online')
-        if online_status == 'online' and previous_status == 'offline':
-            run_synchronization(nome_utente_autenticato)
-        st.session_state['online_status'] = online_status
-        # --- End Synchronization Logic ---
-
-        st.header(f"Ciao, {nome_utente_autenticato}!")
-        st.caption(f"Ruolo: {ruolo}")
-        
         oggi = datetime.date.today()
         giorno_precedente = oggi - datetime.timedelta(days=1)
         if oggi.weekday() == 0: giorno_precedente = oggi - datetime.timedelta(days=3)
@@ -764,8 +775,6 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        archivio_df = carica_archivio_completo()
-
         lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Gestione Turni"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
@@ -775,59 +784,23 @@ def main_app(nome_utente_autenticato, ruolo):
         with tabs[0]:
             st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
             lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year)
-
-            if f"completed_tasks_today" not in st.session_state:
-                report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == oggi)]
-
-                attivita_inviate_da_archivio = []
-                if not report_compilati.empty:
-                    pdl_to_task_map = {task['pdl']: task for task in lista_attivita}
-                    for _, report_row in report_compilati.iterrows():
-                        pdl = report_row['PdL']
-                        original_task = pdl_to_task_map.get(pdl)
-                        task_data = {
-                            'pdl': pdl,
-                            'attivita': original_task['attivita'] if original_task else report_row['Descrizione'],
-                            'storico': original_task['storico'] if original_task else [],
-                            'report': report_row['Report'],
-                            'stato': report_row['Stato'],
-                            'row_index': report_row['GSheet_Row_Index'],
-                            'section_key': 'today'
-                        }
-                        attivita_inviate_da_archivio.append(task_data)
-                st.session_state["completed_tasks_today"] = attivita_inviate_da_archivio
-
             disegna_sezione_attivita(lista_attivita, "today")
         
         with tabs[1]:
             st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-            lista_attivita_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year)
-
-            if f"completed_tasks_yesterday" not in st.session_state:
+            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year)
+            archivio_df = carica_archivio_completo()
+            pdl_compilati_ieri = set()
+            if not archivio_df.empty:
                 report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
-
-                attivita_inviate_da_archivio = []
-                if not report_compilati.empty:
-                    pdl_to_task_map = {task['pdl']: task for task in lista_attivita_ieri}
-                    for _, report_row in report_compilati.iterrows():
-                        pdl = report_row['PdL']
-                        original_task = pdl_to_task_map.get(pdl)
-                        task_data = {
-                            'pdl': pdl,
-                            'attivita': original_task['attivita'] if original_task else report_row['Descrizione'],
-                            'storico': original_task['storico'] if original_task else [],
-                            'report': report_row['Report'],
-                            'stato': report_row['Stato'],
-                            'row_index': report_row['GSheet_Row_Index'],
-                            'section_key': 'yesterday'
-                        }
-                        attivita_inviate_da_archivio.append(task_data)
-                st.session_state["completed_tasks_yesterday"] = attivita_inviate_da_archivio
+                pdl_compilati_ieri = set(report_compilati['PdL'])
             
-            disegna_sezione_attivita(lista_attivita_ieri, "yesterday")
+            attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
+            disegna_sezione_attivita(attivita_da_recuperare, "yesterday")
 
         with tabs[2]:
             st.subheader("Ricerca nell'Archivio")
+            archivio_df = carica_archivio_completo()
             if archivio_df.empty:
                 st.warning("L'archivio è vuoto o non caricabile.")
             else:
@@ -863,21 +836,37 @@ def main_app(nome_utente_autenticato, ruolo):
                 with turni_tab:
                     df_turni = gestionale['turni'].copy()
                     df_turni.dropna(subset=['ID_Turno'], inplace=True)
+
+                    mostra_solo_disponibili = st.checkbox("Mostra solo turni con posti disponibili", key="filter_turni")
+                    st.divider()
+
                     for index, turno in df_turni.iterrows():
+                        prenotazioni_turno = gestionale['prenotazioni'][gestionale['prenotazioni']['ID_Turno'] == turno['ID_Turno']]
+                        posti_tecnico = int(turno['PostiTecnico'])
+                        posti_aiutante = int(turno['PostiAiutante'])
+                        tecnici_prenotati = len(prenotazioni_turno[prenotazioni_turno['RuoloOccupato'] == 'Tecnico'])
+                        aiutanti_prenotati = len(prenotazioni_turno[prenotazioni_turno['RuoloOccupato'] == 'Aiutante'])
+
+                        is_available = (tecnici_prenotati < posti_tecnico) or (aiutanti_prenotati < posti_aiutante)
+                        if mostra_solo_disponibili and not is_available:
+                            continue
+
                         with st.container(border=True):
                             st.markdown(f"**{turno['Descrizione']}**")
                             st.caption(f"{pd.to_datetime(turno['Data']).strftime('%d/%m/%Y')} | {turno['OrarioInizio']} - {turno['OrarioFine']}")
-                            prenotazioni_turno = gestionale['prenotazioni'][gestionale['prenotazioni']['ID_Turno'] == turno['ID_Turno']]
+
+                            tech_icon = "✅" if tecnici_prenotati < posti_tecnico else "❌"
+                            aiut_icon = "✅" if aiutanti_prenotati < posti_aiutante else "❌"
+                            st.markdown(f"**Posti:** `Tecnici: {tecnici_prenotati}/{posti_tecnico}` {tech_icon} | `Aiutanti: {aiutanti_prenotati}/{posti_aiutante}` {aiut_icon}")
+
                             if not prenotazioni_turno.empty:
                                 st.markdown("**Personale Prenotato:**")
                                 for _, p in prenotazioni_turno.iterrows():
                                     st.write(f"- {p['Nome Cognome']} (*{p['RuoloOccupato']}*)")
+
                             st.markdown("---")
+
                             prenotazione_utente = prenotazioni_turno[prenotazioni_turno['Nome Cognome'] == nome_utente_autenticato]
-                            posti_tecnico = int(turno['PostiTecnico'])
-                            posti_aiutante = int(turno['PostiAiutante'])
-                            tecnici_prenotati = len(prenotazioni_turno[prenotazioni_turno['RuoloOccupato'] == 'Tecnico'])
-                            aiutanti_prenotati = len(prenotazioni_turno[prenotazioni_turno['RuoloOccupato'] == 'Aiutante'])
                             
                             if not prenotazione_utente.empty:
                                 st.success("Sei prenotato per questo turno.")
