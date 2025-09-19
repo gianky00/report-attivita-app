@@ -1292,11 +1292,12 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     with admin_tabs[3]: # Gestione Personale
                         with st.form("new_user_form", clear_on_submit=True):
-                            st.subheader("Crea Nuovo Utente Placeholder")
+                            st.subheader("Crea Nuovo Utente")
                             c1, c2 = st.columns(2)
                             new_nome = c1.text_input("Nome")
                             new_cognome = c2.text_input("Cognome")
-                            new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante"])
+                            new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante", "Amministratore"])
+                            new_password = st.text_input("Password (lasciare vuoto per creare un utente placeholder)", type="password")
 
                             submitted_new_user = st.form_submit_button("Crea Utente")
 
@@ -1306,15 +1307,96 @@ def main_app(nome_utente_autenticato, ruolo):
                                     if nome_completo in gestionale_data['contatti']['Nome Cognome'].tolist():
                                         st.error(f"Errore: L'utente '{nome_completo}' esiste già.")
                                     else:
-                                        nuovo_utente = pd.DataFrame([{'Nome Cognome': nome_completo, 'Ruolo': new_ruolo, 'Password': None, 'Link Attività': ''}])
+                                        password_value = new_password if new_password else None
+                                        # Crea il link di login per il nuovo utente
+                                        cognome_url = new_cognome.strip().replace(" ", "")
+                                        base_url = st.get_option('server.baseUrlPath')
+                                        login_link = f"http://localhost:8501/{base_url}?user={cognome_url}" if base_url else f"http://localhost:8501?user={cognome_url}"
+
+                                        nuovo_utente = pd.DataFrame([{
+                                            'Nome Cognome': nome_completo,
+                                            'Ruolo': new_ruolo,
+                                            'Password': password_value,
+                                            'Link Attività': login_link,
+                                            'Stato': 'Attivo'
+                                        }])
                                         gestionale_data['contatti'] = pd.concat([gestionale_data['contatti'], nuovo_utente], ignore_index=True)
+
                                         if salva_gestionale(gestionale_data):
-                                            st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
-                                            st.rerun()
+                                            st.success(f"Utente '{nome_completo}' creato con successo!")
+                                            st.info(f"Link di login per {nome_completo}:")
+                                            st.code(login_link)
+                                            # Non usare st.rerun() qui per permettere all'admin di copiare il link
                                         else:
                                             st.error("Errore durante il salvataggio del nuovo utente.")
                                 else:
                                     st.warning("Nome e Cognome sono obbligatori.")
+
+                        st.divider()
+                        st.subheader("Elenco Utenti")
+
+                        df_contatti = gestionale_data['contatti']
+                        if 'Stato' not in df_contatti.columns:
+                            df_contatti['Stato'] = 'Attivo'
+                        df_contatti['Stato'].fillna('Attivo', inplace=True)
+
+                        for index, user in df_contatti.iterrows():
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            with col1:
+                                st.write(f"**{user['Nome Cognome']}** ({user['Ruolo']}) - Stato: *{user['Stato']}*")
+
+                            with col2:
+                                if user['Stato'] == 'Attivo':
+                                    if st.button("Disattiva", key=f"deactivate_{index}", type="secondary"):
+                                        df_contatti.loc[index, 'Stato'] = 'Disattivato'
+                                        df_contatti.loc[index, 'Password'] = None # Rimuove la password per sicurezza
+                                        if salva_gestionale(gestionale_data):
+                                            st.success(f"Utente {user['Nome Cognome']} disattivato.")
+                                            st.rerun()
+                                else:
+                                    if st.button("Attiva", key=f"activate_{index}", type="primary"):
+                                        df_contatti.loc[index, 'Stato'] = 'Attivo'
+                                        # Nota: l'utente dovrà avere una nuova password impostata manualmente
+                                        if salva_gestionale(gestionale_data):
+                                            st.success(f"Utente {user['Nome Cognome']} attivato. Ricorda di impostare una nuova password.")
+                                            st.rerun()
+
+                            with col3:
+                                if st.button("Modifica", key=f"edit_{index}"):
+                                    st.session_state.editing_user_index = index
+
+                            if st.session_state.get('editing_user_index') == index:
+                                with st.expander("Modifica Utente", expanded=True):
+                                    with st.form(f"edit_user_form_{index}"):
+                                        st.subheader(f"Modifica: {user['Nome Cognome']}")
+
+                                        new_name = st.text_input("Nome Cognome", value=user['Nome Cognome'], key=f"name_{index}")
+                                        new_role = st.selectbox("Ruolo", ["Tecnico", "Aiutante", "Amministratore"], index=["Tecnico", "Aiutante", "Amministratore"].index(user['Ruolo']), key=f"role_{index}")
+
+                                        st.markdown("---")
+                                        st.subheader("Reset Password")
+                                        new_password = st.text_input("Nuova Password (lasciare vuoto per non modificare)", type="password", key=f"pwd_{index}")
+
+                                        col_save, col_cancel = st.columns(2)
+                                        with col_save:
+                                            if st.form_submit_button("Salva Modifiche"):
+                                                df_contatti.loc[index, 'Nome Cognome'] = new_name
+                                                df_contatti.loc[index, 'Ruolo'] = new_role
+                                                if new_password:
+                                                    df_contatti.loc[index, 'Password'] = new_password
+
+                                                if salva_gestionale(gestionale_data):
+                                                    st.success("Utente aggiornato con successo!")
+                                                    del st.session_state.editing_user_index
+                                                    st.rerun()
+                                                else:
+                                                    st.error("Errore durante l'aggiornamento dell'utente.")
+                                        with col_cancel:
+                                            if st.form_submit_button("Annulla", type="secondary"):
+                                                del st.session_state.editing_user_index
+                                                st.rerun()
+
+                            st.markdown("---")
 
 
 # --- GESTIONE LOGIN ---
@@ -1331,17 +1413,11 @@ cookie_manager = get_cookie_manager()
 
 # Check cookie for authentication
 if not st.session_state.authenticated_user:
-    # The library returns a string, so we need to parse it
-    user_cookie_str = cookie_manager.get('user_info')
-    if user_cookie_str:
-        try:
-            user_cookie = json.loads(user_cookie_str)
-            if isinstance(user_cookie, dict):
-                st.session_state.authenticated_user = user_cookie.get('nome')
-                st.session_state.ruolo = user_cookie.get('ruolo')
-        except json.JSONDecodeError:
-            # Handle case where cookie is not valid JSON
-            pass
+    # The library should handle deserialization from JSON string automatically
+    user_cookie = cookie_manager.get('user_info')
+    if user_cookie and isinstance(user_cookie, dict):
+        st.session_state.authenticated_user = user_cookie.get('nome')
+        st.session_state.ruolo = user_cookie.get('ruolo')
 
 # Main application logic
 if st.session_state.authenticated_user:
@@ -1363,10 +1439,10 @@ else:
             if nome:
                 st.session_state.authenticated_user = nome
                 st.session_state.ruolo = ruolo
-                # Set cookie using dictionary-style assignment. The value must be a string.
-                user_info_str = json.dumps({'nome': nome, 'ruolo': ruolo})
-                cookie_manager['user_info'] = user_info_str
-                cookie_manager.save() # Explicitly save the cookie
+                # Set cookie. The library handles serialization. The cookie manager object
+                # must be updated directly.
+                cookies = get_cookie_manager()
+                cookies['user_info'] = {'nome': nome, 'ruolo': ruolo}
                 st.rerun()
             else:
                 st.error("Credenziali non valide.")
