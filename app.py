@@ -34,11 +34,9 @@ if GEMINI_API_KEY:
         st.error(f"Errore nella configurazione di Gemini: {e}")
 
 # --- FUNZIONI DI SUPPORTO E CARICAMENTO DATI ---
-@st.cache_resource
 def get_cookie_manager():
     return CookieManager()
 
-@st.cache_resource
 def autorizza_google():
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
@@ -951,7 +949,7 @@ cookie_manager = get_cookie_manager()
 
 # Check cookie for authentication
 if not st.session_state.authenticated_user:
-    user_cookie = cookie_manager.get(cookie='user_info')
+    user_cookie = cookie_manager.get('user_info')
     if user_cookie and isinstance(user_cookie, dict):
         st.session_state.authenticated_user = user_cookie.get('nome')
         st.session_state.ruolo = user_cookie.get('ruolo')
