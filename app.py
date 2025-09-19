@@ -291,6 +291,54 @@ CRONOLOGIA:
     except Exception as e:
         return {"error": f"Errore durante l'analisi IA: {str(e)}"}
 
+def calculate_technician_performance(archivio_df, start_date, end_date):
+    """Calcola le metriche di performance per i tecnici in un dato intervallo di tempo."""
+
+    # Converte le date in formato datetime di pandas, gestendo errori
+    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce')
+    # Estrae la data dalla colonna timestamp della compilazione
+    archivio_df['Data_Compilazione_dt'] = pd.to_datetime(archivio_df['Data_Compilazione'], errors='coerce').dt.date
+    archivio_df['Data_Compilazione_dt'] = pd.to_datetime(archivio_df['Data_Compilazione_dt']) # Riconverte a datetime64 per la sottrazione
+
+    # Filtra il DataFrame per l'intervallo di date selezionato (basato sulla data di riferimento dell'attività)
+    mask = (archivio_df['Data_Riferimento_dt'] >= start_date) & (archivio_df['Data_Riferimento_dt'] <= end_date)
+    df_filtered = archivio_df[mask].copy()
+
+    if df_filtered.empty:
+        return pd.DataFrame()
+
+    # Calcola il ritardo di compilazione in giorni
+    # Assicura che entrambe le colonne siano datetime valide prima di sottrarre
+    valid_dates = df_filtered.dropna(subset=['Data_Riferimento_dt', 'Data_Compilazione_dt'])
+    valid_dates['Ritardo_Compilazione'] = (valid_dates['Data_Compilazione_dt'] - valid_dates['Data_Riferimento_dt']).dt.days
+
+    # Raggruppa per tecnico
+    performance_data = {}
+    for tecnico, group in df_filtered.groupby('Tecnico'):
+        # Filtra anche il gruppo con date valide per il calcolo del ritardo
+        group_valid_dates = valid_dates[valid_dates['Tecnico'] == tecnico]
+
+        total_interventions = len(group)
+        completed_interventions = len(group[group['Stato'] == 'TERMINATA'])
+        completion_rate = (completed_interventions / total_interventions) * 100 if total_interventions > 0 else 0
+
+        # Definisce un report "sbrigativo" se ha meno di 20 caratteri
+        rushed_reports = len(group[group['Report'].str.len() < 20])
+
+        # Calcola il ritardo medio solo se ci sono dati validi
+        avg_delay = group_valid_dates['Ritardo_Compilazione'].mean() if not group_valid_dates.empty else 0
+
+        performance_data[tecnico] = {
+            "Totale Interventi": total_interventions,
+            "Tasso Completamento (%)": f"{completion_rate:.1f}",
+            "Ritardo Medio Compilazione (gg)": f"{avg_delay:.1f}",
+            "Report Sbrigativi": rushed_reports
+        }
+
+    performance_df = pd.DataFrame.from_dict(performance_data, orient='index')
+    return performance_df
+
+
 # --- FUNZIONI INTERFACCIA UTENTE ---
 def visualizza_storico_organizzato(storico_list, pdl):
     if storico_list:
@@ -575,15 +623,67 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
         full_report_str = f"Attrezzatura: {answers.get('equipment', 'N/D')}\n{final_report_text}"
         handle_submit(full_report_str, stato, answers)
     if col2.button("Annulla"):
-        del st.session_state.debriefing_task; 
+            del st.session_state.debriefing_task;
         if 'answers' in st.session_state: del st.session_state.answers
         st.rerun()
+
+def render_technician_detail_view():
+    """Mostra la vista di dettaglio per un singolo tecnico."""
+    tecnico = st.session_state['detail_technician']
+    start_date = st.session_state['detail_start_date']
+    end_date = st.session_state['detail_end_date']
+
+    st.title(f"Dettaglio Performance: {tecnico}")
+    st.markdown(f"Periodo: **{start_date.strftime('%d/%m/%Y')}** - **{end_date.strftime('%d/%m/%Y')}**")
+
+    # Recupera le metriche già calcolate dalla sessione
+    if 'performance_df' in st.session_state:
+        technician_metrics = st.session_state.performance_df.loc[tecnico]
+
+        # Mostra le metriche specifiche per il tecnico
+        st.markdown("#### Riepilogo Metriche")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Totale Interventi", technician_metrics['Totale Interventi'])
+        c2.metric("Tasso Completamento", f"{technician_metrics['Tasso Completamento (%)']}%")
+        c3.metric("Ritardo Medio (gg)", technician_metrics['Ritardo Medio Compilazione (gg)'])
+        c4.metric("Report Sbrigativi", technician_metrics['Report Sbrigativi'])
+        st.markdown("---")
+
+    if st.button("⬅️ Torna alla Dashboard"):
+        del st.session_state['detail_technician']
+        del st.session_state['detail_start_date']
+        del st.session_state['detail_end_date']
+        st.rerun()
+
+    archivio_df = carica_archivio_completo()
+    mask = (
+        (archivio_df['Tecnico'] == tecnico) &
+        (archivio_df['Data_Riferimento_dt'] >= start_date) &
+        (archivio_df['Data_Riferimento_dt'] <= end_date)
+    )
+    technician_interventions = archivio_df[mask]
+
+    if technician_interventions.empty:
+        st.warning("Nessun intervento trovato per questo tecnico nel periodo selezionato.")
+        return
+
+    st.markdown("### Elenco Interventi")
+    st.dataframe(technician_interventions[['Data_Riferimento', 'PdL', 'Descrizione', 'Stato', 'Report']])
+
+    st.markdown("### Andamento Attività nel Tempo")
+    # Crea un grafico a barre del numero di interventi per giorno
+    interventions_by_day = technician_interventions.groupby(technician_interventions['Data_Riferimento_dt'].dt.date).size().reset_index(name='conteggio')
+    interventions_by_day.rename(columns={'Data_Riferimento_dt': 'Data'}, inplace=True)
+    st.bar_chart(interventions_by_day.set_index('Data'))
+
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
-    
-    if st.session_state.get('debriefing_task'):
+
+    if st.session_state.get('detail_technician'):
+        render_technician_detail_view()
+    elif st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
             render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today(), autorizza_google())
@@ -743,11 +843,62 @@ def main_app(nome_utente_autenticato, ruolo):
         
         if len(tabs) > 4 and ruolo == "Amministratore":
             with tabs[4]:
-                st.subheader("Dashboard Amministratore")
+                st.subheader("Dashboard di Controllo Performance")
 
-                admin_tabs = st.tabs(["Revisione Conoscenze", "Altro"])
+                admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze"])
 
                 with admin_tabs[0]:
+                    archivio_df_perf = carica_archivio_completo()
+                    if archivio_df_perf.empty:
+                        st.warning("Archivio storico non disponibile o vuoto. Impossibile calcolare le performance.")
+                    else:
+                        st.markdown("#### Seleziona Intervallo Temporale")
+
+                        # Selettori per l'intervallo di date
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            start_date = st.date_input("Data di Inizio", datetime.date.today() - datetime.timedelta(days=30))
+                        with col2:
+                            end_date = st.date_input("Data di Fine", datetime.date.today())
+
+                        # Conversione in datetime per il confronto
+                        start_datetime = pd.to_datetime(start_date)
+                        end_datetime = pd.to_datetime(end_date)
+
+                        if st.button("📊 Calcola Performance", type="primary"):
+                            # Calcola e visualizza le performance
+                            performance_df = calculate_technician_performance(archivio_df_perf, start_datetime, end_datetime)
+                            st.session_state['performance_df'] = performance_df # Salva in sessione per dopo
+
+                            if 'performance_df' in st.session_state and not st.session_state['performance_df'].empty:
+                                st.markdown("---")
+                                st.markdown("### Riepilogo Performance del Team")
+
+                                # Card riassuntive
+                                total_interventions_team = st.session_state['performance_df']['Totale Interventi'].sum()
+                                total_rushed_reports_team = st.session_state['performance_df']['Report Sbrigativi'].sum()
+
+                                # Calcolo del tasso di completamento medio pesato
+                                total_completed_interventions = (st.session_state['performance_df']['Tasso Completamento (%)'].astype(float) / 100) * st.session_state['performance_df']['Totale Interventi']
+                                avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
+
+                                c1, c2, c3 = st.columns(3)
+                                c1.metric("Totale Interventi", f"{total_interventions_team}")
+                                c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
+                                c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+
+                                # Tabella delle performance
+                                st.markdown("#### Dettaglio Performance per Tecnico")
+                                for index, row in st.session_state['performance_df'].iterrows():
+                                    st.write(f"**Tecnico:** {index}")
+                                    st.dataframe(row.to_frame().T)
+                                    if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
+                                        st.session_state['detail_technician'] = index
+                                        st.session_state['detail_start_date'] = start_datetime
+                                        st.session_state['detail_end_date'] = end_datetime
+                                        st.rerun()
+
+                with admin_tabs[1]:
                     st.markdown("### 🧠 Revisione Voci del Knowledge Core")
                     unreviewed_entries = learning_module.load_unreviewed_knowledge()
                     pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
@@ -775,13 +926,11 @@ def main_app(nome_utente_autenticato, ruolo):
                             with col2:
                                 if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
                                     if new_equipment_key and new_display_name:
-                                        # Qui si potrebbe costruire una domanda iniziale basata sui dati
                                         first_question = {
                                             "id": "sintomo_iniziale",
                                             "text": "Qual era il sintomo principale?",
                                             "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}
                                         }
-
                                         details = {
                                             "equipment_key": new_equipment_key,
                                             "display_name": new_display_name,
@@ -790,15 +939,12 @@ def main_app(nome_utente_autenticato, ruolo):
                                         result = learning_module.integrate_knowledge(entry['id'], details)
                                         if result.get("success"):
                                             st.success(f"Voce '{entry['id']}' integrata con successo!")
-                                            st.cache_data.clear() # Pulisce la cache per ricaricare il KC
+                                            st.cache_data.clear()
                                             st.rerun()
                                         else:
                                             st.error(f"Errore integrazione: {result.get('error')}")
                                     else:
                                         st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
-
-                with admin_tabs[1]:
-                    st.info("Altre funzionalità amministrative future.")
 
 
 # --- GESTIONE LOGIN ---
