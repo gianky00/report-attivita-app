@@ -64,10 +64,19 @@ def carica_gestionale():
             'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
             'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
         }
+
+        required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
+
         if 'Notifiche' in xls.sheet_names:
-            data['notifiche'] = pd.read_excel(xls, sheet_name='Notifiche')
+            df = pd.read_excel(xls, sheet_name='Notifiche')
+            # Check for missing columns and add them if necessary
+            for col in required_notification_cols:
+                if col not in df.columns:
+                    df[col] = pd.NA
+            data['notifiche'] = df
         else:
-            data['notifiche'] = pd.DataFrame(columns=['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione'])
+            data['notifiche'] = pd.DataFrame(columns=required_notification_cols)
+
         return data
     except Exception as e:
         st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
