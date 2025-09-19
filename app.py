@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit_browser_storage as sbs
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
@@ -117,7 +118,7 @@ def leggi_notifiche(gestionale_data, utente):
     if user_notifiche.empty:
         return user_notifiche
 
-    user_notifiche['Timestamp'] = pd.to_datetime(user_notifiche['Timestamp'], format='%d/%m/%Y %H:%M:%S', errors='coerce')
+    user_notifiche['Timestamp'] = pd.to_datetime(user_notifiche['Timestamp'], errors='coerce')
     return user_notifiche.sort_values(by='Timestamp', ascending=False)
 
 def crea_notifica(gestionale_data, destinatario, messaggio, link_azione=""):
@@ -1000,10 +1001,21 @@ def main_app(nome_utente_autenticato, ruolo):
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
         with col2:
-            st.write("") # Spacer
-            st.write("") # Spacer
-            user_notifications = leggi_notifiche(gestionale_data, nome_utente_autenticato)
-            render_notification_center(user_notifications, gestionale_data)
+            col_notif, col_logout = st.columns([1, 1])
+            with col_notif:
+                st.write("") # Spacer
+                st.write("") # Spacer
+                user_notifications = leggi_notifiche(gestionale_data, nome_utente_autenticato)
+                render_notification_center(user_notifications, gestionale_data)
+            with col_logout:
+                st.write("") # Spacer
+                st.write("") # Spacer
+                if st.button("Logout", key="logout_button"):
+                    sbs.delete_item("user_info", session_storage=False)
+                    # Clear all session state keys for a clean logout
+                    for key in st.session_state.keys():
+                        del st.session_state[key]
+                    st.rerun()
 
         oggi = datetime.date.today()
         giorno_precedente = oggi - datetime.timedelta(days=1)
@@ -1125,105 +1137,9 @@ def main_app(nome_utente_autenticato, ruolo):
                     render_technician_detail_view()
                 else:
                     # Altrimenti, mostra le tab principali della dashboard
-                    # Logic to control expander state
-                    expand_form = True
-                    if st.session_state.get('shift_form_submitted', False):
-                        expand_form = False
-                        st.session_state.shift_form_submitted = False # Reset for next interaction
+                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze", "➕ Crea Nuovo Turno", "👤 Gestione Personale"])
 
-                    with st.expander("➕ Crea Nuovo Turno", expanded=expand_form):
-                        with st.form("new_shift_form", clear_on_submit=True):
-                            st.subheader("Dettagli Nuovo Turno")
-                            tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
-                            desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
-                            data_turno = st.date_input("Data Turno")
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
-                            with col2:
-                                ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
-                            col3, col4 = st.columns(2)
-                            with col3:
-                                posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
-                            with col4:
-                                posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
-
-                            submitted = st.form_submit_button("Crea Turno")
-                            if submitted:
-                                if not desc_turno:
-                                    st.error("La descrizione non può essere vuota.")
-                                else:
-                                    new_id = f"T_{int(datetime.datetime.now().timestamp())}"
-                                    nuovo_turno = pd.DataFrame([{
-                                        'ID_Turno': new_id,
-                                        'Descrizione': desc_turno,
-                                        'Data': pd.to_datetime(data_turno),
-                                        'OrarioInizio': ora_inizio.strftime('%H:%M'),
-                                        'OrarioFine': ora_fine.strftime('%H:%M'),
-                                        'PostiTecnico': posti_tech,
-                                        'PostiAiutante': posti_aiut,
-                                        'Tipo': tipo_turno
-                                    }])
-                                    gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
-
-                                    # Logica di notifica per nuovo turno
-                                    df_contatti = gestionale_data.get('contatti')
-                                    if df_contatti is not None:
-                                        utenti_da_notificare = df_contatti['Nome Cognome'].tolist()
-                                        messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
-                                        for utente in utenti_da_notificare:
-                                            crea_notifica(gestionale_data, utente, messaggio)
-
-                                    if salva_gestionale(gestionale_data):
-                                        st.session_state.shift_form_submitted = True
-                                        st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
-                                        st.toast("Tutti i tecnici sono stati notificati!")
-                                        st.rerun()
-                                    else:
-                                        st.error("Errore nel salvataggio del nuovo turno.")
-
-                    st.divider()
-
-                    with st.expander("👤 Gestione Personale"):
-                        with st.form("new_user_form", clear_on_submit=True):
-                            st.subheader("Crea Nuovo Utente Placeholder")
-                            c1, c2 = st.columns(2)
-                            new_nome = c1.text_input("Nome")
-                            new_cognome = c2.text_input("Cognome")
-                            new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante"])
-
-                            submitted_new_user = st.form_submit_button("Crea Utente")
-
-                            if submitted_new_user:
-                                if new_nome and new_cognome:
-                                    nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
-
-                                    # Check if user already exists
-                                    if nome_completo in gestionale_data['contatti']['Nome Cognome'].tolist():
-                                        st.error(f"Errore: L'utente '{nome_completo}' esiste già.")
-                                    else:
-                                        nuovo_utente = pd.DataFrame([{
-                                            'Nome Cognome': nome_completo,
-                                            'Ruolo': new_ruolo,
-                                            'Password': None, # Explicitly empty
-                                            'Link Attività': '' # Explicitly empty
-                                        }])
-
-                                        gestionale_data['contatti'] = pd.concat([gestionale_data['contatti'], nuovo_utente], ignore_index=True)
-
-                                        if salva_gestionale(gestionale_data):
-                                            st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
-                                            st.rerun()
-                                        else:
-                                            st.error("Errore durante il salvataggio del nuovo utente.")
-                                else:
-                                    st.warning("Nome e Cognome sono obbligatori.")
-
-                    st.divider()
-
-                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze"])
-
-                    with admin_tabs[0]:
+                    with admin_tabs[0]: # Performance Team
                         archivio_df_perf = carica_archivio_completo()
                         if archivio_df_perf.empty:
                             st.warning("Archivio storico non disponibile o vuoto. Impossibile calcolare le performance.")
@@ -1284,7 +1200,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                         st.session_state['detail_end_date'] = results['end_date']
                                         st.rerun()
 
-                    with admin_tabs[1]:
+                    with admin_tabs[1]: # Revisione Conoscenze
                         st.markdown("### 🧠 Revisione Voci del Knowledge Core")
                         unreviewed_entries = learning_module.load_unreviewed_knowledge()
                         pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
@@ -1298,13 +1214,10 @@ def main_app(nome_utente_autenticato, ruolo):
                             with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
                                 st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
                                 st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
-
                                 st.write("**Dettagli del report compilato:**")
                                 st.json(entry['dettagli_report'])
-
                                 st.markdown("---")
                                 st.markdown("**Azione di Integrazione**")
-
                                 col1, col2 = st.columns(2)
                                 with col1:
                                     new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
@@ -1312,16 +1225,8 @@ def main_app(nome_utente_autenticato, ruolo):
                                 with col2:
                                     if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
                                         if new_equipment_key and new_display_name:
-                                            first_question = {
-                                                "id": "sintomo_iniziale",
-                                                "text": "Qual era il sintomo principale?",
-                                                "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}
-                                            }
-                                            details = {
-                                                "equipment_key": new_equipment_key,
-                                                "display_name": new_display_name,
-                                                "new_question": first_question
-                                            }
+                                            first_question = {"id": "sintomo_iniziale", "text": "Qual era il sintomo principale?", "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}}
+                                            details = {"equipment_key": new_equipment_key, "display_name": new_display_name, "new_question": first_question}
                                             result = learning_module.integrate_knowledge(entry['id'], details)
                                             if result.get("success"):
                                                 st.success(f"Voce '{entry['id']}' integrata con successo!")
@@ -1332,20 +1237,106 @@ def main_app(nome_utente_autenticato, ruolo):
                                         else:
                                             st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
 
+                    with admin_tabs[2]: # Crea Nuovo Turno
+                        with st.form("new_shift_form", clear_on_submit=True):
+                            st.subheader("Dettagli Nuovo Turno")
+                            tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
+                            desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
+                            data_turno = st.date_input("Data Turno")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
+                            with col2:
+                                ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
+                            col3, col4 = st.columns(2)
+                            with col3:
+                                posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
+                            with col4:
+                                posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
+
+                            submitted = st.form_submit_button("Crea Turno")
+                            if submitted:
+                                if not desc_turno:
+                                    st.error("La descrizione non può essere vuota.")
+                                else:
+                                    new_id = f"T_{int(datetime.datetime.now().timestamp())}"
+                                    nuovo_turno = pd.DataFrame([{'ID_Turno': new_id, 'Descrizione': desc_turno, 'Data': pd.to_datetime(data_turno), 'OrarioInizio': ora_inizio.strftime('%H:%M'), 'OrarioFine': ora_fine.strftime('%H:%M'), 'PostiTecnico': posti_tech, 'PostiAiutante': posti_aiut, 'Tipo': tipo_turno}])
+                                    gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
+                                    df_contatti = gestionale_data.get('contatti')
+                                    if df_contatti is not None:
+                                        utenti_da_notificare = df_contatti['Nome Cognome'].tolist()
+                                        messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
+                                        for utente in utenti_da_notificare:
+                                            crea_notifica(gestionale_data, utente, messaggio)
+                                    if salva_gestionale(gestionale_data):
+                                        st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
+                                        st.toast("Tutti i tecnici sono stati notificati!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Errore nel salvataggio del nuovo turno.")
+
+                    with admin_tabs[3]: # Gestione Personale
+                        with st.form("new_user_form", clear_on_submit=True):
+                            st.subheader("Crea Nuovo Utente Placeholder")
+                            c1, c2 = st.columns(2)
+                            new_nome = c1.text_input("Nome")
+                            new_cognome = c2.text_input("Cognome")
+                            new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante"])
+
+                            submitted_new_user = st.form_submit_button("Crea Utente")
+
+                            if submitted_new_user:
+                                if new_nome and new_cognome:
+                                    nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
+                                    if nome_completo in gestionale_data['contatti']['Nome Cognome'].tolist():
+                                        st.error(f"Errore: L'utente '{nome_completo}' esiste già.")
+                                    else:
+                                        nuovo_utente = pd.DataFrame([{'Nome Cognome': nome_completo, 'Ruolo': new_ruolo, 'Password': None, 'Link Attività': ''}])
+                                        gestionale_data['contatti'] = pd.concat([gestionale_data['contatti'], nuovo_utente], ignore_index=True)
+                                        if salva_gestionale(gestionale_data):
+                                            st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
+                                            st.rerun()
+                                        else:
+                                            st.error("Errore durante il salvataggio del nuovo utente.")
+                                else:
+                                    st.warning("Nome e Cognome sono obbligatori.")
+
 
 # --- GESTIONE LOGIN ---
+
+# Initialize session state keys if they don't exist
 if 'authenticated_user' not in st.session_state:
     st.session_state.authenticated_user = None
+if 'ruolo' not in st.session_state:
     st.session_state.ruolo = None
+if 'debriefing_task' not in st.session_state:
     st.session_state.debriefing_task = None
 
+# Attempt to load user info from browser storage
+try:
+    user_info = sbs.get_item("user_info", session_storage=False)
+except Exception as e:
+    # This can happen on the first run if the component is not ready
+    user_info = None
+
+# If we found user_info in storage and the session is not yet authenticated,
+# update the session and rerun. This is the core of persistent login.
+if user_info and isinstance(user_info, dict) and not st.session_state.authenticated_user:
+    st.session_state.authenticated_user = user_info.get("nome")
+    st.session_state.ruolo = user_info.get("ruolo")
+    st.rerun()
+
+# Main application logic
 if st.session_state.authenticated_user:
     main_app(st.session_state.authenticated_user, st.session_state.ruolo)
 else:
+    # Login Page
     st.set_page_config(layout="centered", page_title="Login")
     st.title("Accesso Area Report")
     utente_url = st.query_params.get("user")
-    if not utente_url: st.error("ERRORE: Link non valido."); st.stop()
+    if not utente_url:
+        st.error("ERRORE: Link non valido o sessione scaduta. Usa il link fornito.")
+        st.stop()
     
     password_inserita = st.text_input(f"Password per {utente_url}", type="password")
     if st.button("Accedi"):
@@ -1353,8 +1344,10 @@ else:
         if gestionale and 'contatti' in gestionale:
             nome, ruolo = verifica_password(utente_url, password_inserita, gestionale['contatti'])
             if nome:
+                # On successful login, set session state and local storage
                 st.session_state.authenticated_user = nome
                 st.session_state.ruolo = ruolo
+                sbs.set_item("user_info", {"nome": nome, "ruolo": ruolo}, session_storage=False)
                 st.rerun()
             else:
                 st.error("Credenziali non valide.")
