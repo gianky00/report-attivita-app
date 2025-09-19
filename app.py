@@ -69,6 +69,9 @@ def carica_gestionale():
 
         if 'Notifiche' in xls.sheet_names:
             df = pd.read_excel(xls, sheet_name='Notifiche')
+            # Sanitize column names to remove leading/trailing whitespace
+            df.columns = df.columns.str.strip()
+
             # Check for missing columns and add them if necessary
             for col in required_notification_cols:
                 if col not in df.columns:
