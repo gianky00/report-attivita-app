@@ -197,7 +197,7 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=str(giorno), engine='openpyxl', header=None)
         df_range = df_giornaliera.iloc[3:45]
 
-        # 1. Trova tutti i PdL per l'utente corrente per identificare le attività rilevanti
+        # 1. Trova tutti i PdL per l'utente corrente
         pdls_utente = set()
         for _, riga in df_range.iterrows():
             nome_in_giornaliera = str(riga[5]).strip().lower()
@@ -210,41 +210,37 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         if not pdls_utente:
             return []
 
-        # 2. Itera su tutte le attività del giorno e costruisci quelle che coinvolgono l'utente
-        lista_attivita_finale = []
-        attivita_gia_aggiunte = set() # Per evitare di aggiungere la stessa attività (pdl, desc) più volte
+        # 2. Raccogli tutte le attività e i membri del team per i PdL rilevanti
+        attivita_collezionate = {} # Dizionario per raggruppare per (pdl, desc)
         df_storico_db = carica_archivio_completo()
 
         for _, riga in df_range.iterrows():
             pdl_text = str(riga[9])
-            desc_text = str(riga[6])
+            if pd.isna(pdl_text): continue
 
-            if pd.isna(pdl_text) or pd.isna(desc_text):
+            lista_pdl_riga = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
+
+            # Controlla se c'è almeno un PdL rilevante in questa riga
+            if not any(pdl in pdls_utente for pdl in lista_pdl_riga):
                 continue
 
-            lista_pdl = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
-            lista_descrizioni = [line.strip() for line in desc_text.splitlines() if line.strip()]
+            desc_text = str(riga[6])
+            nome_membro = str(riga[5]).strip()
+            start_time = str(riga[10])
+            end_time = str(riga[11])
+            orario = f"{start_time}-{end_time}"
 
-            for pdl, desc in zip(lista_pdl, lista_descrizioni):
-                if pdl in pdls_utente and (pdl, desc) not in attivita_gia_aggiunte:
-                    # Trovata un'attività rilevante, ora costruiamo il team
-                    team = []
-                    for _, riga_team in df_range.iterrows():
-                        if pdl in str(riga_team[9]):
-                            nome_membro = str(riga_team[5]).strip()
-                            if nome_membro and nome_membro.lower() != 'nan':
-                                # Trova il ruolo del membro dal df_contatti
-                                ruolo_membro = "Sconosciuto"
-                                if df_contatti is not None and not df_contatti.empty:
-                                    matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
-                                    if not matching_user.empty:
-                                        ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
-                                team.append({'nome': nome_membro, 'ruolo': ruolo_membro})
+            if pd.isna(desc_text) or not nome_membro or nome_membro.lower() == 'nan':
+                continue
 
-                    # Rimuovi duplicati nel team
-                    team = [dict(t) for t in {tuple(d.items()) for d in team}]
+            lista_descrizioni_riga = [line.strip() for line in desc_text.splitlines() if line.strip()]
 
-                    # Carica lo storico
+            for pdl, desc in zip(lista_pdl_riga, lista_descrizioni_riga):
+                if pdl not in pdls_utente: continue
+
+                activity_key = (pdl, desc)
+                if activity_key not in attivita_collezionate:
+                    # Carica storico solo la prima volta che incontriamo l'attività
                     storico = []
                     if not df_storico_db.empty:
                         storico_df_pdl = df_storico_db[df_storico_db['PdL'] == pdl].copy()
@@ -252,13 +248,42 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
                             storico_df_pdl['Data_Riferimento'] = pd.to_datetime(storico_df_pdl['Data_Riferimento_dt']).dt.strftime('%d/%m/%Y')
                             storico = storico_df_pdl.to_dict('records')
 
-                    lista_attivita_finale.append({
+                    attivita_collezionate[activity_key] = {
                         'pdl': pdl,
                         'attivita': desc,
                         'storico': storico,
-                        'team': team
-                    })
-                    attivita_gia_aggiunte.add((pdl, desc))
+                        'team_members': {} # Usiamo un dizionario per raggruppare gli orari per membro
+                    }
+
+                # Aggiungi o aggiorna il membro del team con il suo orario
+                if nome_membro not in attivita_collezionate[activity_key]['team_members']:
+                    ruolo_membro = "Sconosciuto"
+                    if df_contatti is not None and not df_contatti.empty:
+                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
+                        if not matching_user.empty:
+                            ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
+
+                    attivita_collezionate[activity_key]['team_members'][nome_membro] = {
+                        'ruolo': ruolo_membro,
+                        'orari': set()
+                    }
+
+                attivita_collezionate[activity_key]['team_members'][nome_membro]['orari'].add(orario)
+
+        # 3. Formatta l'output finale
+        lista_attivita_finale = []
+        for activity_data in attivita_collezionate.values():
+            team_list = []
+            for nome, details in activity_data['team_members'].items():
+                team_list.append({
+                    'nome': nome,
+                    'ruolo': details['ruolo'],
+                    'orari': sorted(list(details['orari']))
+                })
+
+            activity_data['team'] = team_list
+            del activity_data['team_members'] # Pulisci la struttura intermedia
+            lista_attivita_finale.append(activity_data)
 
         return lista_attivita_finale
     except FileNotFoundError:
@@ -644,8 +669,11 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
             # --- LOGICA TEAM ---
             team = task.get('team', [])
             if len(team) > 1:
-                team_display = ", ".join([f"{member['nome']} ({member['ruolo']})" for member in team])
-                st.info(f"**Team:** {team_display}")
+                team_details_md = "**Team:**\n"
+                for member in team:
+                    orari_str = ", ".join(member['orari'])
+                    team_details_md += f"- {member['nome']} ({member['ruolo']}) | 🕒 {orari_str}\n"
+                st.info(team_details_md)
             # --- FINE LOGICA TEAM ---
             
             visualizza_storico_organizzato(task.get('storico', []), task['pdl'])
