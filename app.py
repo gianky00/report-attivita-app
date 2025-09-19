@@ -12,10 +12,12 @@ import requests
 import google.generativeai as genai
 import win32com.client as win32
 import matplotlib.pyplot as plt
+import threading
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
 
 # --- CONFIGURAZIONE ---
+EXCEL_LOCK = threading.Lock()
 path_giornaliera_base = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
 PATH_GESTIONALE = r'C:\Users\Coemi\Desktop\SCRIPT\progetto_questionario_attivita\Gestionale_Tecnici.xlsx'
 path_storico_db = r'\\192.168.11.251\Database_Tecnico_SMI\cartella strumentale condivisa\ALLEGRETTI\Database_Report_Attivita.xlsm'
@@ -60,8 +62,9 @@ def carica_knowledge_core():
 
 #@st.cache_data
 def carica_gestionale():
-    try:
-        xls = pd.ExcelFile(PATH_GESTIONALE)
+    with EXCEL_LOCK:
+        try:
+            xls = pd.ExcelFile(PATH_GESTIONALE)
         data = {
             'contatti': pd.read_excel(xls, sheet_name='Contatti'),
             'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
@@ -107,22 +110,31 @@ def carica_gestionale():
         st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
         return None
 
-def salva_gestionale(data):
-    try:
-        with pd.ExcelWriter(PATH_GESTIONALE, engine='openpyxl') as writer:
-            data['contatti'].to_excel(writer, sheet_name='Contatti', index=False)
-            data['turni'].to_excel(writer, sheet_name='TurniDisponibili', index=False)
-            data['prenotazioni'].to_excel(writer, sheet_name='Prenotazioni', index=False)
-            data['sostituzioni'].to_excel(writer, sheet_name='SostituzioniPendenti', index=False)
-            if 'notifiche' in data:
-                data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
-            if 'bacheca' in data:
-                data['bacheca'].to_excel(writer, sheet_name='TurniInBacheca', index=False)
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"Errore durante il salvataggio del file gestionale: {e}")
-        return False
+def _save_to_excel_backend(data):
+    """Questa funzione è sicura per essere eseguita in un thread separato."""
+    with EXCEL_LOCK:
+        try:
+            with pd.ExcelWriter(PATH_GESTIONALE, engine='openpyxl') as writer:
+                data['contatti'].to_excel(writer, sheet_name='Contatti', index=False)
+                data['turni'].to_excel(writer, sheet_name='TurniDisponibili', index=False)
+                data['prenotazioni'].to_excel(writer, sheet_name='Prenotazioni', index=False)
+                data['sostituzioni'].to_excel(writer, sheet_name='SostituzioniPendenti', index=False)
+                if 'notifiche' in data:
+                    data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
+                if 'bacheca' in data:
+                    data['bacheca'].to_excel(writer, sheet_name='TurniInBacheca', index=False)
+            return True
+        except Exception as e:
+            print(f"ERRORE CRITICO NEL THREAD DI SALVATAGGIO: {e}")
+            return False
+
+def salva_gestionale_async(data):
+    """Funzione da chiamare dall'app Streamlit per un salvataggio non bloccante."""
+    st.cache_data.clear()
+    data_copy = {k: v.copy() for k, v in data.items()}
+    thread = threading.Thread(target=_save_to_excel_backend, args=(data_copy,))
+    thread.start()
+    return True # Ritorna immediatamente
 
 def leggi_notifiche(gestionale_data, utente):
     df_notifiche = gestionale_data.get('notifiche')
@@ -693,8 +705,8 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
             
             st.markdown("---")
             # --- LOGICA RUOLO ---
-            if ruolo_utente == "Aiutante":
-                st.warning("ℹ️ Solo i tecnici possono compilare il report per questa attività.")
+            if len(task.get('team', [])) > 1 and ruolo_utente == "Aiutante":
+                st.warning("ℹ️ Solo i tecnici possono compilare il report per questa attività di team.")
             else:
                 col1, col2 = st.columns(2)
                 if col1.button("✍️ Compila Report Guidato (IA)", key=f"guide_{section_key}_{i}"):
@@ -746,7 +758,7 @@ def render_notification_center(notifications_df, gestionale_data):
                     if is_unread:
                         if st.button(" letto", key=f"read_{notifica_id}", help="Segna come letto"):
                             segna_notifica_letta(gestionale_data, notifica_id)
-                            salva_gestionale(gestionale_data)
+                            salva_gestionale_async(gestionale_data)
                             st.rerun()
                 st.divider()
 
@@ -999,7 +1011,7 @@ def render_edit_shift_form(gestionale_data):
             crea_notifica(gestionale_data, utente, messaggio)
 
         # 5. Salva le modifiche e termina la modalità di modifica
-        if salva_gestionale(gestionale_data):
+        if salva_gestionale_async(gestionale_data):
             st.success("Turno aggiornato con successo!")
             st.toast("Le modifiche sono state salvate.")
             del st.session_state['editing_turno_id']
@@ -1074,11 +1086,11 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                 with col1:
                     if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}", help="Rimuove la tua prenotazione dal turno."):
                         if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
-                            salva_gestionale(gestionale); st.rerun()
+                            salva_gestionale_async(gestionale); st.rerun()
                 with col2:
                     if st.button("📢 Pubblica in Bacheca", key=f"pub_{turno['ID_Turno']}_{key_suffix}", help="Rilascia il tuo turno e rendilo disponibile a tutti in bacheca."):
                         if pubblica_turno_in_bacheca_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
-                            salva_gestionale(gestionale); st.rerun()
+                            salva_gestionale_async(gestionale); st.rerun()
                 with col3:
                     if st.button("🔄 Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}", help="Chiedi a un collega specifico di sostituirti."):
                         st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
@@ -1090,7 +1102,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                     ruolo_scelto = st.selectbox("Prenota come:", opzioni, key=f"sel_{turno['ID_Turno']}_{key_suffix}")
                     if st.button("Conferma Prenotazione", key=f"add_{turno['ID_Turno']}_{key_suffix}"):
                         if prenota_turno_logic(gestionale, nome_utente_autenticato, turno['ID_Turno'], ruolo_scelto):
-                            salva_gestionale(gestionale); st.rerun()
+                            salva_gestionale_async(gestionale); st.rerun()
                 else:
                     st.warning("Turno al completo.")
                     if st.button("Chiedi Sostituzione", key=f"ask_full_{turno['ID_Turno']}_{key_suffix}"):
@@ -1103,7 +1115,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                 ricevente = st.selectbox("Seleziona collega:", ricevente_options, key=f"swap_select_{turno['ID_Turno']}_{key_suffix}")
                 if st.button("Invia Richiesta", key=f"swap_confirm_{turno['ID_Turno']}_{key_suffix}"):
                     if richiedi_sostituzione_logic(gestionale, nome_utente_autenticato, ricevente, turno['ID_Turno']):
-                        salva_gestionale(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
+                        salva_gestionale_async(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
 
 def render_technician_detail_view():
     """Mostra la vista di dettaglio per un singolo tecnico."""
@@ -1331,7 +1343,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                 if is_eligible:
                                     if st.button("Prendi questo turno", key=f"take_{bacheca_entry['ID_Bacheca']}"):
                                         if prendi_turno_da_bacheca_logic(gestionale_data, nome_utente_autenticato, ruolo, bacheca_entry['ID_Bacheca']):
-                                            salva_gestionale(gestionale_data)
+                                            salva_gestionale_async(gestionale_data)
                                             st.rerun()
                                 else:
                                     st.info("Non hai il ruolo richiesto per questo turno.")
@@ -1352,11 +1364,11 @@ def main_app(nome_utente_autenticato, ruolo):
                         with c1:
                             if st.button("✅ Accetta", key=f"acc_{richiesta['ID_Richiesta']}"):
                                 if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], nome_utente_autenticato, True):
-                                    salva_gestionale(gestionale_data); st.rerun()
+                                    salva_gestionale_async(gestionale_data); st.rerun()
                         with c2:
                             if st.button("❌ Rifiuta", key=f"rif_{richiesta['ID_Richiesta']}"):
                                 if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], nome_utente_autenticato, False):
-                                    salva_gestionale(gestionale_data); st.rerun()
+                                    salva_gestionale_async(gestionale_data); st.rerun()
                 st.divider()
                 st.markdown("#### 📤 Richieste Inviate")
                 richieste_inviate = df_sostituzioni[df_sostituzioni['Richiedente'] == nome_utente_autenticato]
@@ -1515,7 +1527,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                         messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
                                         for utente in utenti_da_notificare:
                                             crea_notifica(gestionale_data, utente, messaggio)
-                                    if salva_gestionale(gestionale_data):
+                                    if salva_gestionale_async(gestionale_data):
                                         st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
                                         st.toast("Tutti i tecnici sono stati notificati!")
                                         st.rerun()
@@ -1540,7 +1552,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                     else:
                                         nuovo_utente = pd.DataFrame([{'Nome Cognome': nome_completo, 'Ruolo': new_ruolo, 'Password': None, 'Link Attività': ''}])
                                         gestionale_data['contatti'] = pd.concat([gestionale_data['contatti'], nuovo_utente], ignore_index=True)
-                                        if salva_gestionale(gestionale_data):
+                                        if salva_gestionale_async(gestionale_data):
                                             st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
                                             st.rerun()
                                         else:
