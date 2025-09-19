@@ -44,7 +44,7 @@ def render_status_indicator():
         // Use a small timeout to ensure the component is ready to receive the value
         setTimeout(updateOnlineStatus, 100);
     </script>
-    \"\"\"
+    """
 
     # The component's return value is the status string sent from JavaScript
     online_status = components.html(html_code, height=0, width=0, key=component_key)
