@@ -46,20 +46,33 @@ def leggi_dati_da_google(client):
     try:
         sheet = client.open(NOME_FOGLIO_RISPOSTE).sheet1
         all_values = sheet.get_all_values()
-        if len(all_values) < 2:
-            print("🟡 Il foglio non contiene dati.")
-            return None
+
+        # Se il foglio è vuoto o ha solo l'intestazione, non ci sono dati da processare.
+        if len(all_values) <= 1:
+            print("🟡 Il foglio non contiene nuovi dati da leggere.")
+            # Restituisce un DataFrame vuoto ma con le colonne corrette se possibile,
+            # altrimenti None se non c'è neanche l'header.
+            if len(all_values) == 1:
+                headers = all_values[0]
+                return pd.DataFrame(columns=headers)
+            return None # O un DataFrame completamente vuoto se si preferisce
 
         headers = all_values[0]
         records = []
+        # Itera sulle righe di dati (saltando l'intestazione)
         for i, row in enumerate(all_values[1:]):
-            record = dict(zip(headers, row))
-            record['GSheet_Row_Index'] = i + 2
-            records.append(record)
+            # Assicura che la riga non sia completamente vuota
+            if any(cell.strip() for cell in row):
+                record = dict(zip(headers, row))
+                record['GSheet_Row_Index'] = i + 2 # +2 perché l'indice è 0-based e la riga 1 è l'header
+                records.append(record)
+
+        if not records:
+            print("🟡 Nessun record valido trovato dopo la lettura.")
+            return pd.DataFrame(columns=headers)
 
         df = pd.DataFrame(records)
-        if df.empty: return None
-        print(f"✅ Letti {len(df)} record.")
+        print(f"✅ Letti {len(df)} record validi.")
         return df
     except Exception as e:
         print(f"❌ ERRORE durante la lettura dei dati: {e}")

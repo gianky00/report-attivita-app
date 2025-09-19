@@ -65,6 +65,11 @@ def carica_gestionale():
             'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
         }
 
+        # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
+        if 'Tipo' not in data['turni'].columns:
+            data['turni']['Tipo'] = 'Assistenza'
+        data['turni']['Tipo'].fillna('Assistenza', inplace=True)
+
         required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
 
         if 'Notifiche' in xls.sheet_names:
@@ -677,6 +682,84 @@ def render_notification_center(notifications_df, gestionale_data):
                             st.rerun()
                 st.divider()
 
+def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_suffix):
+    """
+    Renderizza una lista di turni, con la logica per la prenotazione, cancellazione e sostituzione.
+    """
+    if df_turni.empty:
+        st.info("Nessun turno di questo tipo disponibile al momento.")
+        return
+
+    mostra_solo_disponibili = st.checkbox("Mostra solo turni con posti disponibili", key=f"filter_turni_{key_suffix}")
+    st.divider()
+
+    for index, turno in df_turni.iterrows():
+        prenotazioni_turno = gestionale['prenotazioni'][gestionale['prenotazioni']['ID_Turno'] == turno['ID_Turno']]
+        posti_tecnico = int(turno['PostiTecnico'])
+        posti_aiutante = int(turno['PostiAiutante'])
+        tecnici_prenotati = len(prenotazioni_turno[prenotazioni_turno['RuoloOccupato'] == 'Tecnico'])
+        aiutanti_prenotati = len(prenotazioni_turno[prenotazioni_turno['RuoloOccupato'] == 'Aiutante'])
+
+        is_available = (tecnici_prenotati < posti_tecnico) or (aiutanti_prenotati < posti_aiutante)
+        if mostra_solo_disponibili and not is_available:
+            continue
+
+        with st.container(border=True):
+            st.markdown(f"**{turno['Descrizione']}**")
+            st.caption(f"{pd.to_datetime(turno['Data']).strftime('%d/%m/%Y')} | {turno['OrarioInizio']} - {turno['OrarioFine']}")
+
+            tech_icon = "✅" if tecnici_prenotati < posti_tecnico else "❌"
+            aiut_icon = "✅" if aiutanti_prenotati < posti_aiutante else "❌"
+            st.markdown(f"**Posti:** `Tecnici: {tecnici_prenotati}/{posti_tecnico}` {tech_icon} | `Aiutanti: {aiutanti_prenotati}/{posti_aiutante}` {aiut_icon}")
+
+            if not prenotazioni_turno.empty:
+                st.markdown("**Personale Prenotato:**")
+                for _, p in prenotazioni_turno.iterrows():
+                    st.write(f"- {p['Nome Cognome']} (*{p['RuoloOccupato']}*)")
+
+            st.markdown("---")
+
+            if ruolo == "Amministratore":
+                if st.button("✏️ Modifica Turno", key=f"edit_{turno['ID_Turno']}_{key_suffix}"):
+                    st.session_state['editing_turno_id'] = turno['ID_Turno']
+                    st.rerun()
+                st.markdown("---")
+
+            prenotazione_utente = prenotazioni_turno[prenotazioni_turno['Nome Cognome'] == nome_utente_autenticato]
+
+            if not prenotazione_utente.empty:
+                st.success("Sei prenotato per questo turno.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}"):
+                        if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
+                            salva_gestionale(gestionale); st.rerun()
+                with col2:
+                    if st.button("Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}"):
+                        st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
+            else:
+                opzioni = []
+                if tecnici_prenotati < posti_tecnico: opzioni.append("Tecnico")
+                if aiutanti_prenotati < posti_aiutante: opzioni.append("Aiutante")
+                if opzioni:
+                    ruolo_scelto = st.selectbox("Prenota come:", opzioni, key=f"sel_{turno['ID_Turno']}_{key_suffix}")
+                    if st.button("Conferma Prenotazione", key=f"add_{turno['ID_Turno']}_{key_suffix}"):
+                        if prenota_turno_logic(gestionale, nome_utente_autenticato, turno['ID_Turno'], ruolo_scelto):
+                            salva_gestionale(gestionale); st.rerun()
+                else:
+                    st.warning("Turno al completo.")
+                    if st.button("Chiedi Sostituzione", key=f"ask_full_{turno['ID_Turno']}_{key_suffix}"):
+                        st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
+
+            if st.session_state.get('sostituzione_turno_id') == turno['ID_Turno']:
+                st.markdown("---")
+                st.markdown("**A chi vuoi chiedere il cambio?**")
+                ricevente_options = prenotazioni_turno['Nome Cognome'].tolist() if not prenotazione_utente.empty else gestionale['contatti']['Nome Cognome'].tolist()
+                ricevente = st.selectbox("Seleziona collega:", ricevente_options, key=f"swap_select_{turno['ID_Turno']}_{key_suffix}")
+                if st.button("Invia Richiesta", key=f"swap_confirm_{turno['ID_Turno']}_{key_suffix}"):
+                    if richiedi_sostituzione_logic(gestionale, nome_utente_autenticato, ricevente, turno['ID_Turno']):
+                        salva_gestionale(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
+
 def render_technician_detail_view():
     """Mostra la vista di dettaglio per un singolo tecnico."""
     tecnico = st.session_state['detail_technician']
@@ -759,15 +842,142 @@ def render_technician_detail_view():
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
+def render_edit_shift_form(gestionale_data):
+    turno_id = st.session_state['editing_turno_id']
+    df_turni = gestionale_data['turni']
+
+    try:
+        turno_data = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]
+    except (IndexError, KeyError):
+        st.error("Errore: Turno non trovato o dati corrotti.")
+        if 'editing_turno_id' in st.session_state:
+            del st.session_state['editing_turno_id']
+        st.rerun()
+
+    st.title(f"Modifica Turno: {turno_data.get('Descrizione', 'N/D')}")
+
+    with st.form("edit_shift_form"):
+        st.subheader("Dettagli Turno")
+
+        # Pre-fill form with existing data
+        tipi_turno = ["Assistenza", "Straordinario"]
+        try:
+            tipo_turno_index = tipi_turno.index(turno_data.get('Tipo', 'Assistenza'))
+        except ValueError:
+            tipo_turno_index = 0 # Default to Assistenza if value is invalid
+
+        tipo_turno = st.selectbox("Tipo Turno", tipi_turno, index=tipo_turno_index)
+
+        desc_turno = st.text_input("Descrizione Turno", value=turno_data.get('Descrizione', ''))
+
+        try:
+            default_date = pd.to_datetime(turno_data['Data']).date()
+        except (ValueError, TypeError):
+            default_date = datetime.date.today()
+        data_turno = st.date_input("Data Turno", value=default_date)
+
+        col1, col2 = st.columns(2)
+        with col1:
+            try:
+                default_start_time = datetime.datetime.strptime(str(turno_data['OrarioInizio']), '%H:%M').time()
+            except (ValueError, TypeError):
+                default_start_time = datetime.time(8, 0)
+            ora_inizio = st.time_input("Orario Inizio", value=default_start_time)
+        with col2:
+            try:
+                default_end_time = datetime.datetime.strptime(str(turno_data['OrarioFine']), '%H:%M').time()
+            except (ValueError, TypeError):
+                default_end_time = datetime.time(17, 0)
+            ora_fine = st.time_input("Orario Fine", value=default_end_time)
+
+        col3, col4 = st.columns(2)
+        with col3:
+            posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1, value=int(turno_data.get('PostiTecnico', 0)))
+        with col4:
+            posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1, value=int(turno_data.get('PostiAiutante', 0)))
+
+        st.subheader("Gestione Personale")
+
+        df_prenotazioni = gestionale_data['prenotazioni']
+        df_contatti = gestionale_data['contatti']
+
+        personale_nel_turno = df_prenotazioni[df_prenotazioni['ID_Turno'] == turno_id]
+        tecnici_nel_turno = personale_nel_turno[personale_nel_turno['RuoloOccupato'] == 'Tecnico']['Nome Cognome'].tolist()
+        aiutanti_nel_turno = personale_nel_turno[personale_nel_turno['RuoloOccupato'] == 'Aiutante']['Nome Cognome'].tolist()
+
+        tutti_i_contatti = df_contatti['Nome Cognome'].tolist()
+
+        tecnici_selezionati = st.multiselect("Seleziona Tecnici Assegnati", options=tutti_i_contatti, default=tecnici_nel_turno, key="edit_tecnici")
+        aiutanti_selezionati = st.multiselect("Seleziona Aiutanti Assegnati", options=tutti_i_contatti, default=aiutanti_nel_turno, key="edit_aiutanti")
+
+        # Form submission buttons
+        col_submit, col_cancel = st.columns(2)
+        with col_submit:
+            submitted = st.form_submit_button("Salva Modifiche")
+        with col_cancel:
+            if st.form_submit_button("Annulla", type="secondary"):
+                del st.session_state['editing_turno_id']
+                st.rerun()
+
+    if submitted:
+        # --- LOGICA DI AGGIORNAMENTO ---
+
+        # 1. Aggiorna i dettagli del turno nel DataFrame dei turni
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Descrizione'] = desc_turno
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Data'] = pd.to_datetime(data_turno)
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'OrarioInizio'] = ora_inizio.strftime('%H:%M')
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'OrarioFine'] = ora_fine.strftime('%H:%M')
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'PostiTecnico'] = posti_tech
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'PostiAiutante'] = posti_aiut
+        df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Tipo'] = tipo_turno
+
+        # 2. Calcola le modifiche al personale
+        personale_originale = set(personale_nel_turno['Nome Cognome'].tolist())
+        personale_nuovo = set(tecnici_selezionati + aiutanti_selezionati)
+
+        personale_rimosso = personale_originale - personale_nuovo
+
+        # 3. Aggiorna le prenotazioni
+        # Rimuovi tutte le vecchie prenotazioni per questo turno
+        gestionale_data['prenotazioni'] = gestionale_data['prenotazioni'][gestionale_data['prenotazioni']['ID_Turno'] != turno_id]
+
+        # Aggiungi le nuove prenotazioni aggiornate
+        nuove_prenotazioni_list = []
+        for utente in tecnici_selezionati:
+            nuove_prenotazioni_list.append({'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}_{utente.replace(' ', '')}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()})
+        for utente in aiutanti_selezionati:
+             nuove_prenotazioni_list.append({'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}_{utente.replace(' ', '')}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Aiutante', 'Timestamp': datetime.datetime.now()})
+
+        if nuove_prenotazioni_list:
+            df_nuove_prenotazioni = pd.DataFrame(nuove_prenotazioni_list)
+            gestionale_data['prenotazioni'] = pd.concat([gestionale_data['prenotazioni'], df_nuove_prenotazioni], ignore_index=True)
+
+        # 4. Invia notifiche per il personale rimosso
+        for utente in personale_rimosso:
+            messaggio = f"Sei stato rimosso dal turno '{desc_turno}' del {data_turno.strftime('%d/%m/%Y')} dall'amministratore."
+            crea_notifica(gestionale_data, utente, messaggio)
+
+        # 5. Salva le modifiche e termina la modalità di modifica
+        if salva_gestionale(gestionale_data):
+            st.success("Turno aggiornato con successo!")
+            st.toast("Le modifiche sono state salvate.")
+            del st.session_state['editing_turno_id']
+            st.rerun()
+        else:
+            st.error("Si è verificato un errore durante il salvataggio delle modifiche.")
+
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
 
-    if st.session_state.get('debriefing_task'):
+    gestionale_data = carica_gestionale()
+
+    if st.session_state.get('editing_turno_id'):
+        render_edit_shift_form(gestionale_data)
+    elif st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
             render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today(), autorizza_google())
     else:
-        gestionale_data = carica_gestionale()
         col1, col2 = st.columns([5, 1])
         with col1:
             st.title(f"Report Attività")
@@ -849,79 +1059,25 @@ def main_app(nome_utente_autenticato, ruolo):
 
         with tabs[3]:
             st.subheader("Gestione Turni Personale")
-            gestionale = carica_gestionale()
-            if gestionale:
-                turni_tab, sostituzioni_tab = st.tabs(["📅 Turni Disponibili", "🔄 Gestione Sostituzioni"])
-                with turni_tab:
-                    df_turni = gestionale['turni'].copy()
-                    df_turni.dropna(subset=['ID_Turno'], inplace=True)
+            if gestionale_data:
+                turni_disponibili_tab, sostituzioni_tab = st.tabs(["📅 Turni Disponibili", "🔄 Gestione Sostituzioni"])
 
-                    mostra_solo_disponibili = st.checkbox("Mostra solo turni con posti disponibili", key="filter_turni")
-                    st.divider()
+                with turni_disponibili_tab:
+                    assistenza_tab, straordinario_tab = st.tabs(["Turni Assistenza", "Turni Straordinario"])
+                    df_turni_totale = gestionale_data['turni'].copy()
+                    df_turni_totale.dropna(subset=['ID_Turno'], inplace=True)
 
-                    for index, turno in df_turni.iterrows():
-                        prenotazioni_turno = gestionale['prenotazioni'][gestionale['prenotazioni']['ID_Turno'] == turno['ID_Turno']]
-                        posti_tecnico = int(turno['PostiTecnico'])
-                        posti_aiutante = int(turno['PostiAiutante'])
-                        tecnici_prenotati = len(prenotazioni_turno[prenotazioni_turno['RuoloOccupato'] == 'Tecnico'])
-                        aiutanti_prenotati = len(prenotazioni_turno[prenotazioni_turno['RuoloOccupato'] == 'Aiutante'])
+                    with assistenza_tab:
+                        df_assistenza = df_turni_totale[df_turni_totale['Tipo'] == 'Assistenza']
+                        render_turni_list(df_assistenza, gestionale_data, nome_utente_autenticato, ruolo, "assistenza")
 
-                        is_available = (tecnici_prenotati < posti_tecnico) or (aiutanti_prenotati < posti_aiutante)
-                        if mostra_solo_disponibili and not is_available:
-                            continue
+                    with straordinario_tab:
+                        df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
+                        render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
 
-                        with st.container(border=True):
-                            st.markdown(f"**{turno['Descrizione']}**")
-                            st.caption(f"{pd.to_datetime(turno['Data']).strftime('%d/%m/%Y')} | {turno['OrarioInizio']} - {turno['OrarioFine']}")
-
-                            tech_icon = "✅" if tecnici_prenotati < posti_tecnico else "❌"
-                            aiut_icon = "✅" if aiutanti_prenotati < posti_aiutante else "❌"
-                            st.markdown(f"**Posti:** `Tecnici: {tecnici_prenotati}/{posti_tecnico}` {tech_icon} | `Aiutanti: {aiutanti_prenotati}/{posti_aiutante}` {aiut_icon}")
-
-                            if not prenotazioni_turno.empty:
-                                st.markdown("**Personale Prenotato:**")
-                                for _, p in prenotazioni_turno.iterrows():
-                                    st.write(f"- {p['Nome Cognome']} (*{p['RuoloOccupato']}*)")
-
-                            st.markdown("---")
-
-                            prenotazione_utente = prenotazioni_turno[prenotazioni_turno['Nome Cognome'] == nome_utente_autenticato]
-                            
-                            if not prenotazione_utente.empty:
-                                st.success("Sei prenotato per questo turno.")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}"):
-                                        if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
-                                            salva_gestionale(gestionale); st.rerun()
-                                with col2:
-                                    if st.button("Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}"):
-                                        st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
-                            else:
-                                opzioni = []
-                                if tecnici_prenotati < posti_tecnico: opzioni.append("Tecnico")
-                                if aiutanti_prenotati < posti_aiutante: opzioni.append("Aiutante")
-                                if opzioni:
-                                    ruolo_scelto = st.selectbox("Prenota come:", opzioni, key=f"sel_{turno['ID_Turno']}")
-                                    if st.button("Conferma Prenotazione", key=f"add_{turno['ID_Turno']}"):
-                                        if prenota_turno_logic(gestionale, nome_utente_autenticato, turno['ID_Turno'], ruolo_scelto):
-                                            salva_gestionale(gestionale); st.rerun()
-                                else:
-                                    st.warning("Turno al completo.")
-                                    if st.button("Chiedi Sostituzione", key=f"ask_full_{turno['ID_Turno']}"):
-                                        st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
-
-                            if st.session_state.get('sostituzione_turno_id') == turno['ID_Turno']:
-                                st.markdown("---")
-                                st.markdown("**A chi vuoi chiedere il cambio?**")
-                                ricevente_options = prenotazioni_turno['Nome Cognome'].tolist() if not prenotazione_utente.empty else gestionale['contatti']['Nome Cognome'].tolist()
-                                ricevente = st.selectbox("Seleziona collega:", ricevente_options, key=f"swap_select_{turno['ID_Turno']}")
-                                if st.button("Invia Richiesta", key=f"swap_confirm_{turno['ID_Turno']}"):
-                                    if richiedi_sostituzione_logic(gestionale, nome_utente_autenticato, ricevente, turno['ID_Turno']):
-                                        salva_gestionale(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
                 with sostituzioni_tab:
                     st.subheader("Richieste di Sostituzione")
-                    df_sostituzioni = gestionale['sostituzioni']
+                    df_sostituzioni = gestionale_data['sostituzioni']
                     st.markdown("#### 📥 Richieste Ricevute")
                     richieste_ricevute = df_sostituzioni[df_sostituzioni['Ricevente'] == nome_utente_autenticato]
                     if richieste_ricevute.empty: st.info("Nessuna richiesta di sostituzione ricevuta.")
@@ -953,6 +1109,65 @@ def main_app(nome_utente_autenticato, ruolo):
                     render_technician_detail_view()
                 else:
                     # Altrimenti, mostra le tab principali della dashboard
+                    # Logic to control expander state
+                    expand_form = True
+                    if st.session_state.get('shift_form_submitted', False):
+                        expand_form = False
+                        st.session_state.shift_form_submitted = False # Reset for next interaction
+
+                    with st.expander("➕ Crea Nuovo Turno", expanded=expand_form):
+                        with st.form("new_shift_form", clear_on_submit=True):
+                            st.subheader("Dettagli Nuovo Turno")
+                            tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
+                            desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
+                            data_turno = st.date_input("Data Turno")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
+                            with col2:
+                                ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
+                            col3, col4 = st.columns(2)
+                            with col3:
+                                posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
+                            with col4:
+                                posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
+
+                            submitted = st.form_submit_button("Crea Turno")
+                            if submitted:
+                                if not desc_turno:
+                                    st.error("La descrizione non può essere vuota.")
+                                else:
+                                    new_id = f"T_{int(datetime.datetime.now().timestamp())}"
+                                    nuovo_turno = pd.DataFrame([{
+                                        'ID_Turno': new_id,
+                                        'Descrizione': desc_turno,
+                                        'Data': pd.to_datetime(data_turno),
+                                        'OrarioInizio': ora_inizio.strftime('%H:%M'),
+                                        'OrarioFine': ora_fine.strftime('%H:%M'),
+                                        'PostiTecnico': posti_tech,
+                                        'PostiAiutante': posti_aiut,
+                                        'Tipo': tipo_turno
+                                    }])
+                                    gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
+
+                                    # Logica di notifica per nuovo turno
+                                    df_contatti = gestionale_data.get('contatti')
+                                    if df_contatti is not None:
+                                        utenti_da_notificare = df_contatti['Nome Cognome'].tolist()
+                                        messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
+                                        for utente in utenti_da_notificare:
+                                            crea_notifica(gestionale_data, utente, messaggio)
+
+                                    if salva_gestionale(gestionale_data):
+                                        st.session_state.shift_form_submitted = True
+                                        st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
+                                        st.toast("Tutti i tecnici sono stati notificati!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Errore nel salvataggio del nuovo turno.")
+
+                    st.divider()
+
                     admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze"])
 
                     with admin_tabs[0]:
@@ -1018,51 +1233,51 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     with admin_tabs[1]:
                         st.markdown("### 🧠 Revisione Voci del Knowledge Core")
-                    unreviewed_entries = learning_module.load_unreviewed_knowledge()
-                    pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
+                        unreviewed_entries = learning_module.load_unreviewed_knowledge()
+                        pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
 
-                    if not pending_entries:
-                        st.success("🎉 Nessuna nuova voce da revisionare!")
-                    else:
-                        st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
+                        if not pending_entries:
+                            st.success("🎉 Nessuna nuova voce da revisionare!")
+                        else:
+                            st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
 
-                    for i, entry in enumerate(pending_entries):
-                        with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
-                            st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
-                            st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
-                            
-                            st.write("**Dettagli del report compilato:**")
-                            st.json(entry['dettagli_report'])
+                        for i, entry in enumerate(pending_entries):
+                            with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
+                                st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
+                                st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
 
-                            st.markdown("---")
-                            st.markdown("**Azione di Integrazione**")
-                            
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
-                                new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
-                            with col2:
-                                if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
-                                    if new_equipment_key and new_display_name:
-                                        first_question = {
-                                            "id": "sintomo_iniziale",
-                                            "text": "Qual era il sintomo principale?",
-                                            "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}
-                                        }
-                                        details = {
-                                            "equipment_key": new_equipment_key,
-                                            "display_name": new_display_name,
-                                            "new_question": first_question
-                                        }
-                                        result = learning_module.integrate_knowledge(entry['id'], details)
-                                        if result.get("success"):
-                                            st.success(f"Voce '{entry['id']}' integrata con successo!")
-                                            st.cache_data.clear()
-                                            st.rerun()
+                                st.write("**Dettagli del report compilato:**")
+                                st.json(entry['dettagli_report'])
+
+                                st.markdown("---")
+                                st.markdown("**Azione di Integrazione**")
+
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
+                                    new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
+                                with col2:
+                                    if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
+                                        if new_equipment_key and new_display_name:
+                                            first_question = {
+                                                "id": "sintomo_iniziale",
+                                                "text": "Qual era il sintomo principale?",
+                                                "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}
+                                            }
+                                            details = {
+                                                "equipment_key": new_equipment_key,
+                                                "display_name": new_display_name,
+                                                "new_question": first_question
+                                            }
+                                            result = learning_module.integrate_knowledge(entry['id'], details)
+                                            if result.get("success"):
+                                                st.success(f"Voce '{entry['id']}' integrata con successo!")
+                                                st.cache_data.clear()
+                                                st.rerun()
+                                            else:
+                                                st.error(f"Errore integrazione: {result.get('error')}")
                                         else:
-                                            st.error(f"Errore integrazione: {result.get('error')}")
-                                    else:
-                                        st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
+                                            st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
 
 
 # --- GESTIONE LOGIN ---
