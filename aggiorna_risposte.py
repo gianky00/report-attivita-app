@@ -45,34 +45,10 @@ def leggi_dati_da_google(client):
     print(f"\nLeggo i dati dal foglio '{NOME_FOGLIO_RISPOSTE}'...")
     try:
         sheet = client.open(NOME_FOGLIO_RISPOSTE).sheet1
-        all_values = sheet.get_all_values()
-
-        # Se il foglio è vuoto o ha solo l'intestazione, non ci sono dati da processare.
-        if len(all_values) <= 1:
-            print("🟡 Il foglio non contiene nuovi dati da leggere.")
-            # Restituisce un DataFrame vuoto ma con le colonne corrette se possibile,
-            # altrimenti None se non c'è neanche l'header.
-            if len(all_values) == 1:
-                headers = all_values[0]
-                return pd.DataFrame(columns=headers)
-            return None # O un DataFrame completamente vuoto se si preferisce
-
-        headers = all_values[0]
-        records = []
-        # Itera sulle righe di dati (saltando l'intestazione)
-        for i, row in enumerate(all_values[1:]):
-            # Assicura che la riga non sia completamente vuota
-            if any(cell.strip() for cell in row):
-                record = dict(zip(headers, row))
-                record['GSheet_Row_Index'] = i + 2 # +2 perché l'indice è 0-based e la riga 1 è l'header
-                records.append(record)
-
-        if not records:
-            print("🟡 Nessun record valido trovato dopo la lettura.")
-            return pd.DataFrame(columns=headers)
-
+        records = sheet.get_all_records()
         df = pd.DataFrame(records)
-        print(f"✅ Letti {len(df)} record validi.")
+        if df.empty: return None
+        print(f"✅ Letti {len(df)} record.")
         return df
     except Exception as e:
         print(f"❌ ERRORE durante la lettura dei dati: {e}")
@@ -85,7 +61,7 @@ def carica_database_esistente(percorso_completo):
             return pd.read_excel(percorso_completo)
         except Exception as e:
             print(f"⚠️ Errore nel caricamento del database: {e}. Creo un nuovo database...")
-    return pd.DataFrame(columns=['PdL', 'Descrizione', 'Stato', 'Tecnico', 'Report', 'Data_Compilazione', 'Data_Riferimento', 'GSheet_Row_Index'])
+    return pd.DataFrame(columns=['PdL', 'Descrizione', 'Stato', 'Tecnico', 'Report', 'Data_Compilazione', 'Data_Riferimento'])
 
 def processa_dati(df_grezzo):
     print("\nProcesso i dati grezzi riga per riga...")
@@ -123,8 +99,7 @@ def processa_dati(df_grezzo):
             'PdL': pdl, 'Descrizione': descrizione_pulita, 'Stato': riga[COLONNA_STATO],
             'Tecnico': riga[COLONNA_UTENTE], 'Report': riga[COLONNA_REPORT],
             'Data_Compilazione': riga[COLONNA_TIMESTAMP],
-            'Data_Riferimento': data_riferimento,
-            'GSheet_Row_Index': riga['GSheet_Row_Index']
+            'Data_Riferimento': data_riferimento
         }
         lista_attivita_pulite.append(nuova_riga)
         
