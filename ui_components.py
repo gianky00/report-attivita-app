@@ -9,7 +9,7 @@ def render_status_indicator():
     # The key is important to keep the component instance stable across reruns
     component_key = "online_status_component"
 
-    html_code = f\"\"\"
+    html_code = f"""
     <div id="status-indicator-container" style="position: fixed; top: 10px; right: 10px; z-index: 1000; background-color: white; padding: 5px 10px; border-radius: 8px; border: 1px solid #dcdcdc; font-family: sans-serif; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);">
         <div id="status-indicator"></div>
     </div>
