@@ -84,6 +84,8 @@ def salva_gestionale(data):
 def carica_archivio_completo():
     try:
         df = pd.read_excel(path_storico_db)
+        if 'GSheet_Row_Index' not in df.columns:
+            df['GSheet_Row_Index'] = pd.NA
         df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce')
         df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
         df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
@@ -665,6 +667,8 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
+        archivio_df = carica_archivio_completo()
+
         lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Gestione Turni"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
@@ -674,23 +678,59 @@ def main_app(nome_utente_autenticato, ruolo):
         with tabs[0]:
             st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
             lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year)
+
+            if f"completed_tasks_today" not in st.session_state:
+                report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == oggi)]
+
+                attivita_inviate_da_archivio = []
+                if not report_compilati.empty:
+                    pdl_to_task_map = {task['pdl']: task for task in lista_attivita}
+                    for _, report_row in report_compilati.iterrows():
+                        pdl = report_row['PdL']
+                        original_task = pdl_to_task_map.get(pdl)
+                        task_data = {
+                            'pdl': pdl,
+                            'attivita': original_task['attivita'] if original_task else report_row['Descrizione'],
+                            'storico': original_task['storico'] if original_task else [],
+                            'report': report_row['Report'],
+                            'stato': report_row['Stato'],
+                            'row_index': report_row['GSheet_Row_Index'],
+                            'section_key': 'today'
+                        }
+                        attivita_inviate_da_archivio.append(task_data)
+                st.session_state["completed_tasks_today"] = attivita_inviate_da_archivio
+
             disegna_sezione_attivita(lista_attivita, "today")
         
         with tabs[1]:
             st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year)
-            archivio_df = carica_archivio_completo()
-            pdl_compilati_ieri = set()
-            if not archivio_df.empty:
+            lista_attivita_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year)
+
+            if f"completed_tasks_yesterday" not in st.session_state:
                 report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
-                pdl_compilati_ieri = set(report_compilati['PdL'])
+
+                attivita_inviate_da_archivio = []
+                if not report_compilati.empty:
+                    pdl_to_task_map = {task['pdl']: task for task in lista_attivita_ieri}
+                    for _, report_row in report_compilati.iterrows():
+                        pdl = report_row['PdL']
+                        original_task = pdl_to_task_map.get(pdl)
+                        task_data = {
+                            'pdl': pdl,
+                            'attivita': original_task['attivita'] if original_task else report_row['Descrizione'],
+                            'storico': original_task['storico'] if original_task else [],
+                            'report': report_row['Report'],
+                            'stato': report_row['Stato'],
+                            'row_index': report_row['GSheet_Row_Index'],
+                            'section_key': 'yesterday'
+                        }
+                        attivita_inviate_da_archivio.append(task_data)
+                st.session_state["completed_tasks_yesterday"] = attivita_inviate_da_archivio
             
-            attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
-            disegna_sezione_attivita(attivita_da_recuperare, "yesterday")
+            disegna_sezione_attivita(lista_attivita_ieri, "yesterday")
 
         with tabs[2]:
             st.subheader("Ricerca nell'Archivio")
-            archivio_df = carica_archivio_completo()
             if archivio_df.empty:
                 st.warning("L'archivio è vuoto o non caricabile.")
             else:
