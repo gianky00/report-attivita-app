@@ -714,8 +714,24 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
 
             if not prenotazioni_turno.empty:
                 st.markdown("**Personale Prenotato:**")
+                df_contatti = gestionale.get('contatti', pd.DataFrame())
                 for _, p in prenotazioni_turno.iterrows():
-                    st.write(f"- {p['Nome Cognome']} (*{p['RuoloOccupato']}*)")
+                    nome_utente = p['Nome Cognome']
+                    ruolo_utente = p['RuoloOccupato']
+
+                    # Check if the user is a placeholder (no password)
+                    user_details = df_contatti[df_contatti['Nome Cognome'] == nome_utente] if not df_contatti.empty else pd.DataFrame()
+
+                    # A user is a placeholder if they don't have a password entry.
+                    # pd.isna() correctly handles None, NaN, etc.
+                    is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('Password'))
+
+                    if is_placeholder:
+                        display_name = f"*{nome_utente} (Esterno)*"
+                    else:
+                        display_name = nome_utente
+
+                    st.markdown(f"- {display_name} (*{ruolo_utente}*)", unsafe_allow_html=True)
 
             st.markdown("---")
 
@@ -1165,6 +1181,43 @@ def main_app(nome_utente_autenticato, ruolo):
                                         st.rerun()
                                     else:
                                         st.error("Errore nel salvataggio del nuovo turno.")
+
+                    st.divider()
+
+                    with st.expander("👤 Gestione Personale"):
+                        with st.form("new_user_form", clear_on_submit=True):
+                            st.subheader("Crea Nuovo Utente Placeholder")
+                            c1, c2 = st.columns(2)
+                            new_nome = c1.text_input("Nome")
+                            new_cognome = c2.text_input("Cognome")
+                            new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante"])
+
+                            submitted_new_user = st.form_submit_button("Crea Utente")
+
+                            if submitted_new_user:
+                                if new_nome and new_cognome:
+                                    nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
+
+                                    # Check if user already exists
+                                    if nome_completo in gestionale_data['contatti']['Nome Cognome'].tolist():
+                                        st.error(f"Errore: L'utente '{nome_completo}' esiste già.")
+                                    else:
+                                        nuovo_utente = pd.DataFrame([{
+                                            'Nome Cognome': nome_completo,
+                                            'Ruolo': new_ruolo,
+                                            'Password': None, # Explicitly empty
+                                            'Link Attività': '' # Explicitly empty
+                                        }])
+
+                                        gestionale_data['contatti'] = pd.concat([gestionale_data['contatti'], nuovo_utente], ignore_index=True)
+
+                                        if salva_gestionale(gestionale_data):
+                                            st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
+                                            st.rerun()
+                                        else:
+                                            st.error("Errore durante il salvataggio del nuovo utente.")
+                                else:
+                                    st.warning("Nome e Cognome sono obbligatori.")
 
                     st.divider()
 
