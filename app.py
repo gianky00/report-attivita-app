@@ -191,43 +191,81 @@ def verifica_password(utente_da_url, password_inserita, df_contatti):
             return nome_completo, riga.get('Ruolo', 'Tecnico')
     return None, None
 
-def trova_attivita(utente_completo, giorno, mese, anno):
+def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
     try:
         path_giornaliera_mensile = os.path.join(path_giornaliera_base, f"Giornaliera {mese:02d}-{anno}.xlsm")
         df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=str(giorno), engine='openpyxl', header=None)
-        df_range = df_giornaliera.iloc[3:45].copy()
-        
-        # BUG FIX: Raccoglie tutte le righe corrispondenti, non solo la prima
-        righe_utente = []
+        df_range = df_giornaliera.iloc[3:45]
+
+        # 1. Trova tutti i PdL per l'utente corrente per identificare le attività rilevanti
+        pdls_utente = set()
         for _, riga in df_range.iterrows():
-            nome_in_giornaliera = str(riga[5]).strip()
-            if not nome_in_giornaliera or nome_in_giornaliera.lower() == 'nan': continue
-            parts_completo = utente_completo.lower().split()
-            if nome_in_giornaliera.lower() in ' '.join(parts_completo):
-                righe_utente.append(riga) # Aggiunge la riga e continua a cercare
+            nome_in_giornaliera = str(riga[5]).strip().lower()
+            if utente_completo.lower() in nome_in_giornaliera:
+                pdl_text = str(riga[9])
+                if not pd.isna(pdl_text):
+                    pdls_found = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
+                    pdls_utente.update(pdls_found)
 
-        if not righe_utente: return []
-        
-        df_utente = pd.DataFrame(righe_utente)
-        df_storico_db = carica_archivio_completo()
+        if not pdls_utente:
+            return []
+
+        # 2. Itera su tutte le attività del giorno e costruisci quelle che coinvolgono l'utente
         lista_attivita_finale = []
+        attivita_gia_aggiunte = set() # Per evitare di aggiungere la stessa attività (pdl, desc) più volte
+        df_storico_db = carica_archivio_completo()
 
-        for _, riga in df_utente.iterrows():
-            pdl_text, desc_text = str(riga[9]), str(riga[6])
-            if pd.isna(pdl_text) or pd.isna(desc_text): continue
+        for _, riga in df_range.iterrows():
+            pdl_text = str(riga[9])
+            desc_text = str(riga[6])
+
+            if pd.isna(pdl_text) or pd.isna(desc_text):
+                continue
+
             lista_pdl = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
             lista_descrizioni = [line.strip() for line in desc_text.splitlines() if line.strip()]
+
             for pdl, desc in zip(lista_pdl, lista_descrizioni):
-                storico_df_pdl = df_storico_db[df_storico_db['PdL'] == pdl].copy() if not df_storico_db.empty else pd.DataFrame()
-                if not storico_df_pdl.empty:
-                    storico_df_pdl['Data_Riferimento'] = storico_df_pdl['Data_Riferimento_dt'].dt.strftime('%d/%m/%Y')
-                    storico = storico_df_pdl.to_dict('records')
-                else:
+                if pdl in pdls_utente and (pdl, desc) not in attivita_gia_aggiunte:
+                    # Trovata un'attività rilevante, ora costruiamo il team
+                    team = []
+                    for _, riga_team in df_range.iterrows():
+                        if pdl in str(riga_team[9]):
+                            nome_membro = str(riga_team[5]).strip()
+                            if nome_membro and nome_membro.lower() != 'nan':
+                                # Trova il ruolo del membro dal df_contatti
+                                ruolo_membro = "Sconosciuto"
+                                if df_contatti is not None and not df_contatti.empty:
+                                    matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
+                                    if not matching_user.empty:
+                                        ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
+                                team.append({'nome': nome_membro, 'ruolo': ruolo_membro})
+
+                    # Rimuovi duplicati nel team
+                    team = [dict(t) for t in {tuple(d.items()) for d in team}]
+
+                    # Carica lo storico
                     storico = []
-                lista_attivita_finale.append({'pdl': pdl, 'attivita': desc, 'storico': storico})
+                    if not df_storico_db.empty:
+                        storico_df_pdl = df_storico_db[df_storico_db['PdL'] == pdl].copy()
+                        if not storico_df_pdl.empty:
+                            storico_df_pdl['Data_Riferimento'] = pd.to_datetime(storico_df_pdl['Data_Riferimento_dt']).dt.strftime('%d/%m/%Y')
+                            storico = storico_df_pdl.to_dict('records')
+
+                    lista_attivita_finale.append({
+                        'pdl': pdl,
+                        'attivita': desc,
+                        'storico': storico,
+                        'team': team
+                    })
+                    attivita_gia_aggiunte.add((pdl, desc))
+
         return lista_attivita_finale
-    except FileNotFoundError: return []
-    except Exception as e: st.error(f"Errore lettura giornaliera: {e}"); return []
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        st.error(f"Errore lettura giornaliera: {e}")
+        return []
 
 
 # --- FUNZIONI DI BUSINESS ---
@@ -588,11 +626,11 @@ def visualizza_storico_organizzato(storico_list, pdl):
     else:
         st.markdown("*Nessuno storico disponibile per questo PdL.*")
 
-def disegna_sezione_attivita(lista_attivita, section_key):
+def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
     if f"completed_tasks_{section_key}" not in st.session_state:
         st.session_state[f"completed_tasks_{section_key}"] = []
 
-    completed_pdls = {task['pdl'] for task in st.session_state[f"completed_tasks_{section_key}"] }
+    completed_pdls = {task['pdl'] for task in st.session_state.get(f"completed_tasks_{section_key}", [])}
     attivita_da_fare = [task for task in lista_attivita if task['pdl'] not in completed_pdls]
 
     st.subheader("📝 Attività da Compilare")
@@ -602,6 +640,13 @@ def disegna_sezione_attivita(lista_attivita, section_key):
     for i, task in enumerate(attivita_da_fare):
         with st.container(border=True):
             st.markdown(f"**PdL `{task['pdl']}`** - {task['attivita']}")
+
+            # --- LOGICA TEAM ---
+            team = task.get('team', [])
+            if len(team) > 1:
+                team_display = ", ".join([f"{member['nome']} ({member['ruolo']})" for member in team])
+                st.info(f"**Team:** {team_display}")
+            # --- FINE LOGICA TEAM ---
             
             visualizza_storico_organizzato(task.get('storico', []), task['pdl'])
             if task.get('storico'):
@@ -619,19 +664,24 @@ def disegna_sezione_attivita(lista_attivita, section_key):
                         st.info(f"**Azione Strategica:** {analisi.get('azione_strategica', 'N/D')}")
             
             st.markdown("---")
-            col1, col2 = st.columns(2)
-            if col1.button("✍️ Compila Report Guidato (IA)", key=f"guide_{section_key}_{i}"):
-                st.session_state.debriefing_task = {**task, "section_key": section_key}
-                st.session_state.report_mode = 'guided'
-                st.rerun()
-            if col2.button("📝 Compila Report Manuale", key=f"manual_{section_key}_{i}"):
-                st.session_state.debriefing_task = {**task, "section_key": section_key}
-                st.session_state.report_mode = 'manual'
-                st.rerun()
+            # --- LOGICA RUOLO ---
+            if ruolo_utente == "Aiutante":
+                st.warning("ℹ️ Solo i tecnici possono compilare il report per questa attività.")
+            else:
+                col1, col2 = st.columns(2)
+                if col1.button("✍️ Compila Report Guidato (IA)", key=f"guide_{section_key}_{i}"):
+                    st.session_state.debriefing_task = {**task, "section_key": section_key}
+                    st.session_state.report_mode = 'guided'
+                    st.rerun()
+                if col2.button("📝 Compila Report Manuale", key=f"manual_{section_key}_{i}"):
+                    st.session_state.debriefing_task = {**task, "section_key": section_key}
+                    st.session_state.report_mode = 'manual'
+                    st.rerun()
+            # --- FINE LOGICA RUOLO ---
     
     st.divider()
 
-    if st.session_state[f"completed_tasks_{section_key}"]:
+    if st.session_state.get(f"completed_tasks_{section_key}", []):
         with st.expander("✅ Attività Inviate (Modificabili)", expanded=False):
             for i, task_data in enumerate(st.session_state[f"completed_tasks_{section_key}"]):
                 with st.container(border=True):
@@ -1149,7 +1199,7 @@ def main_app(nome_utente_autenticato, ruolo):
         elif oggi.weekday() == 6: giorno_precedente = oggi - datetime.timedelta(days=2)
         
         if ruolo in ["Amministratore", "Tecnico"]:
-            attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year)
+            attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
             num_attivita_mancanti = 0
             if attivita_pianificate_ieri:
                 archivio_df = carica_archivio_completo()
@@ -1166,12 +1216,12 @@ def main_app(nome_utente_autenticato, ruolo):
         
         with tabs[0]:
             st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-            lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year)
-            disegna_sezione_attivita(lista_attivita, "today")
+            lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+            disegna_sezione_attivita(lista_attivita, "today", ruolo)
         
         with tabs[1]:
             st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year)
+            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
             archivio_df = carica_archivio_completo()
             pdl_compilati_ieri = set()
             if not archivio_df.empty:
@@ -1179,7 +1229,7 @@ def main_app(nome_utente_autenticato, ruolo):
                 pdl_compilati_ieri = set(report_compilati['PdL'])
             
             attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
-            disegna_sezione_attivita(attivita_da_recuperare, "yesterday")
+            disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
         with tabs[2]:
             st.subheader("Ricerca nell'Archivio")
