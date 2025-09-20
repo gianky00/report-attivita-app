@@ -1,0 +1,12 @@
+streamlit
+gspread
+oauth2client
+pandas
+requests
+google-generativeai
+pywin32; sys_platform == 'win32'
+matplotlib
+streamlit-cookies-manager
+openpyxl
+passlib
+bcrypt

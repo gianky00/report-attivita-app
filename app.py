@@ -15,17 +15,32 @@ import matplotlib.pyplot as plt
 import threading
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
+from modules.auth import authenticate_user
+import config
+from modules.data_manager import (
+    carica_knowledge_core,
+    carica_gestionale,
+    salva_gestionale_async,
+    carica_archivio_completo,
+    trova_attivita,
+    scrivi_o_aggiorna_risposta
+)
+from modules.shift_management import (
+    prenota_turno_logic,
+    cancella_prenotazione_logic,
+    richiedi_sostituzione_logic,
+    rispondi_sostituzione_logic,
+    pubblica_turno_in_bacheca_logic,
+    prendi_turno_da_bacheca_logic
+)
+from modules.notifications import (
+    leggi_notifiche,
+    crea_notifica,
+    segna_notifica_letta
+)
+
 
 # --- CONFIGURAZIONE ---
-EXCEL_LOCK = threading.Lock()
-OUTLOOK_LOCK = threading.Lock()
-path_giornaliera_base = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
-PATH_GESTIONALE = r'C:\Users\Coemi\Desktop\SCRIPT\progetto_questionario_attivita\Gestionale_Tecnici.xlsx'
-path_storico_db = r'\\192.168.11.251\Database_Tecnico_SMI\cartella strumentale condivisa\ALLEGRETTI\Database_Report_Attivita.xlsm'
-NOME_FOGLIO_RISPOSTE = "Report Attività Giornaliera (Risposte)"
-PATH_KNOWLEDGE_CORE = "knowledge_core.json"
-EMAIL_DESTINATARIO = "gianky.allegretti@gmail.com"
-
 # Caricamento sicuro dei secrets
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 
@@ -49,529 +64,6 @@ def autorizza_google():
         client.login()
     return client
 
-@st.cache_data
-def carica_knowledge_core():
-    try:
-        with open(PATH_KNOWLEDGE_CORE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        st.error(f"Errore critico: File '{PATH_KNOWLEDGE_CORE}' non trovato.")
-        return None
-    except json.JSONDecodeError:
-        st.error(f"Errore critico: Il file '{PATH_KNOWLEDGE_CORE}' non è un JSON valido.")
-        return None
-
-#@st.cache_data
-def carica_gestionale():
-    with EXCEL_LOCK:
-        try:
-            xls = pd.ExcelFile(PATH_GESTIONALE)
-            data = {
-                'contatti': pd.read_excel(xls, sheet_name='Contatti'),
-                'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
-                'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
-                'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
-            }
-
-            # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
-            if 'Tipo' not in data['turni'].columns:
-                data['turni']['Tipo'] = 'Assistenza'
-            data['turni']['Tipo'].fillna('Assistenza', inplace=True)
-
-            required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
-
-            if 'Notifiche' in xls.sheet_names:
-                df = pd.read_excel(xls, sheet_name='Notifiche')
-                # Sanitize column names to remove leading/trailing whitespace
-                df.columns = df.columns.str.strip()
-
-                # Check for missing columns and add them if necessary
-                for col in required_notification_cols:
-                    if col not in df.columns:
-                        df[col] = pd.NA
-                data['notifiche'] = df
-            else:
-                data['notifiche'] = pd.DataFrame(columns=required_notification_cols)
-
-            # Aggiunto per la bacheca turni
-            required_bacheca_cols = ['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']
-            if 'TurniInBacheca' in xls.sheet_names:
-                df_bacheca = pd.read_excel(xls, sheet_name='TurniInBacheca')
-                df_bacheca.columns = df_bacheca.columns.str.strip()
-                for col in required_bacheca_cols:
-                    if col not in df_bacheca.columns:
-                        df_bacheca[col] = pd.NA
-                data['bacheca'] = df_bacheca
-            else:
-                data['bacheca'] = pd.DataFrame(columns=required_bacheca_cols)
-
-
-            return data
-        except Exception as e:
-            st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
-            return None
-
-def _save_to_excel_backend(data):
-    """Questa funzione è sicura per essere eseguita in un thread separato."""
-    with EXCEL_LOCK:
-        try:
-            with pd.ExcelWriter(PATH_GESTIONALE, engine='openpyxl') as writer:
-                data['contatti'].to_excel(writer, sheet_name='Contatti', index=False)
-                data['turni'].to_excel(writer, sheet_name='TurniDisponibili', index=False)
-                data['prenotazioni'].to_excel(writer, sheet_name='Prenotazioni', index=False)
-                data['sostituzioni'].to_excel(writer, sheet_name='SostituzioniPendenti', index=False)
-                if 'notifiche' in data:
-                    data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
-                if 'bacheca' in data:
-                    data['bacheca'].to_excel(writer, sheet_name='TurniInBacheca', index=False)
-            return True
-        except Exception as e:
-            print(f"ERRORE CRITICO NEL THREAD DI SALVATAGGIO: {e}")
-            return False
-
-def salva_gestionale_async(data):
-    """Funzione da chiamare dall'app Streamlit per un salvataggio non bloccante."""
-    st.cache_data.clear()
-    data_copy = {k: v.copy() for k, v in data.items()}
-    thread = threading.Thread(target=_save_to_excel_backend, args=(data_copy,))
-    thread.start()
-    return True # Ritorna immediatamente
-
-def leggi_notifiche(gestionale_data, utente):
-    df_notifiche = gestionale_data.get('notifiche')
-
-    required_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
-    if df_notifiche is None or df_notifiche.empty:
-        return pd.DataFrame(columns=required_cols)
-
-    user_notifiche = df_notifiche[df_notifiche['Destinatario'] == utente].copy()
-
-    if user_notifiche.empty:
-        return user_notifiche
-
-    user_notifiche['Timestamp'] = pd.to_datetime(user_notifiche['Timestamp'], errors='coerce')
-    return user_notifiche.sort_values(by='Timestamp', ascending=False)
-
-def crea_notifica(gestionale_data, destinatario, messaggio, link_azione=""):
-    if 'notifiche' not in gestionale_data:
-        gestionale_data['notifiche'] = pd.DataFrame(columns=['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione'])
-
-    new_id = f"N_{int(datetime.datetime.now().timestamp())}"
-    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-
-    nuova_notifica = pd.DataFrame([{
-        'ID_Notifica': new_id,
-        'Timestamp': timestamp,
-        'Destinatario': destinatario,
-        'Messaggio': messaggio,
-        'Stato': 'non letta',
-        'Link_Azione': link_azione
-    }])
-
-    gestionale_data['notifiche'] = pd.concat([gestionale_data['notifiche'], nuova_notifica], ignore_index=True)
-    return True
-
-def segna_notifica_letta(gestionale_data, id_notifica):
-    if 'notifiche' not in gestionale_data or gestionale_data['notifiche'].empty:
-        return False
-
-    df_notifiche = gestionale_data['notifiche']
-    idx = df_notifiche[df_notifiche['ID_Notifica'] == id_notifica].index
-
-    if not idx.empty:
-        df_notifiche.loc[idx, 'Stato'] = 'letta'
-        return True
-    return False
-
-def carica_archivio_completo():
-    try:
-        df = pd.read_excel(path_storico_db)
-        df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce')
-        df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
-        df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
-        df.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
-        return df
-    except Exception:
-        return pd.DataFrame()
-
-def verifica_password(utente_da_url, password_inserita, df_contatti):
-    if df_contatti is None or df_contatti.empty: return None, None
-    for _, riga in df_contatti.iterrows():
-        nome_completo = str(riga['Nome Cognome']).strip()
-        user_param_corretto = nome_completo.split()[-1]
-        if "Garro" in nome_completo: user_param_corretto = "Garro L"
-        if utente_da_url.lower() == user_param_corretto.lower() and str(password_inserita) == str(riga['Password']):
-            return nome_completo, riga.get('Ruolo', 'Tecnico')
-    return None, None
-
-def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
-    try:
-        path_giornaliera_mensile = os.path.join(path_giornaliera_base, f"Giornaliera {mese:02d}-{anno}.xlsm")
-        df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=str(giorno), engine='openpyxl', header=None)
-        df_range = df_giornaliera.iloc[3:45]
-
-        # 1. Trova tutti i PdL per l'utente corrente
-        pdls_utente = set()
-        for _, riga in df_range.iterrows():
-            nome_in_giornaliera = str(riga[5]).strip().lower()
-            if utente_completo.lower() in nome_in_giornaliera:
-                pdl_text = str(riga[9])
-                if not pd.isna(pdl_text):
-                    pdls_found = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
-                    pdls_utente.update(pdls_found)
-
-        if not pdls_utente:
-            return []
-
-        # 2. Raccogli tutte le attività e i membri del team per i PdL rilevanti
-        attivita_collezionate = {} # Dizionario per raggruppare per (pdl, desc)
-        df_storico_db = carica_archivio_completo()
-
-        for _, riga in df_range.iterrows():
-            pdl_text = str(riga[9])
-            if pd.isna(pdl_text): continue
-
-            lista_pdl_riga = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
-
-            # Controlla se c'è almeno un PdL rilevante in questa riga
-            if not any(pdl in pdls_utente for pdl in lista_pdl_riga):
-                continue
-
-            desc_text = str(riga[6])
-            nome_membro = str(riga[5]).strip()
-            start_time = str(riga[10])
-            end_time = str(riga[11])
-            orario = f"{start_time}-{end_time}"
-
-            if pd.isna(desc_text) or not nome_membro or nome_membro.lower() == 'nan':
-                continue
-
-            lista_descrizioni_riga = [line.strip() for line in desc_text.splitlines() if line.strip()]
-
-            for pdl, desc in zip(lista_pdl_riga, lista_descrizioni_riga):
-                if pdl not in pdls_utente: continue
-
-                activity_key = (pdl, desc)
-                if activity_key not in attivita_collezionate:
-                    # Carica storico solo la prima volta che incontriamo l'attività
-                    storico = []
-                    if not df_storico_db.empty:
-                        storico_df_pdl = df_storico_db[df_storico_db['PdL'] == pdl].copy()
-                        if not storico_df_pdl.empty:
-                            storico_df_pdl['Data_Riferimento'] = pd.to_datetime(storico_df_pdl['Data_Riferimento_dt']).dt.strftime('%d/%m/%Y')
-                            storico = storico_df_pdl.to_dict('records')
-
-                    attivita_collezionate[activity_key] = {
-                        'pdl': pdl,
-                        'attivita': desc,
-                        'storico': storico,
-                        'team_members': {} # Usiamo un dizionario per raggruppare gli orari per membro
-                    }
-
-                # Aggiungi o aggiorna il membro del team con il suo orario
-                if nome_membro not in attivita_collezionate[activity_key]['team_members']:
-                    ruolo_membro = "Sconosciuto"
-                    if df_contatti is not None and not df_contatti.empty:
-                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
-                        if not matching_user.empty:
-                            ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
-
-                    attivita_collezionate[activity_key]['team_members'][nome_membro] = {
-                        'ruolo': ruolo_membro,
-                        'orari': set()
-                    }
-
-                attivita_collezionate[activity_key]['team_members'][nome_membro]['orari'].add(orario)
-
-        # 3. Formatta l'output finale
-        lista_attivita_finale = []
-        for activity_data in attivita_collezionate.values():
-            team_list = []
-            for nome, details in activity_data['team_members'].items():
-                team_list.append({
-                    'nome': nome,
-                    'ruolo': details['ruolo'],
-                    'orari': sorted(list(details['orari']))
-                })
-
-            activity_data['team'] = team_list
-            del activity_data['team_members'] # Pulisci la struttura intermedia
-            lista_attivita_finale.append(activity_data)
-
-        return lista_attivita_finale
-    except FileNotFoundError:
-        return []
-    except Exception as e:
-        st.error(f"Errore lettura giornaliera: {e}")
-        return []
-
-
-# --- FUNZIONI DI BUSINESS ---
-def _invia_email_con_outlook_backend(subject, html_body):
-    """Funzione sicura per essere eseguita in un thread, gestisce CoInitialize."""
-    pythoncom.CoInitialize()
-    with OUTLOOK_LOCK:
-        try:
-            outlook = win32.Dispatch('outlook.application')
-            mail = outlook.CreateItem(0)
-            mail.To = EMAIL_DESTINATARIO
-            mail.CC = "francesco.millo@coemi.it"
-            mail.Subject = subject
-            mail.HTMLBody = html_body
-            mail.Send()
-        except Exception as e:
-            # Log all'output standard, non è possibile usare st.warning da un thread
-            print(f"ATTENZIONE: Impossibile inviare l'email con Outlook in background: {e}.")
-        finally:
-            pythoncom.CoUninitialize()
-
-def invia_email_con_outlook_async(subject, html_body):
-    """Avvia l'invio dell'email in un thread separato per non bloccare l'UI."""
-    thread = threading.Thread(target=_invia_email_con_outlook_backend, args=(subject, html_body))
-    thread.start()
-
-def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
-    try:
-        foglio_risposte = client.open(NOME_FOGLIO_RISPOSTE).sheet1
-        timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        dati_formattati = [timestamp, nome_completo, dati_da_scrivere['descrizione'], dati_da_scrivere['report'], dati_da_scrivere['stato'], data_riferimento.strftime('%d/%m/%Y')]
-        
-        if row_index:
-            foglio_risposte.update(f'A{row_index}:F{row_index}', [dati_formattati])
-            azione = "aggiornato"
-        else:
-            foglio_risposte.append_row(dati_formattati)
-            row_index = len(foglio_risposte.get_all_values())
-            azione = "inviato"
-
-        titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
-        report_html = dati_da_scrivere['report'].replace('\n', '<br>')
-        html_body = f"""
-        <html>
-        <head>
-        <style>
-            body {{ font-family: Calibri, sans-serif; }}
-            table {{ border-collapse: collapse; width: 100%; }}
-            th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; }}
-            th {{ background-color: #f2f2f2; }}
-            .report-content {{ white-space: pre-wrap; word-wrap: break-word; }}
-        </style>
-        </head>
-        <body>
-        <h2>Riepilogo Report Attività</h2>
-        <p>Un report è stato <strong>{azione}</strong> dal tecnico {nome_completo}.</p>
-        <table>
-            <tr>
-                <th>Data di Riferimento Attività</th>
-                <td>{data_riferimento.strftime('%d/%m/%Y')}</td>
-            </tr>
-            <tr>
-                <th>Data e Ora Invio Report</th>
-                <td>{timestamp}</td>
-            </tr>
-            <tr>
-                <th>Tecnico</th>
-                <td>{nome_completo}</td>
-            </tr>
-            <tr>
-                <th>Attività</th>
-                <td>{dati_da_scrivere['descrizione']}</td>
-            </tr>
-            <tr>
-                <th>Stato Finale</th>
-                <td><b>{dati_da_scrivere['stato']}</b></td>
-            </tr>
-            <tr>
-                <th>Report Compilato</th>
-                <td class="report-content">{report_html}</td>
-            </tr>
-        </table>
-        </body>
-        </html>
-        """
-        invia_email_con_outlook_async(titolo_email, html_body)
-        return row_index
-    except Exception as e:
-        st.error(f"Errore salvataggio GSheets: {e}")
-        return None
-
-# --- LOGICA DI BUSINESS PER I TURNI ---
-def prenota_turno_logic(gestionale_data, utente, turno_id, ruolo_scelto):
-    df_turni, df_prenotazioni = gestionale_data['turni'], gestionale_data['prenotazioni']
-    turno_info = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]
-    posti_tecnico, posti_aiutante = int(float(turno_info['PostiTecnico'])), int(float(turno_info['PostiAiutante']))
-    prenotazioni_per_turno = df_prenotazioni[df_prenotazioni['ID_Turno'] == turno_id]
-    tecnici_prenotati = len(prenotazioni_per_turno[prenotazioni_per_turno['RuoloOccupato'] == 'Tecnico'])
-    aiutanti_prenotati = len(prenotazioni_per_turno[prenotazioni_per_turno['RuoloOccupato'] == 'Aiutante'])
-    if ruolo_scelto == 'Tecnico' and tecnici_prenotati < posti_tecnico:
-        nuova_riga = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()}
-        gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, pd.DataFrame([nuova_riga])], ignore_index=True)
-        st.success("Turno prenotato come Tecnico!"); return True
-    elif ruolo_scelto == 'Aiutante' and aiutanti_prenotati < posti_aiutante:
-        nuova_riga = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Aiutante', 'Timestamp': datetime.datetime.now()}
-        gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, pd.DataFrame([nuova_riga])], ignore_index=True)
-        st.success("Turno prenotato come Aiutante!"); return True
-    else:
-        st.error("Tutti i posti per il ruolo selezionato sono esauriti!"); return False
-
-def cancella_prenotazione_logic(gestionale_data, utente, turno_id):
-    index_to_drop = gestionale_data['prenotazioni'][(gestionale_data['prenotazioni']['ID_Turno'] == turno_id) & (gestionale_data['prenotazioni']['Nome Cognome'] == utente)].index
-    if not index_to_drop.empty:
-        gestionale_data['prenotazioni'].drop(index_to_drop, inplace=True)
-        st.success("Prenotazione cancellata."); return True
-    st.error("Prenotazione non trovata."); return False
-
-def richiedi_sostituzione_logic(gestionale_data, richiedente, ricevente, turno_id):
-    nuova_richiesta = pd.DataFrame([{'ID_Richiesta': f"S_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Richiedente': richiedente, 'Ricevente': ricevente, 'Timestamp': datetime.datetime.now()}])
-    gestionale_data['sostituzioni'] = pd.concat([gestionale_data['sostituzioni'], nuova_richiesta], ignore_index=True)
-
-    messaggio = f"Hai una nuova richiesta di sostituzione da {richiedente} per il turno {turno_id}."
-    crea_notifica(gestionale_data, ricevente, messaggio)
-
-    st.success(f"Richiesta di sostituzione inviata a {ricevente}.")
-    st.toast("Richiesta inviata! Il collega riceverà una notifica.")
-    return True
-
-def rispondi_sostituzione_logic(gestionale_data, id_richiesta, utente_che_risponde, accettata):
-    sostituzioni_df = gestionale_data['sostituzioni']
-    richiesta_index = sostituzioni_df[sostituzioni_df['ID_Richiesta'] == id_richiesta].index
-    if richiesta_index.empty:
-        st.error("Richiesta non più valida.")
-        return False
-
-    richiesta = sostituzioni_df.loc[richiesta_index[0]]
-    richiedente = richiesta['Richiedente']
-    turno_id = richiesta['ID_Turno']
-
-    if accettata:
-        messaggio = f"{utente_che_risponde} ha ACCETTATO la tua richiesta di cambio per il turno {turno_id}."
-    else:
-        messaggio = f"{utente_che_risponde} ha RIFIUTATO la tua richiesta di cambio per il turno {turno_id}."
-    crea_notifica(gestionale_data, richiedente, messaggio)
-
-    gestionale_data['sostituzioni'].drop(richiesta_index, inplace=True)
-    
-    if not accettata:
-        st.info("Hai rifiutato la richiesta.")
-        st.toast("Risposta inviata. Il richiedente è stato notificato.")
-        return True
-
-    # Logic for accepted request
-    prenotazioni_df = gestionale_data['prenotazioni']
-    idx_richiedente_originale = prenotazioni_df[(prenotazioni_df['ID_Turno'] == turno_id) & (prenotazioni_df['Nome Cognome'] == richiedente)].index
-
-    if not idx_richiedente_originale.empty:
-        prenotazioni_df.loc[idx_richiedente_originale, 'Nome Cognome'] = utente_che_risponde
-        st.success("Sostituzione (subentro) effettuata con successo!")
-        st.toast("Sostituzione effettuata! Il richiedente è stato notificato.")
-        return True
-
-    st.error("Errore: la prenotazione originale del richiedente non è stata trovata per lo scambio.")
-    return False
-
-def pubblica_turno_in_bacheca_logic(gestionale_data, utente_richiedente, turno_id):
-    df_prenotazioni = gestionale_data['prenotazioni']
-
-    # Trova la prenotazione dell'utente per il turno specificato
-    idx_prenotazione = df_prenotazioni[(df_prenotazioni['Nome Cognome'] == utente_richiedente) & (df_prenotazioni['ID_Turno'] == turno_id)].index
-
-    if idx_prenotazione.empty:
-        st.error("Errore: Prenotazione non trovata per pubblicare in bacheca.")
-        return False
-
-    # Ottieni i dettagli della prenotazione prima di rimuoverla
-    prenotazione_rimossa = df_prenotazioni.loc[idx_prenotazione].iloc[0]
-    ruolo_originale = prenotazione_rimossa['RuoloOccupato']
-
-    # Rimuovi la vecchia prenotazione
-    gestionale_data['prenotazioni'].drop(idx_prenotazione, inplace=True)
-
-    # Aggiungi il turno alla bacheca
-    df_bacheca = gestionale_data['bacheca']
-    nuovo_id_bacheca = f"B_{int(datetime.datetime.now().timestamp())}"
-    nuova_voce_bacheca = pd.DataFrame([{
-        'ID_Bacheca': nuovo_id_bacheca,
-        'ID_Turno': turno_id,
-        'Tecnico_Originale': utente_richiedente,
-        'Ruolo_Originale': ruolo_originale,
-        'Timestamp_Pubblicazione': datetime.datetime.now(),
-        'Stato': 'Disponibile',
-        'Tecnico_Subentrante': None,
-        'Timestamp_Assegnazione': None
-    }])
-    gestionale_data['bacheca'] = pd.concat([df_bacheca, nuova_voce_bacheca], ignore_index=True)
-
-    # Invia notifica a tutti gli altri utenti
-    df_turni = gestionale_data['turni']
-    desc_turno = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]['Descrizione']
-    data_turno = pd.to_datetime(df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]['Data']).strftime('%d/%m')
-
-    messaggio = f"📢 Turno libero in bacheca: '{desc_turno}' del {data_turno} ({ruolo_originale})."
-
-    utenti_da_notificare = gestionale_data['contatti']['Nome Cognome'].tolist()
-    for utente in utenti_da_notificare:
-        if utente != utente_richiedente:
-            crea_notifica(gestionale_data, utente, messaggio)
-
-    st.success("Il tuo turno è stato pubblicato in bacheca con successo!")
-    st.toast("Tutti i colleghi sono stati notificati.")
-    return True
-
-
-def prendi_turno_da_bacheca_logic(gestionale_data, utente_subentrante, ruolo_utente, id_bacheca):
-    df_bacheca = gestionale_data['bacheca']
-
-    # Trova la voce in bacheca
-    idx_bacheca = df_bacheca[df_bacheca['ID_Bacheca'] == id_bacheca].index
-    if idx_bacheca.empty:
-        st.error("Questo turno non è più disponibile in bacheca.")
-        return False
-
-    voce_bacheca = df_bacheca.loc[idx_bacheca.iloc[0]]
-
-    if voce_bacheca['Stato'] != 'Disponibile':
-        st.warning("Qualcuno è stato più veloce! Questo turno è già stato assegnato.")
-        return False
-
-    ruolo_richiesto = voce_bacheca['Ruolo_Originale']
-
-    # Controlla l'idoneità del ruolo
-    if ruolo_richiesto == 'Tecnico' and ruolo_utente == 'Aiutante':
-        st.error(f"Non sei idoneo per questo turno. È richiesto il ruolo 'Tecnico'.")
-        return False
-
-    # Assegna il turno
-    df_bacheca.loc[idx_bacheca, 'Stato'] = 'Assegnato'
-    df_bacheca.loc[idx_bacheca, 'Tecnico_Subentrante'] = utente_subentrante
-    df_bacheca.loc[idx_bacheca, 'Timestamp_Assegnazione'] = datetime.datetime.now()
-
-    # Aggiungi la nuova prenotazione
-    df_prenotazioni = gestionale_data['prenotazioni']
-    nuova_prenotazione = pd.DataFrame([{
-        'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}",
-        'ID_Turno': voce_bacheca['ID_Turno'],
-        'Nome Cognome': utente_subentrante,
-        'RuoloOccupato': ruolo_richiesto, # L'utente prende il ruolo che si è liberato
-        'Timestamp': datetime.datetime.now()
-    }])
-    gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, nuova_prenotazione], ignore_index=True)
-
-    # Invia notifiche di conferma
-    tecnico_originale = voce_bacheca['Tecnico_Originale']
-    df_turni = gestionale_data['turni']
-    turno_info = df_turni[df_turni['ID_Turno'] == voce_bacheca['ID_Turno']].iloc[0]
-    desc_turno = turno_info['Descrizione']
-    data_turno = pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')
-
-    messaggio_subentrante = f"Hai preso con successo il turno '{desc_turno}' del {data_turno} dalla bacheca."
-    crea_notifica(gestionale_data, utente_subentrante, messaggio_subentrante)
-
-    messaggio_originale = f"Il tuo turno '{desc_turno}' del {data_turno} è stato preso da {utente_subentrante}."
-    crea_notifica(gestionale_data, tecnico_originale, messaggio_originale)
-
-    st.success(f"Ti sei prenotato con successo per il turno come {ruolo_richiesto}!")
-    st.balloons()
-    return True
 
 # --- FUNZIONI DI ANALISI IA ---
 @st.cache_data(show_spinner=False)
@@ -1703,25 +1195,27 @@ else:
     # Login Page
     st.set_page_config(layout="centered", page_title="Login")
     st.title("Accesso Area Report")
-    utente_url = st.query_params.get("user")
-    if not utente_url:
-        st.error("ERRORE: Link non valido.")
-        st.stop()
     
-    password_inserita = st.text_input(f"Password per {utente_url}", type="password")
+    # Utilizziamo un form di login standard
+    username_inserito = st.text_input("Nome Utente (Cognome)")
+    password_inserita = st.text_input("Password", type="password")
+
     if st.button("Accedi"):
-        gestionale = carica_gestionale()
-        if gestionale and 'contatti' in gestionale:
-            nome, ruolo = verifica_password(utente_url, password_inserita, gestionale['contatti'])
-            if nome:
-                st.session_state.authenticated_user = nome
-                st.session_state.ruolo = ruolo
-                # Set cookie using dictionary-style assignment. The value must be a string.
-                user_info_str = json.dumps({'nome': nome, 'ruolo': ruolo})
-                cookie_manager['user_info'] = user_info_str
-                cookie_manager.save() # Explicitly save the cookie
-                st.rerun()
-            else:
-                st.error("Credenziali non valide.")
+        if not username_inserito or not password_inserita:
+            st.warning("Per favore, inserisci nome utente e password.")
         else:
-            st.error("Impossibile caricare dati di login.")
+            gestionale = carica_gestionale()
+            if gestionale and 'contatti' in gestionale:
+                nome, ruolo = authenticate_user(username_inserito, password_inserita, gestionale['contatti'])
+                if nome:
+                    st.session_state.authenticated_user = nome
+                    st.session_state.ruolo = ruolo
+                    # Set cookie using dictionary-style assignment. The value must be a string.
+                    user_info_str = json.dumps({'nome': nome, 'ruolo': ruolo})
+                    cookie_manager['user_info'] = user_info_str
+                    cookie_manager.save() # Explicitly save the cookie
+                    st.rerun()
+                else:
+                    st.error("Credenziali non valide.")
+            else:
+                st.error("Impossibile caricare dati di login.")
