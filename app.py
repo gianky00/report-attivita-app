@@ -1,6 +1,5 @@
 import streamlit as st
 import gspread
-from streamlit_cookies_manager import CookieManager
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import datetime
@@ -52,9 +51,6 @@ if GEMINI_API_KEY:
         st.error(f"Errore nella configurazione di Gemini: {e}")
 
 # --- FUNZIONI DI SUPPORTO E CARICAMENTO DATI ---
-def get_cookie_manager():
-    return CookieManager()
-
 @st.cache_resource
 def autorizza_google():
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
@@ -798,11 +794,13 @@ def main_app(nome_utente_autenticato, ruolo):
             st.write("")
             st.write("")
             if st.button("Logout", type="secondary"):
-                cookie_manager = get_cookie_manager()
-                cookie_manager.delete('user_info')
-                # Pulisce completamente la sessione per un logout sicuro
+                # Pulisce lo stato della sessione per il logout
+                st.session_state.authenticated_user = None
+                st.session_state.ruolo = None
+                # Rimuove anche altre chiavi di sessione per una pulizia completa
                 for key in list(st.session_state.keys()):
-                    del st.session_state[key]
+                    if key not in ['authenticated_user', 'ruolo']:
+                        del st.session_state[key]
                 st.rerun()
 
         oggi = datetime.date.today()
@@ -1172,24 +1170,8 @@ for key, default_value in keys_to_initialize.items():
     if key not in st.session_state:
         st.session_state[key] = default_value
 
-cookie_manager = get_cookie_manager()
-
-# Check cookie for authentication
-if not st.session_state.authenticated_user:
-    # The library returns a string, so we need to parse it
-    user_cookie_str = cookie_manager.get('user_info')
-    if user_cookie_str:
-        try:
-            user_cookie = json.loads(user_cookie_str)
-            if isinstance(user_cookie, dict):
-                st.session_state.authenticated_user = user_cookie.get('nome')
-                st.session_state.ruolo = user_cookie.get('ruolo')
-        except json.JSONDecodeError:
-            # Handle case where cookie is not valid JSON
-            pass
-
 # Main application logic
-if st.session_state.authenticated_user:
+if st.session_state.get('authenticated_user'):
     main_app(st.session_state.authenticated_user, st.session_state.ruolo)
 else:
     # Login Page
@@ -1208,12 +1190,9 @@ else:
             if gestionale and 'contatti' in gestionale:
                 nome, ruolo = authenticate_user(username_inserito, password_inserita, gestionale['contatti'])
                 if nome:
+                    # Imposta i dati dell'utente nello stato della sessione
                     st.session_state.authenticated_user = nome
                     st.session_state.ruolo = ruolo
-                    # Set cookie using dictionary-style assignment. The value must be a string.
-                    user_info_str = json.dumps({'nome': nome, 'ruolo': ruolo})
-                    cookie_manager['user_info'] = user_info_str
-                    cookie_manager.save() # Explicitly save the cookie
                     st.rerun()
                 else:
                     st.error("Credenziali non valide.")
