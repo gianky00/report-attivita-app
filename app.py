@@ -1299,21 +1299,28 @@ def render_programmazione_tab():
     st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
 
     # Filtri per restringere la ricerca
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         pdl_filter = st.text_input("Filtra per PdL...", key="prog_pdl_filter")
     with col2:
         area_filter = st.multiselect("Filtra per Area", options=sorted(scheduled_df['Area'].unique()), key="prog_area_filter")
     with col3:
         tcl_filter = st.multiselect("Filtra per TCL", options=sorted(scheduled_df['TCL'].unique()), key="prog_tcl_filter")
+    with col4:
+        day_filter = st.multiselect("Filtra per Giorno", options=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"], key="prog_day_filter")
 
-    # Applica filtri testuali e multiselect
+    # Applica filtri
     if pdl_filter:
         scheduled_df = scheduled_df[scheduled_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
     if area_filter:
         scheduled_df = scheduled_df[scheduled_df['Area'].isin(area_filter)]
     if tcl_filter:
         scheduled_df = scheduled_df[scheduled_df['TCL'].isin(tcl_filter)]
+    if day_filter:
+        # Crea una regex che matcha qualsiasi dei giorni selezionati
+        # es. 'Lunedì|Martedì'
+        day_regex = '|'.join(day_filter)
+        scheduled_df = scheduled_df[scheduled_df['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
 
     st.divider()
 
