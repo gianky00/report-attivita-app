@@ -1224,28 +1224,43 @@ def render_situazione_impianti_tab():
         st.info("Questa sezione mostra lo stato di avanzamento delle attività (es. SOSPESO, COMPLETATO) raggruppate per Area e TCL.")
         return
 
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_tcl = st.multiselect(
-            "Filtra per TCL",
-            options=sorted(df['TCL'].unique()),
-            default=sorted(df['TCL'].unique()),
-            key="tcl_filter"
-        )
-    with col2:
-        selected_area = st.multiselect(
-            "Filtra per Area",
-            options=sorted(df['Area'].unique()),
-            default=sorted(df['Area'].unique()),
-            key="area_filter"
-        )
+    with st.form("situazione_filters_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            selected_tcl = st.multiselect(
+                "Filtra per TCL",
+                options=sorted(df['TCL'].unique()),
+                default=sorted(df['TCL'].unique())
+            )
+        with col2:
+            selected_area = st.multiselect(
+                "Filtra per Area",
+                options=sorted(df['Area'].unique()),
+                default=sorted(df['Area'].unique())
+            )
+        with col3:
+            selected_stato = st.multiselect(
+                "Filtra per Stato",
+                options=sorted(df['Stato'].unique()),
+                default=sorted(df['Stato'].unique())
+            )
 
-    if not selected_tcl or not selected_area:
-        st.warning("Seleziona almeno un TCL e un'Area per visualizzare i dati.")
+        submitted = st.form_submit_button("Applica Filtri")
+
+    if not submitted:
+        st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
+        return
+
+    if not selected_tcl or not selected_area or not selected_stato:
+        st.warning("Seleziona almeno un valore per ogni filtro.")
         return
 
     # Applica i filtri
-    filtered_df = df[df['TCL'].isin(selected_tcl) & df['Area'].isin(selected_area)].copy()
+    filtered_df = df[
+        df['TCL'].isin(selected_tcl) &
+        df['Area'].isin(selected_area) &
+        df['Stato'].isin(selected_stato)
+    ].copy()
 
     if filtered_df.empty:
         st.info("Nessuna attività corrisponde ai filtri selezionati.")
@@ -1298,16 +1313,22 @@ def render_programmazione_tab():
 
     st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
 
-    # Filtri per restringere la ricerca
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        pdl_filter = st.text_input("Filtra per PdL...", key="prog_pdl_filter")
-    with col2:
-        area_filter = st.multiselect("Filtra per Area", options=sorted(scheduled_df['Area'].unique()), key="prog_area_filter")
-    with col3:
-        tcl_filter = st.multiselect("Filtra per TCL", options=sorted(scheduled_df['TCL'].unique()), key="prog_tcl_filter")
-    with col4:
-        day_filter = st.multiselect("Filtra per Giorno", options=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"], key="prog_day_filter")
+    with st.form("programmazione_filters_form"):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            pdl_filter = st.text_input("Filtra per PdL...")
+        with col2:
+            area_filter = st.multiselect("Filtra per Area", options=sorted(scheduled_df['Area'].unique()))
+        with col3:
+            tcl_filter = st.multiselect("Filtra per TCL", options=sorted(scheduled_df['TCL'].unique()))
+        with col4:
+            day_filter = st.multiselect("Filtra per Giorno", options=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"])
+
+        submitted = st.form_submit_button("Applica Filtri")
+
+    if not submitted:
+        st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
+        return
 
     # Applica filtri
     if pdl_filter:
@@ -1317,25 +1338,34 @@ def render_programmazione_tab():
     if tcl_filter:
         scheduled_df = scheduled_df[scheduled_df['TCL'].isin(tcl_filter)]
     if day_filter:
-        # Crea una regex che matcha qualsiasi dei giorni selezionati
-        # es. 'Lunedì|Martedì'
         day_regex = '|'.join(day_filter)
         scheduled_df = scheduled_df[scheduled_df['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
 
     st.divider()
 
+    if scheduled_df.empty:
+        st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
+        return
+
     # Layout a card, mobile-friendly
-    for _, row in scheduled_df.iterrows():
+    for index, row in scheduled_df.iterrows():
         with st.container(border=True):
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.markdown(f"#### PdL `{row['PdL']}`")
-                st.markdown(f"**Impianto:** {row['Impianto']} | **Area:** {row['Area']} | **TCL:** {row['TCL']}")
+                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
             with col2:
                 st.markdown(f"**Stato Attuale**")
                 st.info(f"_{row['Stato']}_")
 
+            if pd.notna(row['Descrizione']):
+                st.caption(f"Descrizione: {row['Descrizione']}")
+
             st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
+
+            # Mostra storico interventi
+            if row['Storico']:
+                visualizza_storico_organizzato(row['Storico'], row['PdL'])
 
 
 def main_app(nome_utente_autenticato, ruolo):

@@ -278,30 +278,24 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
 def carica_dati_attivita_programmate():
     """
     Carica i dati dal file Excel delle attività programmate, li unisce con lo
-    stato reale dall'archivio storico e restituisce un DataFrame unificato.
-    La gerarchia degli stati è:
-    1. Stato dall'archivio web (se esiste)
-    2. Stato mappato dalla colonna M dell'Excel
-    3. 'Pianificato' come default
+    stato reale e lo storico dall'archivio, e restituisce un DataFrame unificato.
     """
     file_path = r"\\192.168.11.251\Database_Tecnico_SMI\cartella strumentale condivisa\ALLEGRETTI\ATTIVITA_PROGRAMMATE.xlsm"
     sheets_to_process = ["A1", "A2", "A3", "CTE", "BLENDING"]
 
     # --- Mappature e configurazioni ---
-    PDL_COL_INDEX = 4       # Colonna E
-    IMPIANTO_COL_INDEX = 5  # Colonna F
-    STATO_EXCEL_COL_INDEX = 12 # Colonna M
+    PDL_COL_INDEX = 4           # Colonna E
+    IMPIANTO_COL_INDEX = 5      # Colonna F
+    DESCRIZIONE_COL_INDEX = 6   # Colonna G
+    STATO_EXCEL_COL_INDEX = 12  # Colonna M
     GIORNI_COL_INDICES = {"Lunedì": 7, "Martedì": 8, "Mercoledì": 9, "Giovedì": 10, "Venerdì": 11}
 
     tcl_map = {"A1": "Francesco Naselli", "A2": "Francesco Naselli", "A3": "Ferdinando Caldarella", "CTE": "Ferdinando Caldarella", "BLENDING": "Ivan Messina"}
     area_map = {"A1": "Area 1", "A2": "Area 2", "A3": "Area 3", "CTE": "CTE", "BLENDING": "BLENDING"}
 
     status_map_excel = {
-        'DA CHIUDERE': 'TERMINATA',
-        'EMESSO': 'IN CORSO',
-        'IN CORSO': 'IN CORSO',
-        'INTERROTTO': 'SOSPESA',
-        'RICHIESTO': 'DA PROCESSARE'
+        'DA CHIUDERE': 'TERMINATA', 'EMESSO': 'IN CORSO', 'IN CORSO': 'IN CORSO',
+        'INTERROTTO': 'SOSPESA', 'RICHIESTO': 'DA PROCESSARE'
     }
 
     # 1. Carica le attività pianificate da Excel
@@ -314,17 +308,14 @@ def carica_dati_attivita_programmate():
                 for _, row in df_sheet.iterrows():
                     pdl = row.iloc[PDL_COL_INDEX]
                     if pd.notna(pdl) and str(pdl).strip():
-                        impianto = row.iloc[IMPIANTO_COL_INDEX]
-                        giorni = [giorno for giorno, index in GIORNI_COL_INDICES.items() if index < len(row) and str(row.iloc[index]).strip().upper() == 'X']
-
                         stato_excel_raw = row.iloc[STATO_EXCEL_COL_INDEX] if STATO_EXCEL_COL_INDEX < len(row) else None
-                        stato_iniziale = status_map_excel.get(str(stato_excel_raw).strip().upper(), 'Pianificato')
 
                         planned_activities.append({
                             'PdL': str(pdl).strip(),
-                            'Impianto': impianto,
-                            'StatoIniziale': stato_iniziale,
-                            'GiorniProgrammati': ", ".join(giorni) if giorni else "Non Programmato",
+                            'Impianto': row.iloc[IMPIANTO_COL_INDEX],
+                            'Descrizione': row.iloc[DESCRIZIONE_COL_INDEX],
+                            'StatoIniziale': status_map_excel.get(str(stato_excel_raw).strip().upper(), 'Pianificato'),
+                            'GiorniProgrammati': ", ".join([g for g, i in GIORNI_COL_INDICES.items() if i < len(row) and str(row.iloc[i]).strip().upper() == 'X']) or "Non Programmato",
                             'TCL': tcl_map.get(sheet_name, 'Non Definito'),
                             'Area': area_map.get(sheet_name, 'Non Definito'),
                             'Foglio': sheet_name
@@ -336,32 +327,32 @@ def carica_dati_attivita_programmate():
         st.error(f"Errore durante la lettura del file Excel delle attività: {e}")
         return pd.DataFrame()
 
-    if not planned_activities:
-        return pd.DataFrame()
+    if not planned_activities: return pd.DataFrame()
 
-    df_planned = pd.DataFrame(planned_activities)
-    df_planned.drop_duplicates(subset='PdL', keep='first', inplace=True)
+    df_planned = pd.DataFrame(planned_activities).drop_duplicates(subset='PdL', keep='first')
 
-    # 2. Carica l'archivio degli stati reali delle attività
+    # 2. Carica l'archivio degli stati e dello storico
     df_archived = carica_archivio_completo()
     if df_archived.empty:
         df_planned.rename(columns={'StatoIniziale': 'Stato'}, inplace=True)
+        df_planned['Storico'] = [[] for _ in range(len(df_planned))]
         return df_planned
 
     df_archived['PdL'] = df_archived['PdL'].astype(str).str.strip()
+
+    # Prendi lo stato più recente per ogni PdL
     df_latest_status = df_archived.sort_values('Data_Riferimento_dt', ascending=True).drop_duplicates(subset='PdL', keep='last')
 
-    # 3. Unisci le due fonti di dati
-    df_merged = pd.merge(
-        df_planned,
-        df_latest_status[['PdL', 'Stato']],
-        on='PdL',
-        how='left'
-    )
+    # Raggruppa l'intero storico per ogni PdL
+    df_history = df_archived.groupby('PdL').apply(lambda x: x.to_dict('records')).rename('Storico')
 
-    # 4. Applica la gerarchia degli stati
-    # Se lo 'Stato' dall'archivio è NaN, usa lo 'StatoIniziale' da Excel.
-    df_merged['Stato'].fillna(df_merged['StatoIniziale'], inplace=True)
-    df_merged.drop(columns=['StatoIniziale'], inplace=True)
+    # 3. Unisci le tre fonti di dati: pianificato, stato più recente, e storico completo
+    df_merged = pd.merge(df_planned, df_latest_status[['PdL', 'Stato']], on='PdL', how='left')
+    df_final = pd.merge(df_merged, df_history, on='PdL', how='left')
 
-    return df_merged
+    # 4. Applica la gerarchia degli stati e riempi i dati mancanti
+    df_final['Stato'].fillna(df_final['StatoIniziale'], inplace=True)
+    df_final['Storico'].fillna(pd.Series([[] for _ in range(len(df_final))]), inplace=True)
+    df_final.drop(columns=['StatoIniziale'], inplace=True)
+
+    return df_final
