@@ -15,7 +15,14 @@ import threading
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
 import bcrypt
-from modules.auth import authenticate_user
+import qrcode
+import io
+from modules.auth import (
+    authenticate_user,
+    generate_2fa_secret,
+    get_provisioning_uri,
+    verify_2fa_code
+)
 import config
 from modules.data_manager import (
     carica_knowledge_core,
@@ -23,8 +30,7 @@ from modules.data_manager import (
     salva_gestionale_async,
     carica_archivio_completo,
     trova_attivita,
-    scrivi_o_aggiorna_risposta,
-    carica_dati_attivita_programmate
+    scrivi_o_aggiorna_risposta
 )
 from modules.shift_management import (
     sync_oncall_shifts,
@@ -716,6 +722,17 @@ def render_gestione_account(gestionale_data):
                         st.session_state.editing_user = user_name
                         st.rerun()
 
+                # Aggiungi colonna per reset 2FA
+                has_2fa = '2FA_Secret' in user and pd.notna(user['2FA_Secret']) and user['2FA_Secret']
+                if has_2fa:
+                    with col1:
+                        if st.button("Resetta 2FA", key=f"reset_2fa_{user_name}", help="Rimuove la 2FA per questo utente. Dovrà configurarla di nuovo al prossimo accesso."):
+                            user_idx = df_contatti[df_contatti['Nome Cognome'] == user_name].index[0]
+                            df_contatti.loc[user_idx, '2FA_Secret'] = None
+                            salva_gestionale_async(gestionale_data)
+                            st.success(f"2FA resettata per {user_name}.")
+                            st.rerun()
+
     st.divider()
 
     # --- Crea Nuovo Utente Placeholder ---
@@ -1149,6 +1166,21 @@ def render_guida_tab(ruolo):
             - Conferme quando un tuo turno in bacheca viene preso da un collega.
         - Clicca sul pulsante **"letto"** per marcare una notifica come letta e farla sparire dal conteggio.
         """)
+
+    with st.expander("🔐 Sicurezza Account e 2FA (Nuovo!)"):
+        st.subheader("Impostare la Verifica in Due Passaggi (2FA)")
+        st.markdown("""
+        Per aumentare la sicurezza del tuo account, al primo accesso ti verrà chiesto di configurare la verifica in due passaggi.
+        1.  **Installa un'app di Autenticazione**: Scarica sul tuo cellulare un'app come Google Authenticator, Microsoft Authenticator, o un'altra di tua scelta.
+        2.  **Configura l'Account**:
+            - **Da PC**: Apri l'app e scegli di scansionare il **QR Code** mostrato sullo schermo.
+            - **Da Cellulare**: Clicca su **"Copia Codice"** e, nella tua app di autenticazione, scegli di inserire una "chiave di configurazione" manualmente.
+        3.  **Verifica**: Inserisci il codice a 6 cifre generato dall'app per completare la configurazione.
+
+        D'ora in poi, dopo aver inserito la password, dovrai inserire il codice temporaneo dalla tua app per accedere.
+        """)
+        st.subheader("Cosa fare se cambi cellulare?")
+        st.warning("Se cambi cellulare o perdi accesso alla tua app di autenticazione, **contatta un amministratore**. Potrà resettare la tua configurazione 2FA e permetterti di registrarla sul nuovo dispositivo al tuo accesso successivo.")
 
     # Sezione Admin (visibile solo agli admin)
     if ruolo == "Amministratore":
@@ -1769,41 +1801,135 @@ def main_app(nome_utente_autenticato, ruolo):
 
 # Initialize session state keys if they don't exist
 keys_to_initialize = {
-    'authenticated_user': None, 'ruolo': None, 'debriefing_task': None
+    'login_state': 'password', # 'password', 'setup_2fa', 'verify_2fa', 'logged_in'
+    'authenticated_user': None,
+    'ruolo': None,
+    'debriefing_task': None,
+    'temp_user_for_2fa': None,
+    '2fa_secret': None
 }
 for key, default_value in keys_to_initialize.items():
     if key not in st.session_state:
         st.session_state[key] = default_value
 
 # Prova a caricare una sessione esistente all'avvio
-load_session()
+if not st.session_state.get('authenticated_user'):
+    load_session()
+    if st.session_state.get('authenticated_user'):
+        st.session_state.login_state = 'logged_in'
 
-# Main application logic
-if st.session_state.get('authenticated_user'):
+
+# --- UI LOGIC ---
+
+if st.session_state.login_state == 'logged_in':
     main_app(st.session_state.authenticated_user, st.session_state.ruolo)
+
 else:
-    # Login Page
     st.set_page_config(layout="centered", page_title="Login")
     st.title("Accesso Area Report")
     
-    # Utilizziamo un form di login standard
-    username_inserito = st.text_input("Nome Utente (Cognome)")
-    password_inserita = st.text_input("Password", type="password")
+    gestionale = carica_gestionale()
+    if not gestionale or 'contatti' not in gestionale:
+        st.error("Errore critico: impossibile caricare i dati degli utenti.")
+        st.stop()
 
-    if st.button("Accedi"):
-        if not username_inserito or not password_inserita:
-            st.warning("Per favore, inserisci nome utente e password.")
-        else:
-            gestionale = carica_gestionale()
-            if gestionale and 'contatti' in gestionale:
-                nome, ruolo = authenticate_user(username_inserito, password_inserita, gestionale['contatti'])
-                if nome:
-                    # Imposta i dati dell'utente e salva la sessione
-                    st.session_state.authenticated_user = nome
+    df_contatti = gestionale['contatti']
+
+    if st.session_state.login_state == 'password':
+        with st.form("login_form"):
+            username_inserito = st.text_input("Nome Utente (Cognome)")
+            password_inserita = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Accedi")
+
+            if submitted:
+                if not username_inserito or not password_inserita:
+                    st.warning("Per favore, inserisci nome utente e password.")
+                else:
+                    status, user_data = authenticate_user(username_inserito, password_inserita, df_contatti)
+
+                    if status == "2FA_REQUIRED":
+                        st.session_state.login_state = 'verify_2fa'
+                        st.session_state.temp_user_for_2fa = user_data # Salva il nome utente
+                        st.rerun()
+                    elif status == "2FA_SETUP_REQUIRED":
+                        st.session_state.login_state = 'setup_2fa'
+                        st.session_state.temp_user_for_2fa, st.session_state.ruolo = user_data
+                        st.rerun()
+                    elif status == "SUCCESS":
+                        nome_completo, ruolo = user_data
+                        st.session_state.login_state = 'logged_in'
+                        st.session_state.authenticated_user = nome_completo
+                        st.session_state.ruolo = ruolo
+                        save_session(nome_completo, ruolo)
+                        st.rerun()
+                    else:
+                        st.error("Credenziali non valide.")
+
+    elif st.session_state.login_state == 'setup_2fa':
+        st.subheader("Configurazione Sicurezza Account (2FA)")
+        st.info("Per una maggiore sicurezza, è necessario configurare la verifica in due passaggi.")
+
+        if not st.session_state.get('2fa_secret'):
+            st.session_state['2fa_secret'] = generate_2fa_secret()
+
+        secret = st.session_state['2fa_secret']
+        user_to_setup = st.session_state['temp_user_for_2fa']
+
+        uri = get_provisioning_uri(user_to_setup, secret)
+        img = qrcode.make(uri)
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        qr_bytes = buf.getvalue()
+
+        st.image(qr_bytes)
+        st.markdown("1. Installa un'app di autenticazione (es. Google Authenticator, Microsoft Authenticator).")
+        st.markdown("2. Scansiona questo QR Code con l'app.")
+        st.markdown("3. Se non puoi scansionare, inserisci manualmente la seguente chiave:")
+        st.code(secret)
+
+        with st.form("verify_2fa_setup"):
+            code = st.text_input("Inserisci il codice a 6 cifre mostrato dall'app per verificare")
+            submitted = st.form_submit_button("Verifica e Attiva")
+
+            if submitted:
+                if verify_2fa_code(secret, code):
+                    # Salva il segreto nel file gestionale
+                    user_idx = df_contatti[df_contatti['Nome Cognome'] == user_to_setup].index[0]
+                    # Assicura che la colonna esista prima di scrivere
+                    if '2FA_Secret' not in df_contatti.columns:
+                        df_contatti['2FA_Secret'] = None
+                    df_contatti.loc[user_idx, '2FA_Secret'] = secret
+
+                    if salva_gestionale_async(gestionale):
+                        st.success("Configurazione 2FA completata con successo! Accesso in corso...")
+                        st.session_state.login_state = 'logged_in'
+                        st.session_state.authenticated_user = user_to_setup
+                        # il ruolo è già in sessione
+                        save_session(user_to_setup, st.session_state.ruolo)
+                        st.rerun()
+                    else:
+                        st.error("Errore durante il salvataggio della configurazione. Riprova.")
+                else:
+                    st.error("Codice non valido. Riprova.")
+
+    elif st.session_state.login_state == 'verify_2fa':
+        st.subheader("Verifica in Due Passaggi")
+        user_to_verify = st.session_state.temp_user_for_2fa
+        user_row = df_contatti[df_contatti['Nome Cognome'] == user_to_verify].iloc[0]
+        secret = user_row['2FA_Secret']
+        ruolo = user_row['Ruolo']
+
+        with st.form("verify_2fa_login"):
+            code = st.text_input(f"Ciao {user_to_verify.split()[0]}, inserisci il codice dalla tua app di autenticazione")
+            submitted = st.form_submit_button("Verifica")
+
+            if submitted:
+                if verify_2fa_code(secret, code):
+                    st.success("Codice corretto! Accesso in corso...")
+                    st.session_state.login_state = 'logged_in'
+                    st.session_state.authenticated_user = user_to_verify
                     st.session_state.ruolo = ruolo
-                    save_session(nome, ruolo)
+                    save_session(user_to_verify, ruolo)
                     st.rerun()
                 else:
-                    st.error("Credenziali non valide.")
-            else:
-                st.error("Impossibile caricare dati di login.")
+                    st.error("Codice non valido. Riprova.")

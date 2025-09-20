@@ -1,32 +1,41 @@
 import threading
-import os
+import toml
+import sys
+
+# --- CARICAMENTO CONFIGURAZIONE ---
+# Carica le configurazioni dal file 'secrets.toml'.
+# Questo file è locale e non viene tracciato da Git per motivi di sicurezza.
+# Assicurati di aver creato un file 'secrets.toml' a partire da 'secrets.toml.example'.
+
+try:
+    secrets = toml.load("secrets.toml")
+except FileNotFoundError:
+    # Termina l'applicazione se il file di configurazione essenziale non è presente.
+    # In un ambiente Streamlit, st.error() sarebbe meglio, ma questo file viene
+    # importato prima che Streamlit sia necessariamente attivo.
+    print("ERRORE CRITICO: File 'secrets.toml' non trovato. L'applicazione non può partire.")
+    print("Per favore, crea il file 'secrets.toml' copiando 'secrets.toml.example' e inserendo i percorsi corretti.")
+    sys.exit(1) # Esce dal programma
 
 # --- PATHS ---
-# Questa logica permette di usare percorsi diversi per l'ambiente di produzione e quello di sviluppo.
-# Se esiste un file/directory locale con il nome di sviluppo, viene usato quello.
-# Altrimenti, viene usato il percorso di produzione.
+# I percorsi vengono ora letti in modo sicuro dal file di configurazione.
+# Se una chiave non è presente nel file, il programma si fermerà con un errore chiaro.
+try:
+    PATH_STORICO_DB = secrets["path_storico_db"]
+    PATH_GESTIONALE = secrets["path_gestionale"]
+    PATH_GIORNALIERA_BASE = secrets["path_giornaliera_base"]
+    PATH_ATTIVITA_PROGRAMMATE = secrets["path_attivita_programmate"]
+except KeyError as e:
+    print(f"ERRORE CRITICO: Chiave di configurazione mancante in 'secrets.toml': {e}")
+    sys.exit(1)
 
-# Percorso Gestionale
-PROD_PATH_GESTIONALE = r'C:\Users\Coemi\Desktop\SCRIPT\progetto_questionario_attivita\Gestionale_Tecnici.xlsx'
-DEV_PATH_GESTIONALE = 'Gestionale_Tecnici.xlsx'
-PATH_GESTIONALE = DEV_PATH_GESTIONALE if os.path.exists(DEV_PATH_GESTIONALE) else PROD_PATH_GESTIONALE
 
-# Percorso Storico DB
-PROD_PATH_STORICO_DB = r'\\192.168.11.251\Database_Tecnico_SMI\cartella strumentale condivisa\ALLEGRETTI\Database_Report_Attivita.xlsm'
-DEV_PATH_STORICO_DB = 'Database_Report_Attivita.xlsm'
-PATH_STORICO_DB = DEV_PATH_STORICO_DB if os.path.exists(DEV_PATH_STORICO_DB) else PROD_PATH_STORICO_DB
-
-# Percorso Knowledge Core (solo locale)
+# Percorso Knowledge Core (rimane locale al progetto)
 PATH_KNOWLEDGE_CORE = "knowledge_core.json"
-
-# Percorso Giornaliere
-PROD_PATH_GIORNALIERA_BASE = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
-DEV_PATH_GIORNALIERA_BASE = "Giornaliere" # Directory fittizia
-PATH_GIORNALIERA_BASE = DEV_PATH_GIORNALIERA_BASE if os.path.exists(DEV_PATH_GIORNALIERA_BASE) else PROD_PATH_GIORNALIERA_BASE
 
 
 # --- SPREADSHEET & EMAIL ---
-NOME_FOGLIO_RISPOSTE = "Report Attività Giornaliera (Risposte)"
+NOME_FOGLIO_RISPOSTE = secrets.get("nome_foglio_risposte", "Report Attività Giornaliera (Risposte)")
 EMAIL_DESTINATARIO = "gianky.allegretti@gmail.com"
 EMAIL_CC = "francesco.millo@coemi.it"
 
