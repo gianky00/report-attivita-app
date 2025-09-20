@@ -1330,7 +1330,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     st.info("Nessun record trovato.")
 
         with tabs[3]:
-            render_reperibilita_tab(gestionale_data, nome_utente_autenticato)
+            render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
 
         with tabs[4]:
             st.subheader("Turni")
