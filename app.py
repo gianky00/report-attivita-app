@@ -841,6 +841,20 @@ def render_technician_detail_view():
 def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_utente):
     st.subheader("📅 Calendario Reperibilità Settimanale")
 
+    # --- STATO DELLA SESSIONE (per la data di inizio settimana) ---
+    if 'week_start_date' not in st.session_state:
+        st.session_state.week_start_date = datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday())
+
+    # --- SINCRONIZZAZIONE DINAMICA ---
+    # Sincronizza sempre la settimana visualizzata per garantire che i dati siano presenti
+    week_start = st.session_state.week_start_date
+    week_end = week_start + datetime.timedelta(days=6)
+    if sync_oncall_shifts(gestionale_data, start_date=week_start, end_date=week_end):
+        salva_gestionale_async(gestionale_data)
+        st.toast("Calendario aggiornato per la settimana corrente.")
+        st.rerun()
+
+
     # --- DATI E CONFIGURAZIONE ---
     HOLIDAYS_2025 = [
         datetime.date(2025, 1, 1), datetime.date(2025, 1, 6), datetime.date(2025, 4, 20),
@@ -1225,17 +1239,6 @@ def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
 
     gestionale_data = carica_gestionale()
-
-    # Sincronizza automaticamente i turni di reperibilità all'avvio
-    today = datetime.date.today()
-    start_sync_date = today.replace(day=1)
-    # Calcola una finestra di sincronizzazione di circa 2 mesi (mese corrente + prossimo)
-    end_sync_date = (start_sync_date + datetime.timedelta(days=35)).replace(day=1) + datetime.timedelta(days=31)
-
-    if sync_oncall_shifts(gestionale_data, start_date=start_sync_date, end_date=end_sync_date):
-        # Se sono stati aggiunti nuovi turni, salva il file gestionale
-        salva_gestionale_async(gestionale_data)
-        st.toast("Calendario reperibilità sincronizzato.")
 
     if st.session_state.get('editing_turno_id'):
         render_edit_shift_form(gestionale_data)
