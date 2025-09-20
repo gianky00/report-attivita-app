@@ -848,18 +848,81 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
         datetime.date(2025, 6, 2), datetime.date(2025, 8, 15), datetime.date(2025, 11, 1),
         datetime.date(2025, 12, 8), datetime.date(2025, 12, 25), datetime.date(2025, 12, 26),
     ]
-    WEEKDAY_NAMES_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    WEEKDAY_NAMES_IT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
+    MESI_ITALIANI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
     today = datetime.date.today()
+
+    # --- GESTIONE MODALE PRIMA DI TUTTO ---
+    # Se siamo in modalità "gestione", mostriamo solo l'interfaccia di gestione e fermiamo il resto.
+    if 'managing_oncall_shift_id' in st.session_state and st.session_state.managing_oncall_shift_id:
+        shift_id_to_manage = st.session_state.managing_oncall_shift_id
+        user_to_manage = st.session_state.managing_oncall_user
+
+        with st.container(border=True):
+            st.subheader("Gestione Turno di Reperibilità")
+            try:
+                turno_info = gestionale_data['turni'][gestionale_data['turni']['ID_Turno'] == shift_id_to_manage].iloc[0]
+                st.write(f"Stai modificando il turno di **{user_to_manage}** per il giorno **{pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')}**.")
+            except IndexError:
+                st.error("Dettagli del turno non trovati.")
+                # Aggiungiamo un pulsante per uscire in caso di errore
+                if st.button("⬅️ Torna al Calendario"):
+                     if 'managing_oncall_shift_id' in st.session_state: del st.session_state.managing_oncall_shift_id
+                     st.rerun()
+                st.stop()
+
+
+            if st.session_state.get('oncall_swap_mode'):
+                st.markdown("**A chi vuoi chiedere il cambio?**")
+                contatti_validi = gestionale_data['contatti'][
+                    (gestionale_data['contatti']['Nome Cognome'] != user_to_manage) &
+                    (gestionale_data['contatti']['PasswordHash'].notna())
+                ]
+                ricevente = st.selectbox("Seleziona collega:", contatti_validi['Nome Cognome'].tolist(), key=f"swap_select_{shift_id_to_manage}")
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Invia Richiesta", key=f"swap_confirm_{shift_id_to_manage}", use_container_width=True, type="primary"):
+                        if richiedi_sostituzione_logic(gestionale_data, user_to_manage, ricevente, shift_id_to_manage):
+                            salva_gestionale_async(gestionale_data)
+                            del st.session_state.managing_oncall_shift_id
+                            if 'oncall_swap_mode' in st.session_state: del st.session_state.oncall_swap_mode
+                            st.rerun()
+                with c2:
+                    if st.button("Annulla Scambio", use_container_width=True):
+                        del st.session_state.oncall_swap_mode
+                        st.rerun()
+            else:
+                st.info("Cosa vuoi fare con questo turno?")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📢 Pubblica in Bacheca", use_container_width=True):
+                        if pubblica_turno_in_bacheca_logic(gestionale_data, user_to_manage, shift_id_to_manage):
+                            salva_gestionale_async(gestionale_data)
+                            del st.session_state.managing_oncall_shift_id
+                            st.rerun()
+                with col2:
+                    if st.button("🔄 Chiedi Sostituzione", use_container_width=True):
+                        st.session_state.oncall_swap_mode = True
+                        st.rerun()
+
+            st.divider()
+            if st.button("⬅️ Torna al Calendario", key=f"cancel_manage_{shift_id_to_manage}", use_container_width=True):
+                if 'managing_oncall_shift_id' in st.session_state: del st.session_state.managing_oncall_shift_id
+                if 'managing_oncall_user' in st.session_state: del st.session_state.managing_oncall_user
+                if 'oncall_swap_mode' in st.session_state: del st.session_state.oncall_swap_mode
+                st.rerun()
+        st.stop() # Ferma l'esecuzione per non mostrare il calendario sotto la modale
 
     # --- STATO DELLA SESSIONE ---
     if 'week_start_date' not in st.session_state:
         st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
 
-    # --- LOGICA DI NAVIGAZIONE (Layout Verticale) ---
+    # --- LOGICA DI NAVIGAZIONE ---
     current_year = st.session_state.week_start_date.year
     selected_month = st.selectbox(
         "Mese", range(1, 13),
-        format_func=lambda m: datetime.date(current_year, m, 1).strftime('%B'),
+        format_func=lambda m: MESI_ITALIANI[m-1],
         index=st.session_state.week_start_date.month - 1,
         key="month_select"
     )
@@ -869,13 +932,11 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
         key="year_select"
     )
 
-    # Se mese o anno cambiano, aggiorna e ricarica
     if selected_year != st.session_state.week_start_date.year or selected_month != st.session_state.week_start_date.month:
         new_date = datetime.date(selected_year, selected_month, 1)
         st.session_state.week_start_date = new_date - datetime.timedelta(days=new_date.weekday())
         st.rerun()
 
-    # Navigazione settimanale
     col_nav1, col_nav2, col_nav3 = st.columns([1, 5, 1])
     with col_nav1:
         if st.button("⬅️", help="Settimana precedente", use_container_width=True):
@@ -884,7 +945,14 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
     with col_nav2:
         week_start = st.session_state.week_start_date
         week_end = week_start + datetime.timedelta(days=6)
-        st.markdown(f"<div style='text-align: center; font-weight: bold; margin-top: 8px;'>{week_start.strftime('%d %b')} — {week_end.strftime('%d %b %Y')}</div>", unsafe_allow_html=True)
+        week_label = f"{week_start.strftime('%d')} {MESI_ITALIANI[week_start.month-1]}"
+        if week_start.year != week_end.year:
+            week_label += f" {week_start.year} — {week_end.strftime('%d')} {MESI_ITALIANI[week_end.month-1]} {week_end.year}"
+        elif week_start.month != week_end.month:
+            week_label += f" — {week_end.strftime('%d')} {MESI_ITALIANI[week_end.month-1]} {week_end.year}"
+        else:
+            week_label += f" — {week_end.strftime('%d')} {MESI_ITALIANI[week_end.month-1]} {week_end.year}"
+        st.markdown(f"<div style='text-align: center; font-weight: bold; margin-top: 8px;'>{week_label}</div>", unsafe_allow_html=True)
     with col_nav3:
         if st.button("➡️", help="Settimana successiva", use_container_width=True):
             st.session_state.week_start_date += datetime.timedelta(weeks=1)
@@ -913,17 +981,16 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
             is_weekend = day.weekday() in [5, 6]
             is_holiday = day in HOLIDAYS_2025
 
-            border_style = "2px solid #1E90FF" if is_today else "1px solid #d3d3d3"
+            border_style = "2px solid #007bff" if is_today else "1px solid #d3d3d3"
             day_color = "red" if is_holiday else "inherit"
 
             if is_today:
-                background_color = "#e0f7fa"  # Celeste per oggi
+                background_color = "#e0f7fa"
             elif is_weekend:
-                background_color = "#fff0f0"  # Rosso chiaro per weekend
+                background_color = "#fff0f0"
             else:
                 background_color = "white"
 
-            # Fetch dei tecnici per il giorno
             technicians_html = ""
             shift_today = oncall_shifts_df[oncall_shifts_df['date_only'] == day]
             user_is_on_call = False
@@ -944,100 +1011,34 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
                             user_is_on_call = True
 
                     if tech_surnames:
-                         # Salva il nome del primo tecnico per la gestione admin
                         managed_user_name = prenotazioni_today.iloc[0]['Nome Cognome']
 
-                    technicians_html = "<br>".join([f"<div style='font-size: 1.1em; font-weight: 500; line-height: 1.2;'>{s}</div>" for s in tech_surnames])
+                    technicians_html = "".join([f"<div style='font-size: 0.9em; font-weight: 500; line-height: 1.3; margin-bottom: 2px;'>{s}</div>" for s in tech_surnames])
                 else:
                     technicians_html = "<span style='color: grey; font-style: italic;'>Libero</span>"
             else:
                  technicians_html = "<span style='color: grey; font-style: italic;'>N/D</span>"
 
-            # Box del giorno
             st.markdown(
                 f"""
-                <div style="border: {border_style}; border-radius: 8px; padding: 8px; text-align: center; background-color: {background_color}; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="border: {border_style}; border-radius: 8px; padding: 8px; text-align: center; background-color: {background_color}; height: 140px; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
                         <p style="font-weight: bold; color: {day_color}; margin: 0; font-size: 0.9em;">{WEEKDAY_NAMES_IT[day.weekday()]}</p>
                         <h3 style="margin: 0; color: {day_color};">{day.day}</h3>
                     </div>
-                    <div style='margin-top: 10px;'>
+                    <div style='margin-top: 5px;'>
                         {technicians_html}
                     </div>
                 </div>
                 """, unsafe_allow_html=True
             )
 
-            # Pulsante Gestisci (visibile a utente di turno o admin)
             can_manage = (user_is_on_call or ruolo_utente == "Amministratore") and shift_id_today
             if can_manage:
                 if st.button("Gestisci", key=f"manage_{day}", use_container_width=True):
                     st.session_state.managing_oncall_shift_id = shift_id_today
                     st.session_state.managing_oncall_user = managed_user_name
                     st.rerun()
-
-    # --- LOGICA MODALE "GESTISCI TURNO" ---
-    if 'managing_oncall_shift_id' in st.session_state and st.session_state.managing_oncall_shift_id:
-        shift_id_to_manage = st.session_state.managing_oncall_shift_id
-        user_to_manage = st.session_state.managing_oncall_user
-
-        # Aggiungi un overlay per l'effetto modale
-        st.markdown(
-            """
-            <style>
-            .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 99; }
-            .modal-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 25px; border-radius: 10px; z-index: 100; width: 90%; max-width: 550px; }
-            </style>
-            <div class="overlay"></div>
-            <div class="modal-content">
-            """, unsafe_allow_html=True
-        )
-
-        with st.container():
-            st.subheader(f"Gestisci Reperibilità di {user_to_manage.split(' ')[-1]}")
-
-            if st.session_state.get('oncall_swap_mode'):
-                st.markdown("**A chi vuoi chiedere il cambio?**")
-                # Escludi l'utente stesso e utenti senza password (placeholder)
-                contatti_validi = gestionale_data['contatti'][
-                    (gestionale_data['contatti']['Nome Cognome'] != user_to_manage) &
-                    (gestionale_data['contatti']['PasswordHash'].notna())
-                ]
-                ricevente = st.selectbox("Seleziona collega:", contatti_validi['Nome Cognome'].tolist(), key=f"swap_select_{shift_id_to_manage}")
-
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("Invia Richiesta", key=f"swap_confirm_{shift_id_to_manage}", use_container_width=True):
-                        if richiedi_sostituzione_logic(gestionale_data, user_to_manage, ricevente, shift_id_to_manage):
-                            salva_gestionale_async(gestionale_data)
-                            del st.session_state.managing_oncall_shift_id
-                            del st.session_state.oncall_swap_mode
-                            st.rerun()
-                with c2:
-                    if st.button("Annulla Scambio", use_container_width=True):
-                        del st.session_state.oncall_swap_mode
-                        st.rerun()
-            else:
-                st.info("Cosa vuoi fare con questo turno?")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("📢 Pubblica in Bacheca", use_container_width=True, type="primary"):
-                        if pubblica_turno_in_bacheca_logic(gestionale_data, user_to_manage, shift_id_to_manage):
-                            salva_gestionale_async(gestionale_data)
-                            del st.session_state.managing_oncall_shift_id
-                            st.rerun()
-                with col2:
-                    if st.button("🔄 Chiedi Sostituzione", use_container_width=True):
-                        st.session_state.oncall_swap_mode = True
-                        st.rerun()
-
-            if st.button("Chiudi", key=f"cancel_manage_{shift_id_to_manage}", use_container_width=True):
-                if 'managing_oncall_shift_id' in st.session_state: del st.session_state.managing_oncall_shift_id
-                if 'managing_oncall_user' in st.session_state: del st.session_state.managing_oncall_user
-                if 'oncall_swap_mode' in st.session_state: del st.session_state.oncall_swap_mode
-                st.rerun()
-
-        st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_guida_tab(ruolo):

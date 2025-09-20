@@ -79,10 +79,13 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
     df_contatti = gestionale_data['contatti']
 
     # Crea una mappa Cognome -> Nome Cognome per una ricerca veloce
-    surname_map = {
-        str(row['Nome Cognome']).strip().split()[-1].upper(): str(row['Nome Cognome']).strip()
-        for _, row in df_contatti.iterrows()
-    }
+    surname_map = {}
+    for _, row in df_contatti.iterrows():
+        # Assicura che il nome sia una stringa valida e non vuota
+        if isinstance(row['Nome Cognome'], str) and row['Nome Cognome'].strip():
+            full_name = row['Nome Cognome'].strip()
+            surname = full_name.split()[-1].upper()
+            surname_map[surname] = full_name
 
     changes_made = False
     current_date = start_date
