@@ -1079,8 +1079,31 @@ def render_guida_tab(ruolo):
         st.subheader("Vedere lo Storico")
         st.markdown("Sotto ogni attività, puoi espandere la sezione 'Mostra cronologia interventi' per vedere tutti i report passati relativi a quel PdL. Questo è utile per capire i problemi ricorrenti.")
 
+    with st.expander("📊 Situazione Impianti"):
+        st.subheader("Avere una Visione d'Insieme")
+        st.markdown("""
+        Questa sezione ti offre una panoramica dello stato di tutte le attività pianificate nel file Excel, arricchite con lo stato di avanzamento reale preso dall'applicazione.
+        - **Come funziona?** Il sistema unisce i dati, dando sempre la priorità allo stato più aggiornato (quello dei report compilati).
+        - **Filtri**: Puoi filtrare la vista per **TCL**, **Area** e **Stato**.
+        - **Importante**: Dopo aver selezionato i filtri, clicca sul pulsante **"Applica Filtri"** per aggiornare i grafici e la tabella con i risultati.
+        """)
+
+    with st.expander("🗓️ Programmazione Attività"):
+        st.subheader("Vedere le Attività Programmate")
+        st.markdown("""
+        Qui puoi vedere quali attività sono state programmate per la settimana e consultarne tutti i dettagli in un unico posto.
+        - Ogni attività è presentata in una "card" separata per una facile consultazione.
+        - **Dettagli nella Card**:
+            - Dati principali (PdL, Impianto, TCL, Area).
+            - Lo **stato attuale** dell'attività.
+            - La **descrizione completa** dell'attività.
+            - I **giorni della settimana** in cui è programmata.
+        - **Storico Interventi**: Se per un PdL sono già stati eseguiti interventi, puoi cliccare su `"Mostra cronologia interventi"` direttamente dentro la card per vedere lo storico, senza doverlo cercare nell'archivio.
+        - **Filtri**: Puoi cercare attività specifiche usando i filtri per **PdL**, **Area**, **TCL** o **Giorno** della settimana. Anche qui, ricorda di cliccare su **"Applica Filtri"** per avviare la ricerca.
+        """)
+
     # Sezione Reperibilità
-    with st.expander("🗓️ Calendario Reperibilità", expanded=True):
+    with st.expander("🗓️ Calendario Reperibilità"):
         st.subheader("Visualizzare il Calendario")
         st.markdown("""
         Questa sezione mostra il calendario delle reperibilità con una vista settimanale.
