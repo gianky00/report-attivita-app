@@ -1002,16 +1002,25 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
                 prenotazioni_today = df_prenotazioni[df_prenotazioni['ID_Turno'] == shift_id_today]
                 df_contatti = gestionale_data.get('contatti', pd.DataFrame())
 
-
                 if not prenotazioni_today.empty:
                     tech_display_list = []
                     for _, booking in prenotazioni_today.iterrows():
                         technician_name = booking['Nome Cognome']
                         surname = technician_name.split()[-1].upper()
 
-                        # --- LOGICA PLACEHOLDER ---
+                        # --- LOGICA PLACEHOLDER CORRETTA ---
                         user_details = df_contatti[df_contatti['Nome Cognome'] == technician_name] if not df_contatti.empty else pd.DataFrame()
-                        is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('Password')) or pd.isna(user_details.iloc[0].get('PasswordHash'))
+
+                        is_placeholder = False
+                        if user_details.empty:
+                            is_placeholder = True
+                        else:
+                            user_row = user_details.iloc[0]
+                            # Un utente è placeholder se ENTRAMBI i campi password sono vuoti/nulli
+                            has_legacy_pass = 'Password' in user_row and pd.notna(user_row['Password'])
+                            has_hashed_pass = 'PasswordHash' in user_row and pd.notna(user_row['PasswordHash'])
+                            if not has_legacy_pass and not has_hashed_pass:
+                                is_placeholder = True
 
                         if is_placeholder:
                             display_name = f"<i>{surname} (Esterno)</i>"
@@ -1026,7 +1035,7 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
                     if tech_display_list:
                         managed_user_name = prenotazioni_today.iloc[0]['Nome Cognome']
 
-                    technicians_html = "".join([f"<div style='font-size: 0.9em; font-weight: 500; line-height: 1.3; margin-bottom: 2px;'>{s}</div>" for s in tech_display_list])
+                    technicians_html = f"<div style='font-size: 0.9em; font-weight: 500; line-height: 1.3;'>{', '.join(tech_display_list)}</div>"
                 else:
                     technicians_html = "<span style='color: grey; font-style: italic;'>Libero</span>"
             else:
@@ -1034,15 +1043,15 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
             st.markdown(
                 f"""
-                <div style="border: {border_style}; border-radius: 8px; padding: 8px; background-color: {background_color}; height: 140px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="border: {border_style}; border-radius: 8px; padding: 8px; background-color: {background_color}; height: 120px; display: flex; flex-direction: column; justify-content: space-between;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
                         <!-- Colonna Sinistra: Giorno -->
                         <div style="text-align: left;">
-                            <p style="font-weight: bold; color: {day_color}; margin: 0; font-size: 0.9em;">{WEEKDAY_NAMES_IT[day.weekday()]}</p>
-                            <h3 style="margin: 0; color: {day_color};">{day.day}</h3>
+                            <p style="font-weight: bold; color: {day_color}; margin: 0; font-size: 1em;">{WEEKDAY_NAMES_IT[day.weekday()]}</p>
+                            <h2 style="margin: 0; color: {day_color};">{day.day}</h2>
                         </div>
                         <!-- Colonna Destra: Tecnici -->
-                        <div style="text-align: right; padding-left: 5px;">
+                        <div style="text-align: right; padding-left: 5px; font-size: 0.9em; font-weight: 500;">
                             {technicians_html}
                         </div>
                     </div>

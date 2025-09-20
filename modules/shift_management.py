@@ -69,6 +69,21 @@ def get_oncall_team_for_date(target_date):
 
     return teams[team_index]
 
+def find_user_by_surname(surname_to_find, contatti_df):
+    """
+    Trova il nome completo di un utente nel DataFrame dei contatti basandosi sul cognome.
+    La ricerca non è sensibile alle maiuscole/minuscole e non dipende dall'ordine del nome/cognome.
+    Restituisce il nome completo o None se non trovato.
+    """
+    surname_upper = surname_to_find.upper()
+    for _, row in contatti_df.iterrows():
+        full_name = row.get('Nome Cognome', '')
+        if isinstance(full_name, str) and full_name.strip():
+            # Controlla se il cognome del calendario è una delle parole nel nome completo
+            if surname_upper in full_name.upper().split():
+                return full_name.strip()
+    return None
+
 def sync_oncall_shifts(gestionale_data, start_date, end_date):
     """
     Sincronizza i turni di reperibilità, creandoli se non esistono.
@@ -77,15 +92,6 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
     df_turni = gestionale_data['turni']
     df_prenotazioni = gestionale_data['prenotazioni']
     df_contatti = gestionale_data['contatti']
-
-    # Crea una mappa Cognome -> Nome Cognome per una ricerca veloce
-    surname_map = {}
-    for _, row in df_contatti.iterrows():
-        # Assicura che il nome sia una stringa valida e non vuota
-        if isinstance(row['Nome Cognome'], str) and row['Nome Cognome'].strip():
-            full_name = row['Nome Cognome'].strip()
-            surname = full_name.split()[-1].upper()
-            surname_map[surname] = full_name
 
     changes_made = False
     current_date = start_date
@@ -117,18 +123,34 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
 
         # 2. Crea le nuove prenotazioni
         for surname in team_surnames:
-            full_name = surname_map.get(surname.upper())
-            if full_name:
-                new_booking = {
-                    'ID_Prenotazione': f"P_{shift_id}_{full_name.replace(' ', '')}",
-                    'ID_Turno': shift_id,
-                    'Nome Cognome': full_name,
-                    'RuoloOccupato': 'Tecnico',
-                    'Timestamp': datetime.datetime.now()
+            full_name = find_user_by_surname(surname, df_contatti)
+
+            # Se il tecnico non esiste, crealo come placeholder
+            if not full_name:
+                full_name = surname.capitalize()
+                st.info(f"Rilevato nuovo utente '{full_name}' dal calendario di reperibilità. Creato come utente esterno (placeholder).")
+
+                new_user_data = {
+                    'Nome Cognome': full_name, 'Ruolo': 'Tecnico',
+                    'Password': None, 'PasswordHash': None
                 }
-                df_prenotazioni = pd.concat([df_prenotazioni, pd.DataFrame([new_booking])], ignore_index=True)
-            else:
-                st.warning(f"Attenzione: Il cognome '{surname}' dal calendario reperibilità non è stato trovato nei contatti.")
+                # Assicura che tutte le colonne del dataframe contatti siano presenti
+                for col in df_contatti.columns:
+                    if col not in new_user_data:
+                        new_user_data[col] = None
+
+                new_user_df = pd.DataFrame([new_user_data])
+                df_contatti = pd.concat([df_contatti, new_user_df], ignore_index=True)
+
+            # Ora che siamo sicuri che l'utente esista, crea la prenotazione
+            new_booking = {
+                'ID_Prenotazione': f"P_{shift_id}_{full_name.replace(' ', '')}",
+                'ID_Turno': shift_id,
+                'Nome Cognome': full_name,
+                'RuoloOccupato': 'Tecnico',
+                'Timestamp': datetime.datetime.now()
+            }
+            df_prenotazioni = pd.concat([df_prenotazioni, pd.DataFrame([new_booking])], ignore_index=True)
 
         current_date += datetime.timedelta(days=1)
 
@@ -136,6 +158,7 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
     if changes_made:
         gestionale_data['turni'] = df_turni
         gestionale_data['prenotazioni'] = df_prenotazioni
+        gestionale_data['contatti'] = df_contatti
 
     return changes_made
 
