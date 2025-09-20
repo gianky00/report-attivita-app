@@ -12,10 +12,13 @@ import requests
 import google.generativeai as genai
 import win32com.client as win32
 import matplotlib.pyplot as plt
+import threading
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
 
 # --- CONFIGURAZIONE ---
+EXCEL_LOCK = threading.Lock()
+OUTLOOK_LOCK = threading.Lock()
 path_giornaliera_base = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
 PATH_GESTIONALE = r'C:\Users\Coemi\Desktop\SCRIPT\progetto_questionario_attivita\Gestionale_Tecnici.xlsx'
 path_storico_db = r'\\192.168.11.251\Database_Tecnico_SMI\cartella strumentale condivisa\ALLEGRETTI\Database_Report_Attivita.xlsm'
@@ -60,69 +63,79 @@ def carica_knowledge_core():
 
 #@st.cache_data
 def carica_gestionale():
-    try:
-        xls = pd.ExcelFile(PATH_GESTIONALE)
-        data = {
-            'contatti': pd.read_excel(xls, sheet_name='Contatti'),
-            'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
-            'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
-            'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
-        }
+    with EXCEL_LOCK:
+        try:
+            xls = pd.ExcelFile(PATH_GESTIONALE)
+            data = {
+                'contatti': pd.read_excel(xls, sheet_name='Contatti'),
+                'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
+                'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
+                'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
+            }
 
-        # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
-        if 'Tipo' not in data['turni'].columns:
-            data['turni']['Tipo'] = 'Assistenza'
-        data['turni']['Tipo'].fillna('Assistenza', inplace=True)
+            # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
+            if 'Tipo' not in data['turni'].columns:
+                data['turni']['Tipo'] = 'Assistenza'
+            data['turni']['Tipo'].fillna('Assistenza', inplace=True)
 
-        required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
+            required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
 
-        if 'Notifiche' in xls.sheet_names:
-            df = pd.read_excel(xls, sheet_name='Notifiche')
-            # Sanitize column names to remove leading/trailing whitespace
-            df.columns = df.columns.str.strip()
+            if 'Notifiche' in xls.sheet_names:
+                df = pd.read_excel(xls, sheet_name='Notifiche')
+                # Sanitize column names to remove leading/trailing whitespace
+                df.columns = df.columns.str.strip()
 
-            # Check for missing columns and add them if necessary
-            for col in required_notification_cols:
-                if col not in df.columns:
-                    df[col] = pd.NA
-            data['notifiche'] = df
-        else:
-            data['notifiche'] = pd.DataFrame(columns=required_notification_cols)
+                # Check for missing columns and add them if necessary
+                for col in required_notification_cols:
+                    if col not in df.columns:
+                        df[col] = pd.NA
+                data['notifiche'] = df
+            else:
+                data['notifiche'] = pd.DataFrame(columns=required_notification_cols)
 
-        # Aggiunto per la bacheca turni
-        required_bacheca_cols = ['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']
-        if 'TurniInBacheca' in xls.sheet_names:
-            df_bacheca = pd.read_excel(xls, sheet_name='TurniInBacheca')
-            df_bacheca.columns = df_bacheca.columns.str.strip()
-            for col in required_bacheca_cols:
-                if col not in df_bacheca.columns:
-                    df_bacheca[col] = pd.NA
-            data['bacheca'] = df_bacheca
-        else:
-            data['bacheca'] = pd.DataFrame(columns=required_bacheca_cols)
+            # Aggiunto per la bacheca turni
+            required_bacheca_cols = ['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']
+            if 'TurniInBacheca' in xls.sheet_names:
+                df_bacheca = pd.read_excel(xls, sheet_name='TurniInBacheca')
+                df_bacheca.columns = df_bacheca.columns.str.strip()
+                for col in required_bacheca_cols:
+                    if col not in df_bacheca.columns:
+                        df_bacheca[col] = pd.NA
+                data['bacheca'] = df_bacheca
+            else:
+                data['bacheca'] = pd.DataFrame(columns=required_bacheca_cols)
 
 
-        return data
-    except Exception as e:
-        st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
-        return None
+            return data
+        except Exception as e:
+            st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
+            return None
 
-def salva_gestionale(data):
-    try:
-        with pd.ExcelWriter(PATH_GESTIONALE, engine='openpyxl') as writer:
-            data['contatti'].to_excel(writer, sheet_name='Contatti', index=False)
-            data['turni'].to_excel(writer, sheet_name='TurniDisponibili', index=False)
-            data['prenotazioni'].to_excel(writer, sheet_name='Prenotazioni', index=False)
-            data['sostituzioni'].to_excel(writer, sheet_name='SostituzioniPendenti', index=False)
-            if 'notifiche' in data:
-                data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
-            if 'bacheca' in data:
-                data['bacheca'].to_excel(writer, sheet_name='TurniInBacheca', index=False)
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"Errore durante il salvataggio del file gestionale: {e}")
-        return False
+def _save_to_excel_backend(data):
+    """Questa funzione è sicura per essere eseguita in un thread separato."""
+    with EXCEL_LOCK:
+        try:
+            with pd.ExcelWriter(PATH_GESTIONALE, engine='openpyxl') as writer:
+                data['contatti'].to_excel(writer, sheet_name='Contatti', index=False)
+                data['turni'].to_excel(writer, sheet_name='TurniDisponibili', index=False)
+                data['prenotazioni'].to_excel(writer, sheet_name='Prenotazioni', index=False)
+                data['sostituzioni'].to_excel(writer, sheet_name='SostituzioniPendenti', index=False)
+                if 'notifiche' in data:
+                    data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
+                if 'bacheca' in data:
+                    data['bacheca'].to_excel(writer, sheet_name='TurniInBacheca', index=False)
+            return True
+        except Exception as e:
+            print(f"ERRORE CRITICO NEL THREAD DI SALVATAGGIO: {e}")
+            return False
+
+def salva_gestionale_async(data):
+    """Funzione da chiamare dall'app Streamlit per un salvataggio non bloccante."""
+    st.cache_data.clear()
+    data_copy = {k: v.copy() for k, v in data.items()}
+    thread = threading.Thread(target=_save_to_excel_backend, args=(data_copy,))
+    thread.start()
+    return True # Ritorna immediatamente
 
 def leggi_notifiche(gestionale_data, utente):
     df_notifiche = gestionale_data.get('notifiche')
@@ -191,60 +204,131 @@ def verifica_password(utente_da_url, password_inserita, df_contatti):
             return nome_completo, riga.get('Ruolo', 'Tecnico')
     return None, None
 
-def trova_attivita(utente_completo, giorno, mese, anno):
+def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
     try:
         path_giornaliera_mensile = os.path.join(path_giornaliera_base, f"Giornaliera {mese:02d}-{anno}.xlsm")
         df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=str(giorno), engine='openpyxl', header=None)
-        df_range = df_giornaliera.iloc[3:45].copy()
-        
-        # BUG FIX: Raccoglie tutte le righe corrispondenti, non solo la prima
-        righe_utente = []
+        df_range = df_giornaliera.iloc[3:45]
+
+        # 1. Trova tutti i PdL per l'utente corrente
+        pdls_utente = set()
         for _, riga in df_range.iterrows():
-            nome_in_giornaliera = str(riga[5]).strip()
-            if not nome_in_giornaliera or nome_in_giornaliera.lower() == 'nan': continue
-            parts_completo = utente_completo.lower().split()
-            if nome_in_giornaliera.lower() in ' '.join(parts_completo):
-                righe_utente.append(riga) # Aggiunge la riga e continua a cercare
+            nome_in_giornaliera = str(riga[5]).strip().lower()
+            if utente_completo.lower() in nome_in_giornaliera:
+                pdl_text = str(riga[9])
+                if not pd.isna(pdl_text):
+                    pdls_found = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
+                    pdls_utente.update(pdls_found)
 
-        if not righe_utente: return []
-        
-        df_utente = pd.DataFrame(righe_utente)
+        if not pdls_utente:
+            return []
+
+        # 2. Raccogli tutte le attività e i membri del team per i PdL rilevanti
+        attivita_collezionate = {} # Dizionario per raggruppare per (pdl, desc)
         df_storico_db = carica_archivio_completo()
-        lista_attivita_finale = []
 
-        for _, riga in df_utente.iterrows():
-            pdl_text, desc_text = str(riga[9]), str(riga[6])
-            if pd.isna(pdl_text) or pd.isna(desc_text): continue
-            lista_pdl = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
-            lista_descrizioni = [line.strip() for line in desc_text.splitlines() if line.strip()]
-            for pdl, desc in zip(lista_pdl, lista_descrizioni):
-                storico_df_pdl = df_storico_db[df_storico_db['PdL'] == pdl].copy() if not df_storico_db.empty else pd.DataFrame()
-                if not storico_df_pdl.empty:
-                    storico_df_pdl['Data_Riferimento'] = storico_df_pdl['Data_Riferimento_dt'].dt.strftime('%d/%m/%Y')
-                    storico = storico_df_pdl.to_dict('records')
-                else:
+        for _, riga in df_range.iterrows():
+            pdl_text = str(riga[9])
+            if pd.isna(pdl_text): continue
+
+            lista_pdl_riga = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
+
+            # Controlla se c'è almeno un PdL rilevante in questa riga
+            if not any(pdl in pdls_utente for pdl in lista_pdl_riga):
+                continue
+
+            desc_text = str(riga[6])
+            nome_membro = str(riga[5]).strip()
+            start_time = str(riga[10])
+            end_time = str(riga[11])
+            orario = f"{start_time}-{end_time}"
+
+            if pd.isna(desc_text) or not nome_membro or nome_membro.lower() == 'nan':
+                continue
+
+            lista_descrizioni_riga = [line.strip() for line in desc_text.splitlines() if line.strip()]
+
+            for pdl, desc in zip(lista_pdl_riga, lista_descrizioni_riga):
+                if pdl not in pdls_utente: continue
+
+                activity_key = (pdl, desc)
+                if activity_key not in attivita_collezionate:
+                    # Carica storico solo la prima volta che incontriamo l'attività
                     storico = []
-                lista_attivita_finale.append({'pdl': pdl, 'attivita': desc, 'storico': storico})
+                    if not df_storico_db.empty:
+                        storico_df_pdl = df_storico_db[df_storico_db['PdL'] == pdl].copy()
+                        if not storico_df_pdl.empty:
+                            storico_df_pdl['Data_Riferimento'] = pd.to_datetime(storico_df_pdl['Data_Riferimento_dt']).dt.strftime('%d/%m/%Y')
+                            storico = storico_df_pdl.to_dict('records')
+
+                    attivita_collezionate[activity_key] = {
+                        'pdl': pdl,
+                        'attivita': desc,
+                        'storico': storico,
+                        'team_members': {} # Usiamo un dizionario per raggruppare gli orari per membro
+                    }
+
+                # Aggiungi o aggiorna il membro del team con il suo orario
+                if nome_membro not in attivita_collezionate[activity_key]['team_members']:
+                    ruolo_membro = "Sconosciuto"
+                    if df_contatti is not None and not df_contatti.empty:
+                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
+                        if not matching_user.empty:
+                            ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
+
+                    attivita_collezionate[activity_key]['team_members'][nome_membro] = {
+                        'ruolo': ruolo_membro,
+                        'orari': set()
+                    }
+
+                attivita_collezionate[activity_key]['team_members'][nome_membro]['orari'].add(orario)
+
+        # 3. Formatta l'output finale
+        lista_attivita_finale = []
+        for activity_data in attivita_collezionate.values():
+            team_list = []
+            for nome, details in activity_data['team_members'].items():
+                team_list.append({
+                    'nome': nome,
+                    'ruolo': details['ruolo'],
+                    'orari': sorted(list(details['orari']))
+                })
+
+            activity_data['team'] = team_list
+            del activity_data['team_members'] # Pulisci la struttura intermedia
+            lista_attivita_finale.append(activity_data)
+
         return lista_attivita_finale
-    except FileNotFoundError: return []
-    except Exception as e: st.error(f"Errore lettura giornaliera: {e}"); return []
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        st.error(f"Errore lettura giornaliera: {e}")
+        return []
 
 
 # --- FUNZIONI DI BUSINESS ---
-def invia_email_con_outlook(subject, html_body):
+def _invia_email_con_outlook_backend(subject, html_body):
+    """Funzione sicura per essere eseguita in un thread, gestisce CoInitialize."""
     pythoncom.CoInitialize()
-    try:
-        outlook = win32.Dispatch('outlook.application')
-        mail = outlook.CreateItem(0)
-        mail.To = EMAIL_DESTINATARIO
-        mail.CC = "francesco.millo@coemi.it"
-        mail.Subject = subject
-        mail.HTMLBody = html_body
-        mail.Send()
-    except Exception as e:
-        st.warning(f"Impossibile inviare l'email con Outlook: {e}. Assicurati che Outlook sia installato e in esecuzione.")
-    finally:
-        pythoncom.CoUninitialize()
+    with OUTLOOK_LOCK:
+        try:
+            outlook = win32.Dispatch('outlook.application')
+            mail = outlook.CreateItem(0)
+            mail.To = EMAIL_DESTINATARIO
+            mail.CC = "francesco.millo@coemi.it"
+            mail.Subject = subject
+            mail.HTMLBody = html_body
+            mail.Send()
+        except Exception as e:
+            # Log all'output standard, non è possibile usare st.warning da un thread
+            print(f"ATTENZIONE: Impossibile inviare l'email con Outlook in background: {e}.")
+        finally:
+            pythoncom.CoUninitialize()
+
+def invia_email_con_outlook_async(subject, html_body):
+    """Avvia l'invio dell'email in un thread separato per non bloccare l'UI."""
+    thread = threading.Thread(target=_invia_email_con_outlook_backend, args=(subject, html_body))
+    thread.start()
 
 def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
     try:
@@ -305,7 +389,7 @@ def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_rif
         </body>
         </html>
         """
-        invia_email_con_outlook(titolo_email, html_body)
+        invia_email_con_outlook_async(titolo_email, html_body)
         return row_index
     except Exception as e:
         st.error(f"Errore salvataggio GSheets: {e}")
@@ -588,11 +672,11 @@ def visualizza_storico_organizzato(storico_list, pdl):
     else:
         st.markdown("*Nessuno storico disponibile per questo PdL.*")
 
-def disegna_sezione_attivita(lista_attivita, section_key):
+def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
     if f"completed_tasks_{section_key}" not in st.session_state:
         st.session_state[f"completed_tasks_{section_key}"] = []
 
-    completed_pdls = {task['pdl'] for task in st.session_state[f"completed_tasks_{section_key}"] }
+    completed_pdls = {task['pdl'] for task in st.session_state.get(f"completed_tasks_{section_key}", [])}
     attivita_da_fare = [task for task in lista_attivita if task['pdl'] not in completed_pdls]
 
     st.subheader("📝 Attività da Compilare")
@@ -602,6 +686,16 @@ def disegna_sezione_attivita(lista_attivita, section_key):
     for i, task in enumerate(attivita_da_fare):
         with st.container(border=True):
             st.markdown(f"**PdL `{task['pdl']}`** - {task['attivita']}")
+
+            # --- LOGICA TEAM ---
+            team = task.get('team', [])
+            if len(team) > 1:
+                team_details_md = "**Team:**\n"
+                for member in team:
+                    orari_str = ", ".join(member['orari'])
+                    team_details_md += f"- {member['nome']} ({member['ruolo']}) | 🕒 {orari_str}\n"
+                st.info(team_details_md)
+            # --- FINE LOGICA TEAM ---
             
             visualizza_storico_organizzato(task.get('storico', []), task['pdl'])
             if task.get('storico'):
@@ -619,19 +713,24 @@ def disegna_sezione_attivita(lista_attivita, section_key):
                         st.info(f"**Azione Strategica:** {analisi.get('azione_strategica', 'N/D')}")
             
             st.markdown("---")
-            col1, col2 = st.columns(2)
-            if col1.button("✍️ Compila Report Guidato (IA)", key=f"guide_{section_key}_{i}"):
-                st.session_state.debriefing_task = {**task, "section_key": section_key}
-                st.session_state.report_mode = 'guided'
-                st.rerun()
-            if col2.button("📝 Compila Report Manuale", key=f"manual_{section_key}_{i}"):
-                st.session_state.debriefing_task = {**task, "section_key": section_key}
-                st.session_state.report_mode = 'manual'
-                st.rerun()
+            # --- LOGICA RUOLO ---
+            if len(task.get('team', [])) > 1 and ruolo_utente == "Aiutante":
+                st.warning("ℹ️ Solo i tecnici possono compilare il report per questa attività di team.")
+            else:
+                col1, col2 = st.columns(2)
+                if col1.button("✍️ Compila Report Guidato (IA)", key=f"guide_{section_key}_{i}"):
+                    st.session_state.debriefing_task = {**task, "section_key": section_key}
+                    st.session_state.report_mode = 'guided'
+                    st.rerun()
+                if col2.button("📝 Compila Report Manuale", key=f"manual_{section_key}_{i}"):
+                    st.session_state.debriefing_task = {**task, "section_key": section_key}
+                    st.session_state.report_mode = 'manual'
+                    st.rerun()
+            # --- FINE LOGICA RUOLO ---
     
     st.divider()
 
-    if st.session_state[f"completed_tasks_{section_key}"]:
+    if st.session_state.get(f"completed_tasks_{section_key}", []):
         with st.expander("✅ Attività Inviate (Modificabili)", expanded=False):
             for i, task_data in enumerate(st.session_state[f"completed_tasks_{section_key}"]):
                 with st.container(border=True):
@@ -668,7 +767,7 @@ def render_notification_center(notifications_df, gestionale_data):
                     if is_unread:
                         if st.button(" letto", key=f"read_{notifica_id}", help="Segna come letto"):
                             segna_notifica_letta(gestionale_data, notifica_id)
-                            salva_gestionale(gestionale_data)
+                            salva_gestionale_async(gestionale_data)
                             st.rerun()
                 st.divider()
 
@@ -921,7 +1020,7 @@ def render_edit_shift_form(gestionale_data):
             crea_notifica(gestionale_data, utente, messaggio)
 
         # 5. Salva le modifiche e termina la modalità di modifica
-        if salva_gestionale(gestionale_data):
+        if salva_gestionale_async(gestionale_data):
             st.success("Turno aggiornato con successo!")
             st.toast("Le modifiche sono state salvate.")
             del st.session_state['editing_turno_id']
@@ -996,11 +1095,11 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                 with col1:
                     if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}", help="Rimuove la tua prenotazione dal turno."):
                         if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
-                            salva_gestionale(gestionale); st.rerun()
+                            salva_gestionale_async(gestionale); st.rerun()
                 with col2:
                     if st.button("📢 Pubblica in Bacheca", key=f"pub_{turno['ID_Turno']}_{key_suffix}", help="Rilascia il tuo turno e rendilo disponibile a tutti in bacheca."):
                         if pubblica_turno_in_bacheca_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
-                            salva_gestionale(gestionale); st.rerun()
+                            salva_gestionale_async(gestionale); st.rerun()
                 with col3:
                     if st.button("🔄 Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}", help="Chiedi a un collega specifico di sostituirti."):
                         st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
@@ -1012,7 +1111,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                     ruolo_scelto = st.selectbox("Prenota come:", opzioni, key=f"sel_{turno['ID_Turno']}_{key_suffix}")
                     if st.button("Conferma Prenotazione", key=f"add_{turno['ID_Turno']}_{key_suffix}"):
                         if prenota_turno_logic(gestionale, nome_utente_autenticato, turno['ID_Turno'], ruolo_scelto):
-                            salva_gestionale(gestionale); st.rerun()
+                            salva_gestionale_async(gestionale); st.rerun()
                 else:
                     st.warning("Turno al completo.")
                     if st.button("Chiedi Sostituzione", key=f"ask_full_{turno['ID_Turno']}_{key_suffix}"):
@@ -1025,7 +1124,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                 ricevente = st.selectbox("Seleziona collega:", ricevente_options, key=f"swap_select_{turno['ID_Turno']}_{key_suffix}")
                 if st.button("Invia Richiesta", key=f"swap_confirm_{turno['ID_Turno']}_{key_suffix}"):
                     if richiedi_sostituzione_logic(gestionale, nome_utente_autenticato, ricevente, turno['ID_Turno']):
-                        salva_gestionale(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
+                        salva_gestionale_async(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
 
 def render_technician_detail_view():
     """Mostra la vista di dettaglio per un singolo tecnico."""
@@ -1108,6 +1207,77 @@ def render_technician_detail_view():
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
 
+def render_guida_tab():
+    st.title("❓ Guida & Istruzioni")
+    st.write("Benvenuto nella guida utente! Qui troverai le istruzioni per usare al meglio l'applicazione.")
+    st.info("Usa i menù a tendina qui sotto per esplorare le diverse sezioni e funzionalità dell'app.")
+
+    # Sezione Attività
+    with st.expander("📝 Le Tue Attività (Oggi e Giorno Precedente)", expanded=True):
+        st.subheader("Compilare un Report")
+        st.markdown("""
+        In questa sezione vedi le attività che ti sono state assegnate per la giornata.
+        - Per ogni attività, vedrai il codice **PdL** e una breve descrizione.
+        - Se lavori in **Team**, vedrai i nomi dei tuoi colleghi, il loro ruolo e gli orari di lavoro per quell'attività.
+        - Puoi scegliere tra due modalità di compilazione:
+            - **✍️ Compila Report Guidato (IA)**: Una procedura a domande che ti aiuta a scrivere un report completo e standardizzato.
+            - **📝 Compila Report Manuale**: Un campo di testo libero dove puoi scrivere il report come preferisci.
+        - **Importante per gli Aiutanti**: Se fai parte di un team con più persone, solo un **Tecnico** può compilare il report. Potrai vedere l'attività e il report una volta compilato, ma non potrai inviarlo. Se lavori da solo, puoi compilare il report normalmente.
+        """)
+        st.subheader("Vedere lo Storico")
+        st.markdown("Sotto ogni attività, puoi espandere la sezione 'Mostra cronologia interventi' per vedere tutti i report passati relativi a quel PdL. Questo è utile per capire i problemi ricorrenti.")
+
+    # Sezione Gestione Turni
+    with st.expander("📅 Gestione Turni"):
+        st.subheader("Prenotare un Turno")
+        st.markdown("""
+        Nella sotto-sezione "Turni Disponibili", puoi vedere tutti i turni di assistenza o straordinario a cui puoi partecipare.
+        1.  Trova un turno con posti liberi (indicato da ✅).
+        2.  Seleziona il ruolo che vuoi occupare ("Tecnico" o "Aiutante").
+        3.  Clicca su **"Conferma Prenotazione"**.
+        """)
+
+        st.subheader("Cedere un Turno: Le 3 Opzioni")
+        st.markdown("Se sei già prenotato per un turno e non puoi più partecipare, hai 3 opzioni:")
+        st.markdown("""
+        1.  **Cancella Prenotazione**: L'opzione più semplice. La tua prenotazione viene rimossa e il posto torna disponibile per tutti. Usala se non hai bisogno di essere sostituito.
+        2.  **📢 Pubblica in Bacheca**: Questa è l'opzione migliore se vuoi che qualcun altro prenda il tuo posto. Il tuo turno viene messo in una "bacheca" pubblica visibile a tutti. Il primo collega idoneo che lo accetta prenderà automaticamente il tuo posto e tu riceverai una notifica di conferma.
+        3.  **🔄 Chiedi Sostituzione**: Usala se vuoi chiedere a un collega specifico di sostituirti. Seleziona il nome del collega e invia la richiesta. Riceverai una notifica se accetta o rifiuta.
+        """)
+
+        st.subheader("La Bacheca dei Turni Liberi (📢 Bacheca)")
+        st.markdown("""
+        Questa sotto-sezione è una bacheca pubblica dove trovi i turni che i tuoi colleghi hanno messo a disposizione.
+        - Se vedi un turno che ti interessa e hai il ruolo richiesto, puoi cliccare su **"Prendi questo turno"**.
+        - La regola è: **"primo che arriva, primo servito"**. Se sarai il più veloce, il turno sarà tuo!
+        - Il sistema aggiornerà automaticamente il calendario e invierà le notifiche di conferma.
+        """)
+
+    # Sezione Notifiche
+    with st.expander("🔔 Notifiche"):
+        st.subheader("Come Funzionano")
+        st.markdown("""
+        L'icona della campanella in alto a destra ti mostra se hai nuove notifiche. Un numero rosso indica i messaggi non letti.
+        - Clicca sulla campanella per aprire il centro notifiche.
+        - Riceverai notifiche per:
+            - Nuovi turni disponibili.
+            - Richieste di sostituzione ricevute.
+            - Risposte alle tue richieste di sostituzione.
+            - Conferme quando un tuo turno in bacheca viene preso da un collega.
+        - Clicca sul pulsante **"letto"** per marcare una notifica come letta e farla sparire dal conteggio.
+        """)
+
+    # Sezione Archivio
+    with st.expander("🗂️ Ricerca nell'Archivio"):
+        st.subheader("Trovare Vecchi Report")
+        st.markdown("Usa questa sezione per cercare tra tutti i report compilati in passato. Puoi filtrare per:")
+        st.markdown("""
+        - **PdL**: Per vedere tutti gli interventi su un punto specifico.
+        - **Descrizione**: Per cercare parole chiave nell'attività.
+        - **Tecnico**: Per vedere tutti i report compilati da uno o più colleghi.
+        """)
+
+
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
@@ -1149,7 +1319,7 @@ def main_app(nome_utente_autenticato, ruolo):
         elif oggi.weekday() == 6: giorno_precedente = oggi - datetime.timedelta(days=2)
         
         if ruolo in ["Amministratore", "Tecnico"]:
-            attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year)
+            attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
             num_attivita_mancanti = 0
             if attivita_pianificate_ieri:
                 archivio_df = carica_archivio_completo()
@@ -1158,7 +1328,7 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Gestione Turni"]
+        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Gestione Turni", "❓ Guida & Istruzioni"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
         
@@ -1166,12 +1336,12 @@ def main_app(nome_utente_autenticato, ruolo):
         
         with tabs[0]:
             st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-            lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year)
-            disegna_sezione_attivita(lista_attivita, "today")
+            lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+            disegna_sezione_attivita(lista_attivita, "today", ruolo)
         
         with tabs[1]:
             st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year)
+            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
             archivio_df = carica_archivio_completo()
             pdl_compilati_ieri = set()
             if not archivio_df.empty:
@@ -1179,7 +1349,7 @@ def main_app(nome_utente_autenticato, ruolo):
                 pdl_compilati_ieri = set(report_compilati['PdL'])
             
             attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
-            disegna_sezione_attivita(attivita_da_recuperare, "yesterday")
+            disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
         with tabs[2]:
             st.subheader("Ricerca nell'Archivio")
@@ -1187,12 +1357,25 @@ def main_app(nome_utente_autenticato, ruolo):
             if archivio_df.empty:
                 st.warning("L'archivio è vuoto o non caricabile.")
             else:
+                # --- PAGINATION LOGIC ---
+                ITEMS_PER_PAGE = 20
+                if 'num_items_to_show' not in st.session_state:
+                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
+                if 'last_search_filters' not in st.session_state:
+                    st.session_state.last_search_filters = (None, None, None)
+
                 col1, col2, col3 = st.columns(3)
                 with col1: pdl_search = st.text_input("Filtra per PdL", key="pdl_search")
                 with col2: desc_search = st.text_input("Filtra per Descrizione", key="desc_search")
                 with col3:
                     lista_tecnici = sorted(list(archivio_df['Tecnico'].dropna().unique()))
                     tec_search = st.multiselect("Filtra per Tecnico/i", options=lista_tecnici, key="tec_search")
+
+                current_filters = (pdl_search, desc_search, tuple(sorted(tec_search)))
+                if current_filters != st.session_state.last_search_filters:
+                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
+                st.session_state.last_search_filters = current_filters
+                # --- END PAGINATION LOGIC ---
                 
                 risultati_df = archivio_df.copy()
                 if pdl_search: risultati_df = risultati_df[risultati_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
@@ -1202,12 +1385,25 @@ def main_app(nome_utente_autenticato, ruolo):
                 if not risultati_df.empty:
                     pdl_unici_df = risultati_df.sort_values(by='Data_Riferimento_dt', ascending=False).drop_duplicates(subset=['PdL'], keep='first')
                     st.info(f"Trovati {len(risultati_df)} interventi, raggruppati in {len(pdl_unici_df)} PdL unici.")
-                    for _, riga_pdl in pdl_unici_df.iterrows():
+
+                    # Applica la paginazione
+                    items_to_display_df = pdl_unici_df.head(st.session_state.num_items_to_show)
+
+                    for _, riga_pdl in items_to_display_df.iterrows():
                         pdl_corrente = riga_pdl['PdL']
                         descrizione_recente = riga_pdl.get('Descrizione', '')
                         with st.expander(f"**PdL {pdl_corrente}** | *{str(descrizione_recente)[:60]}...*"):
                             interventi_per_pdl_df = risultati_df[risultati_df['PdL'] == pdl_corrente].sort_values(by='Data_Riferimento_dt', ascending=False)
                             visualizza_storico_organizzato(interventi_per_pdl_df.to_dict('records'), pdl_corrente)
+
+                    # --- PAGINATION BUTTON ---
+                    total_results = len(pdl_unici_df)
+                    if st.session_state.num_items_to_show < total_results:
+                        st.divider()
+                        if st.button("Carica Altri Risultati..."):
+                            st.session_state.num_items_to_show += ITEMS_PER_PAGE
+                            st.rerun()
+                    # --- END PAGINATION BUTTON ---
                 else:
                     st.info("Nessun record trovato.")
 
@@ -1253,7 +1449,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                 if is_eligible:
                                     if st.button("Prendi questo turno", key=f"take_{bacheca_entry['ID_Bacheca']}"):
                                         if prendi_turno_da_bacheca_logic(gestionale_data, nome_utente_autenticato, ruolo, bacheca_entry['ID_Bacheca']):
-                                            salva_gestionale(gestionale_data)
+                                            salva_gestionale_async(gestionale_data)
                                             st.rerun()
                                 else:
                                     st.info("Non hai il ruolo richiesto per questo turno.")
@@ -1274,11 +1470,11 @@ def main_app(nome_utente_autenticato, ruolo):
                         with c1:
                             if st.button("✅ Accetta", key=f"acc_{richiesta['ID_Richiesta']}"):
                                 if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], nome_utente_autenticato, True):
-                                    salva_gestionale(gestionale_data); st.rerun()
+                                    salva_gestionale_async(gestionale_data); st.rerun()
                         with c2:
                             if st.button("❌ Rifiuta", key=f"rif_{richiesta['ID_Richiesta']}"):
                                 if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], nome_utente_autenticato, False):
-                                    salva_gestionale(gestionale_data); st.rerun()
+                                    salva_gestionale_async(gestionale_data); st.rerun()
                 st.divider()
                 st.markdown("#### 📤 Richieste Inviate")
                 richieste_inviate = df_sostituzioni[df_sostituzioni['Richiedente'] == nome_utente_autenticato]
@@ -1286,8 +1482,11 @@ def main_app(nome_utente_autenticato, ruolo):
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
         
-        if len(tabs) > 4 and ruolo == "Amministratore":
-            with tabs[4]:
+        with tabs[4]:
+            render_guida_tab()
+
+        if len(tabs) > 5 and ruolo == "Amministratore":
+            with tabs[5]:
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
@@ -1437,7 +1636,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                         messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
                                         for utente in utenti_da_notificare:
                                             crea_notifica(gestionale_data, utente, messaggio)
-                                    if salva_gestionale(gestionale_data):
+                                    if salva_gestionale_async(gestionale_data):
                                         st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
                                         st.toast("Tutti i tecnici sono stati notificati!")
                                         st.rerun()
@@ -1462,7 +1661,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                     else:
                                         nuovo_utente = pd.DataFrame([{'Nome Cognome': nome_completo, 'Ruolo': new_ruolo, 'Password': None, 'Link Attività': ''}])
                                         gestionale_data['contatti'] = pd.concat([gestionale_data['contatti'], nuovo_utente], ignore_index=True)
-                                        if salva_gestionale(gestionale_data):
+                                        if salva_gestionale_async(gestionale_data):
                                             st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
                                             st.rerun()
                                         else:
