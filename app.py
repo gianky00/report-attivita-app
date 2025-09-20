@@ -1000,20 +1000,33 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
             if not shift_today.empty:
                 shift_id_today = shift_today.iloc[0]['ID_Turno']
                 prenotazioni_today = df_prenotazioni[df_prenotazioni['ID_Turno'] == shift_id_today]
+                df_contatti = gestionale_data.get('contatti', pd.DataFrame())
+
 
                 if not prenotazioni_today.empty:
-                    tech_surnames = []
+                    tech_display_list = []
                     for _, booking in prenotazioni_today.iterrows():
                         technician_name = booking['Nome Cognome']
                         surname = technician_name.split()[-1].upper()
-                        tech_surnames.append(surname)
+
+                        # --- LOGICA PLACEHOLDER ---
+                        user_details = df_contatti[df_contatti['Nome Cognome'] == technician_name] if not df_contatti.empty else pd.DataFrame()
+                        is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('Password')) or pd.isna(user_details.iloc[0].get('PasswordHash'))
+
+                        if is_placeholder:
+                            display_name = f"<i>{surname} (Esterno)</i>"
+                        else:
+                            display_name = surname
+                        tech_display_list.append(display_name)
+                        # --- FINE LOGICA PLACEHOLDER ---
+
                         if technician_name == nome_utente_autenticato:
                             user_is_on_call = True
 
-                    if tech_surnames:
+                    if tech_display_list:
                         managed_user_name = prenotazioni_today.iloc[0]['Nome Cognome']
 
-                    technicians_html = "".join([f"<div style='font-size: 0.9em; font-weight: 500; line-height: 1.3; margin-bottom: 2px;'>{s}</div>" for s in tech_surnames])
+                    technicians_html = "".join([f"<div style='font-size: 0.9em; font-weight: 500; line-height: 1.3; margin-bottom: 2px;'>{s}</div>" for s in tech_display_list])
                 else:
                     technicians_html = "<span style='color: grey; font-style: italic;'>Libero</span>"
             else:
@@ -1021,13 +1034,17 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
             st.markdown(
                 f"""
-                <div style="border: {border_style}; border-radius: 8px; padding: 8px; text-align: center; background-color: {background_color}; height: 140px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <p style="font-weight: bold; color: {day_color}; margin: 0; font-size: 0.9em;">{WEEKDAY_NAMES_IT[day.weekday()]}</p>
-                        <h3 style="margin: 0; color: {day_color};">{day.day}</h3>
-                    </div>
-                    <div style='margin-top: 5px;'>
-                        {technicians_html}
+                <div style="border: {border_style}; border-radius: 8px; padding: 8px; background-color: {background_color}; height: 140px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+                        <!-- Colonna Sinistra: Giorno -->
+                        <div style="text-align: left;">
+                            <p style="font-weight: bold; color: {day_color}; margin: 0; font-size: 0.9em;">{WEEKDAY_NAMES_IT[day.weekday()]}</p>
+                            <h3 style="margin: 0; color: {day_color};">{day.day}</h3>
+                        </div>
+                        <!-- Colonna Destra: Tecnici -->
+                        <div style="text-align: right; padding-left: 5px;">
+                            {technicians_html}
+                        </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True
