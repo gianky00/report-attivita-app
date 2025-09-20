@@ -1060,12 +1060,12 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
 
 def render_guida_tab(ruolo):
-    st.title("❓ Guida & Istruzioni")
+    st.title("❓ Guida")
     st.write("Benvenuto nella guida utente! Qui troverai le istruzioni per usare al meglio l'applicazione.")
     st.info("Usa i menù a tendina qui sotto per esplorare le diverse sezioni e funzionalità dell'app. La tua sessione ora rimane attiva anche se aggiorni la pagina!")
 
     # Sezione Attività
-    with st.expander("📝 Le Tue Attività (Oggi e Giorno Precedente)"):
+    with st.expander("📝 Le Tue Attività (Oggi e Giorno Precedente)", expanded=True):
         st.subheader("Compilare un Report")
         st.markdown("""
         In questa sezione vedi le attività che ti sono state assegnate per la giornata.
@@ -1102,33 +1102,25 @@ def render_guida_tab(ruolo):
         - **Filtri**: Puoi cercare attività specifiche usando i filtri per **PdL**, **Area**, **TCL** o **Giorno** della settimana. Anche qui, ricorda di cliccare su **"Applica Filtri"** per avviare la ricerca.
         """)
 
-    # Sezione Reperibilità
-    with st.expander("🗓️ Calendario Reperibilità"):
-        st.subheader("Visualizzare il Calendario")
+    # Sezione Turni (unificata)
+    with st.expander("📅 Gestione Turni (Assistenza, Straordinari, Reperibilità)"):
+        st.subheader("Prenotare un Turno di Assistenza o Straordinario")
         st.markdown("""
-        Questa sezione mostra il calendario delle reperibilità con una vista settimanale.
-        - **Navigazione**: Usa i pulsanti **⬅️** e **➡️** per muoverti tra le settimane, oppure seleziona un Mese e Anno specifici dai menu a tendina.
-        - **Evidenziazione**: Il giorno corrente è cerchiato in blu, mentre i giorni festivi sono segnati in rosso.
-        - **Tecnici di Turno**: Sotto ogni giorno, vedrai i cognomi dei tecnici incaricati per la reperibilità.
-        """)
-        st.subheader("Gestire il Tuo Turno di Reperibilità")
-        st.markdown("""
-        Se sei di turno in un determinato giorno, vedrai apparire il pulsante **"Gestisci Turno"**.
-        - Dato che i turni di reperibilità sono assegnati d'ufficio, l'unica azione disponibile è **"📢 Pubblica in Bacheca"**.
-        - Cliccando questo pulsante, il tuo posto nel turno di reperibilità viene messo a disposizione di tutti i colleghi, che potranno prenderlo dalla sezione **Turni > Bacheca**.
-        """)
-
-    # Sezione Turni
-    with st.expander("📅 Turni (Assistenza e Straordinari)"):
-        st.subheader("Prenotare un Turno")
-        st.markdown("""
-        Nella sotto-sezione "Turni Disponibili", puoi vedere tutti i turni di assistenza o straordinario a cui puoi partecipare.
+        Nella sotto-sezione `📅 Turni`, puoi vedere tutti i turni di assistenza o straordinario a cui puoi partecipare.
         1.  Trova un turno con posti liberi (indicato da ✅).
         2.  Seleziona il ruolo che vuoi occupare ("Tecnico" o "Aiutante").
         3.  Clicca su **"Conferma Prenotazione"**.
         """)
 
-        st.subheader("Cedere un Turno: Le 3 Opzioni")
+        st.subheader("Gestire un Turno di Reperibilità")
+        st.markdown("""
+        Nella sotto-sezione `🗓️ Turni Reperibilità`, puoi visualizzare il calendario settimanale.
+        - Se sei di turno in un determinato giorno, vedrai apparire il pulsante **"Gestisci"**.
+        - Dato che i turni di reperibilità sono assegnati d'ufficio, l'unica azione disponibile è **"📢 Pubblica in Bacheca"**.
+        - Cliccando questo pulsante, il tuo posto nel turno di reperibilità viene messo a disposizione di tutti i colleghi, che potranno prenderlo dalla sezione `📢 Bacheca`.
+        """)
+
+        st.subheader("Cedere un Turno (Assistenza/Straordinario): Le 3 Opzioni")
         st.markdown("Se sei già prenotato per un turno e non puoi più partecipare, hai 3 opzioni:")
         st.markdown("""
         1.  **Cancella Prenotazione**: L'opzione più semplice. La tua prenotazione viene rimossa e il posto torna disponibile per tutti. Usala se non hai bisogno di essere sostituito.
@@ -1136,9 +1128,9 @@ def render_guida_tab(ruolo):
         3.  **🔄 Chiedi Sostituzione**: Usala se vuoi chiedere a un collega specifico di sostituirti. Seleziona il nome del collega e invia la richiesta. Riceverai una notifica se accetta o rifiuta.
         """)
 
-        st.subheader("La Bacheca dei Turni Liberi (📢 Bacheca)")
+        st.subheader("La Bacheca dei Turni (📢 Bacheca)")
         st.markdown("""
-        Questa sotto-sezione è una bacheca pubblica dove trovi i turni che i tuoi colleghi hanno messo a disposizione.
+        Questa sotto-sezione è una bacheca pubblica dove trovi i turni che i tuoi colleghi (sia di assistenza/straordinario che di reperibilità) hanno messo a disposizione.
         - Se vedi un turno che ti interessa e hai il ruolo richiesto, puoi cliccare su **"Prendi questo turno"**.
         - La regola è: **"primo che arriva, primo servito"**. Se sarai il più veloce, il turno sarà tuo!
         - Il sistema aggiornerà automaticamente il calendario e invierà le notifiche di conferma.
@@ -1447,7 +1439,7 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "📊 Situazione Impianti", "🗓️ Programmazione Attività", "Ricerca nell'Archivio", "Reperibilità", "Turni", "❓ Guida & Istruzioni"]
+        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "📊 Situazione Impianti", "🗓️ Programmazione Attività", "Ricerca nell'Archivio", "📅 Gestione Turni", "❓ Guida"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
         
@@ -1533,13 +1525,8 @@ def main_app(nome_utente_autenticato, ruolo):
                     st.info("Nessun record trovato.")
 
         with tabs[5]:
-            render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
-
-        with tabs[6]:
-            st.subheader("Turni")
-            # The 'gestionale_data' is already loaded at the top of main_app.
-            # No need to load it again here.
-            turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni Disponibili", "📢 Bacheca", "🔄 Gestione Sostituzioni"])
+            st.subheader("Gestione Turni")
+            turni_disponibili_tab, bacheca_tab, sostituzioni_tab, reperibilita_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni", "🗓️ Turni Reperibilità"])
 
             with turni_disponibili_tab:
                 assistenza_tab, straordinario_tab = st.tabs(["Turni Assistenza", "Turni Straordinario"])
@@ -1609,12 +1596,15 @@ def main_app(nome_utente_autenticato, ruolo):
                 if richieste_inviate.empty: st.info("Nessuna richiesta di sostituzione inviata.")
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
-        
-        with tabs[7]:
+
+            with reperibilita_tab:
+                render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
+
+        with tabs[6]:
             render_guida_tab(ruolo)
 
-        if len(tabs) > 8 and ruolo == "Amministratore":
-            with tabs[8]:
+        if len(tabs) > 7 and ruolo == "Amministratore":
+            with tabs[7]:
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
