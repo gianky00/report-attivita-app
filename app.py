@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import threading
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
+import holidays
 
 # --- CONFIGURAZIONE ---
 EXCEL_LOCK = threading.Lock()
@@ -468,6 +469,90 @@ def rispondi_sostituzione_logic(gestionale_data, id_richiesta, utente_che_rispon
 
     st.error("Errore: la prenotazione originale del richiedente non è stata trovata per lo scambio.")
     return False
+
+import calendar
+from datetime import date, timedelta
+
+def genera_calendario_reperibilita(year, month):
+    squadre_rotazione = ["RICIPUTO-GUARINO", "SPINALI-ALLEGRETTI", "MILLO-GUARINO", "TARASCIO-PARTESANO"]
+    anchor_date = date(2025, 9, 5) # Riciputo-Guarino starts a 7-day block
+    anchor_team_index = 0 # Index for Riciputo-Guarino
+
+    calendario = {}
+    num_days = calendar.monthrange(year, month)[1]
+
+    for day_num in range(1, num_days + 1):
+        current_date = date(year, month, day_num)
+        days_passed = (current_date - anchor_date).days
+
+        # Calculate the index in the rotation
+        team_index_offset = days_passed // 7
+        team_index = (anchor_team_index + team_index_offset) % len(squadre_rotazione)
+
+        calendario[day_num] = squadre_rotazione[team_index]
+
+    return calendario
+
+def sincronizza_reperibilita(gestionale_data):
+    needs_saving = False
+    today = date.today()
+
+    # Generate for current and next month to be safe
+    months_to_sync = [(today.year, today.month)]
+    next_month = today.month + 1
+    next_year = today.year
+    if next_month > 12:
+        next_month = 1
+        next_year += 1
+    months_to_sync.append((next_year, next_month))
+
+    df_turni = gestionale_data['turni']
+    df_prenotazioni = gestionale_data['prenotazioni']
+
+    for year, month in months_to_sync:
+        calendario_mese = genera_calendario_reperibilita(year, month)
+        for day, squadra in calendario_mese.items():
+            current_date = date(year, month, day)
+            shift_id = f"R_{current_date.strftime('%Y%m%d')}"
+
+            # Check if shift already exists
+            if shift_id not in df_turni['ID_Turno'].values:
+                print(f"INFO: Creazione turno Reperibilità per il {current_date.strftime('%d/%m/%Y')}")
+                needs_saving = True
+
+                # Create the new shift
+                nuovo_turno = {
+                    'ID_Turno': shift_id,
+                    'Descrizione': 'Reperibilità',
+                    'Data': pd.to_datetime(current_date),
+                    'OrarioInizio': '00:00',
+                    'OrarioFine': '23:59',
+                    'PostiTecnico': 2,
+                    'PostiAiutante': 0,
+                    'Tipo': 'Reperibilità'
+                }
+                df_turni = pd.concat([df_turni, pd.DataFrame([nuovo_turno])], ignore_index=True)
+
+                # Create the bookings
+                tecnici = squadra.split('-')
+                for tecnico in tecnici:
+                    # Find the full name from contatti
+                    contatto_row = gestionale_data['contatti'][gestionale_data['contatti']['Nome Cognome'].str.contains(tecnico, case=False, na=False)]
+                    if not contatto_row.empty:
+                        nome_completo = contatto_row.iloc[0]['Nome Cognome']
+                        nuova_prenotazione = {
+                            'ID_Prenotazione': f"P_{shift_id}_{nome_completo.replace(' ', '')}",
+                            'ID_Turno': shift_id,
+                            'Nome Cognome': nome_completo,
+                            'RuoloOccupato': 'Tecnico',
+                            'Timestamp': datetime.datetime.now()
+                        }
+                        df_prenotazioni = pd.concat([df_prenotazioni, pd.DataFrame([nuova_prenotazione])], ignore_index=True)
+
+    gestionale_data['turni'] = df_turni
+    gestionale_data['prenotazioni'] = df_prenotazioni
+    return needs_saving
+
 
 def pubblica_turno_in_bacheca_logic(gestionale_data, utente_richiedente, turno_id):
     df_prenotazioni = gestionale_data['prenotazioni']
@@ -1207,6 +1292,72 @@ def render_technician_detail_view():
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
 
+def render_reperibilita_tab(gestionale_data):
+    st.subheader("📅 Calendario Reperibilità")
+
+    # --- Selezione Mese e Anno ---
+    col1, col2 = st.columns(2)
+    current_year = date.today().year
+    with col1:
+        selected_year = st.selectbox("Seleziona Anno", range(current_year - 1, current_year + 2), index=1)
+    with col2:
+        # Month names in Italian
+        mesi_italiani = {
+            1: "Gennaio", 2: "Febbraio", 3: "Marzo", 4: "Aprile", 5: "Maggio", 6: "Giugno",
+            7: "Luglio", 8: "Agosto", 9: "Settembre", 10: "Ottobre", 11: "Novembre", 12: "Dicembre"
+        }
+        selected_month_num = st.selectbox("Seleziona Mese", range(1, 13), format_func=lambda m: mesi_italiani[m], index=date.today().month - 1)
+
+    st.divider()
+
+    # --- Generazione Dati Calendario ---
+    calendario_reperibilita = genera_calendario_reperibilita(selected_year, selected_month_num)
+    it_holidays = holidays.IT(years=selected_year)
+
+    month_calendar = calendar.monthcalendar(selected_year, selected_month_num)
+    days_of_week = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+
+    # --- Disegno Calendario ---
+    # Header dei giorni della settimana
+    cols = st.columns(7)
+    for col, day_name in zip(cols, days_of_week):
+        col.markdown(f"**{day_name}**")
+
+    # Giorni del mese
+    for week in month_calendar:
+        cols = st.columns(7)
+        for i, day in enumerate(week):
+            with cols[i]:
+                if day == 0:
+                    st.write("") # Giorno fuori dal mese
+                else:
+                    current_date = date(selected_year, selected_month_num, day)
+                    squadra = calendario_reperibilita.get(day, "N/D")
+                    is_holiday = current_date in it_holidays
+                    is_weekend = current_date.weekday() >= 5 # Sabato o Domenica
+
+                    # Styling
+                    bg_color = "transparent" # Colore di default
+                    border_style = "1px solid #e0e0e0"
+                    day_color = "#31333F" # Colore standard del testo
+                    if is_holiday:
+                        bg_color = "#ffebeb" # Rosso chiaro per festività
+                        day_color = "#D32F2F"
+                        border_style = f"1px solid {day_color}"
+                    elif is_weekend:
+                        bg_color = "#f0f8ff" # Blu chiaro per weekend
+
+                    st.markdown(
+                        f"""
+                        <div style="background-color:{bg_color}; border-radius:10px; padding:10px; height:120px; border: {border_style};">
+                            <div style="font-weight:bold; text-align:right; color:{day_color};">{day}</div>
+                            <div style="font-size:0.8em; text-align:center; margin-top:10px; line-height:1.2;">{squadra.replace('-', '<br>')}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+
 def render_guida_tab():
     st.title("❓ Guida & Istruzioni")
     st.write("Benvenuto nella guida utente! Qui troverai le istruzioni per usare al meglio l'applicazione.")
@@ -1283,6 +1434,8 @@ def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
 
     gestionale_data = carica_gestionale()
+    if sincronizza_reperibilita(gestionale_data):
+        salva_gestionale_async(gestionale_data)
 
     if st.session_state.get('editing_turno_id'):
         render_edit_shift_form(gestionale_data)
@@ -1328,7 +1481,7 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Gestione Turni", "❓ Guida & Istruzioni"]
+        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Turni", "❓ Guida & Istruzioni"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
         
@@ -1408,23 +1561,28 @@ def main_app(nome_utente_autenticato, ruolo):
                     st.info("Nessun record trovato.")
 
         with tabs[3]:
-            st.subheader("Gestione Turni Personale")
-            # The 'gestionale_data' is already loaded at the top of main_app.
-            # No need to load it again here.
-            turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni Disponibili", "📢 Bacheca", "🔄 Gestione Sostituzioni"])
+            st.subheader("Gestione Turni e Reperibilità")
 
-            with turni_disponibili_tab:
+            turni_standard_tab, reperibilita_tab, bacheca_tab, sostituzioni_tab = st.tabs(["🏢 Turni Standard", "📅 Turni Reperibilità", "📢 Bacheca", "🔄 Gestione Sostituzioni"])
+
+            with turni_standard_tab:
                 assistenza_tab, straordinario_tab = st.tabs(["Turni Assistenza", "Turni Straordinario"])
                 df_turni_totale = gestionale_data['turni'].copy()
                 df_turni_totale.dropna(subset=['ID_Turno'], inplace=True)
 
+                # Filtra solo i turni che non sono di reperibilità
+                df_turni_standard = df_turni_totale[df_turni_totale['Tipo'] != 'Reperibilità']
+
                 with assistenza_tab:
-                    df_assistenza = df_turni_totale[df_turni_totale['Tipo'] == 'Assistenza']
+                    df_assistenza = df_turni_standard[(df_turni_standard['Tipo'] == 'Assistenza') | (df_turni_standard['Tipo'].isna())]
                     render_turni_list(df_assistenza, gestionale_data, nome_utente_autenticato, ruolo, "assistenza")
 
                 with straordinario_tab:
-                    df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
+                    df_straordinario = df_turni_standard[df_turni_standard['Tipo'] == 'Straordinario']
                     render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
+
+            with reperibilita_tab:
+                render_reperibilita_tab(gestionale_data)
 
             with bacheca_tab:
                 st.subheader("Turni Liberi in Bacheca")
