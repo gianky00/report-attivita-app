@@ -3,7 +3,104 @@ import pandas as pd
 import datetime
 from modules.notifications import crea_notifica
 
-# --- LOGICA DI BUSINESS PER I TURNI ---
+# --- LOGICA DI BUSINESS PER LA REPERIBILITÀ ---
+
+def get_oncall_team_for_date(target_date):
+    """
+    Calcola il team di reperibilità per una data specifica basandosi su una rotazione di 28 giorni.
+    """
+    # Sequenza dei team in rotazione
+    teams = [
+        ["RICIPUTO", "GUARINO"],      # Settimana 1
+        ["SPINALI", "ALLEGRETTI"],    # Settimana 2
+        ["MILLO", "GUARINO"],         # Settimana 3
+        ["TARASCIO", "PARTESANO"],    # Settimana 4
+    ]
+
+    # Data di riferimento da cui inizia un ciclo completo di 7 giorni del primo team (Team B)
+    # Venerdì 3 Ottobre 2025 è l'inizio di un blocco di 7 giorni per RICIPUTO-GUARINO.
+    # Inizia il 3, finisce il 9. Il 10 inizia SPINALI.
+    reference_date = datetime.date(2025, 10, 3)
+
+    # Calcola i giorni trascorsi dalla data di riferimento
+    delta_days = (target_date - reference_date).days
+
+    # Calcola l'indice del team nel ciclo di 28 giorni (4 team * 7 giorni)
+    # Usiamo (delta_days // 7) per trovare in quale blocco di 7 giorni cadiamo.
+    # L'operatore modulo (%) assicura che l'indice rimanga nel range 0-3.
+    team_index = (delta_days // 7) % 4
+
+    return teams[team_index]
+
+def sync_oncall_shifts(gestionale_data, start_date, end_date):
+    """
+    Sincronizza i turni di reperibilità, creandoli se non esistono.
+    Usa la logica di rotazione dinamica per determinare i team.
+    """
+    df_turni = gestionale_data['turni']
+    df_prenotazioni = gestionale_data['prenotazioni']
+    df_contatti = gestionale_data['contatti']
+
+    # Crea una mappa Cognome -> Nome Cognome per una ricerca veloce
+    surname_map = {
+        str(row['Nome Cognome']).strip().split()[-1].upper(): str(row['Nome Cognome']).strip()
+        for _, row in df_contatti.iterrows()
+    }
+
+    changes_made = False
+    current_date = start_date
+
+    while current_date <= end_date:
+        # Controlla se un turno di reperibilità per questo giorno esiste già
+        # Converte la colonna 'Data' in solo data per il confronto
+        if not df_turni[(df_turni['Tipo'] == 'Reperibilità') & (pd.to_datetime(df_turni['Data']).dt.date == current_date)].empty:
+            current_date += datetime.timedelta(days=1)
+            continue
+
+        changes_made = True
+        team_surnames = get_oncall_team_for_date(current_date)
+        date_str = current_date.strftime("%Y-%m-%d")
+        shift_id = f"REP_{date_str}"
+
+        # 1. Crea il nuovo turno
+        new_shift = {
+            'ID_Turno': shift_id,
+            'Descrizione': f"Reperibilità {current_date.strftime('%d/%m/%Y')}",
+            'Data': pd.to_datetime(current_date),
+            'OrarioInizio': '00:00',
+            'OrarioFine': '23:59',
+            'PostiTecnico': len(team_surnames),
+            'PostiAiutante': 0,
+            'Tipo': 'Reperibilità'
+        }
+        df_turni = pd.concat([df_turni, pd.DataFrame([new_shift])], ignore_index=True)
+
+        # 2. Crea le nuove prenotazioni
+        for surname in team_surnames:
+            full_name = surname_map.get(surname.upper())
+            if full_name:
+                new_booking = {
+                    'ID_Prenotazione': f"P_{shift_id}_{full_name.replace(' ', '')}",
+                    'ID_Turno': shift_id,
+                    'Nome Cognome': full_name,
+                    'RuoloOccupato': 'Tecnico',
+                    'Timestamp': datetime.datetime.now()
+                }
+                df_prenotazioni = pd.concat([df_prenotazioni, pd.DataFrame([new_booking])], ignore_index=True)
+            else:
+                st.warning(f"Attenzione: Il cognome '{surname}' dal calendario reperibilità non è stato trovato nei contatti.")
+
+        current_date += datetime.timedelta(days=1)
+
+    # Aggiorna i DataFrame nel dizionario principale
+    if changes_made:
+        gestionale_data['turni'] = df_turni
+        gestionale_data['prenotazioni'] = df_prenotazioni
+
+    return changes_made
+
+
+# --- LOGICA DI BUSINESS PER I TURNI STANDARD ---
 def prenota_turno_logic(gestionale_data, utente, turno_id, ruolo_scelto):
     df_turni, df_prenotazioni = gestionale_data['turni'], gestionale_data['prenotazioni']
     turno_info = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]
@@ -95,7 +192,7 @@ def pubblica_turno_in_bacheca_logic(gestionale_data, utente_richiedente, turno_i
     gestionale_data['prenotazioni'].drop(idx_prenotazione, inplace=True)
 
     # Aggiungi il turno alla bacheca
-    df_bacheca = gestionale_data['bacheca']
+    df_bacheca = gestionale_data.get('bacheca', pd.DataFrame(columns=['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']))
     nuovo_id_bacheca = f"B_{int(datetime.datetime.now().timestamp())}"
     nuova_voce_bacheca = pd.DataFrame([{
         'ID_Bacheca': nuovo_id_bacheca,
