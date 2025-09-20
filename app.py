@@ -18,6 +18,7 @@ import learning_module
 
 # --- CONFIGURAZIONE ---
 EXCEL_LOCK = threading.Lock()
+OUTLOOK_LOCK = threading.Lock()
 path_giornaliera_base = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
 PATH_GESTIONALE = r'C:\Users\Coemi\Desktop\SCRIPT\progetto_questionario_attivita\Gestionale_Tecnici.xlsx'
 path_storico_db = r'\\192.168.11.251\Database_Tecnico_SMI\cartella strumentale condivisa\ALLEGRETTI\Database_Report_Attivita.xlsm'
@@ -306,20 +307,28 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
 
 
 # --- FUNZIONI DI BUSINESS ---
-def invia_email_con_outlook(subject, html_body):
+def _invia_email_con_outlook_backend(subject, html_body):
+    """Funzione sicura per essere eseguita in un thread, gestisce CoInitialize."""
     pythoncom.CoInitialize()
-    try:
-        outlook = win32.Dispatch('outlook.application')
-        mail = outlook.CreateItem(0)
-        mail.To = EMAIL_DESTINATARIO
-        mail.CC = "francesco.millo@coemi.it"
-        mail.Subject = subject
-        mail.HTMLBody = html_body
-        mail.Send()
-    except Exception as e:
-        st.warning(f"Impossibile inviare l'email con Outlook: {e}. Assicurati che Outlook sia installato e in esecuzione.")
-    finally:
-        pythoncom.CoUninitialize()
+    with OUTLOOK_LOCK:
+        try:
+            outlook = win32.Dispatch('outlook.application')
+            mail = outlook.CreateItem(0)
+            mail.To = EMAIL_DESTINATARIO
+            mail.CC = "francesco.millo@coemi.it"
+            mail.Subject = subject
+            mail.HTMLBody = html_body
+            mail.Send()
+        except Exception as e:
+            # Log all'output standard, non è possibile usare st.warning da un thread
+            print(f"ATTENZIONE: Impossibile inviare l'email con Outlook in background: {e}.")
+        finally:
+            pythoncom.CoUninitialize()
+
+def invia_email_con_outlook_async(subject, html_body):
+    """Avvia l'invio dell'email in un thread separato per non bloccare l'UI."""
+    thread = threading.Thread(target=_invia_email_con_outlook_backend, args=(subject, html_body))
+    thread.start()
 
 def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
     try:
@@ -380,7 +389,7 @@ def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_rif
         </body>
         </html>
         """
-        invia_email_con_outlook(titolo_email, html_body)
+        invia_email_con_outlook_async(titolo_email, html_body)
         return row_index
     except Exception as e:
         st.error(f"Errore salvataggio GSheets: {e}")
@@ -1348,12 +1357,25 @@ def main_app(nome_utente_autenticato, ruolo):
             if archivio_df.empty:
                 st.warning("L'archivio è vuoto o non caricabile.")
             else:
+                # --- PAGINATION LOGIC ---
+                ITEMS_PER_PAGE = 20
+                if 'num_items_to_show' not in st.session_state:
+                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
+                if 'last_search_filters' not in st.session_state:
+                    st.session_state.last_search_filters = (None, None, None)
+
                 col1, col2, col3 = st.columns(3)
                 with col1: pdl_search = st.text_input("Filtra per PdL", key="pdl_search")
                 with col2: desc_search = st.text_input("Filtra per Descrizione", key="desc_search")
                 with col3:
                     lista_tecnici = sorted(list(archivio_df['Tecnico'].dropna().unique()))
                     tec_search = st.multiselect("Filtra per Tecnico/i", options=lista_tecnici, key="tec_search")
+
+                current_filters = (pdl_search, desc_search, tuple(sorted(tec_search)))
+                if current_filters != st.session_state.last_search_filters:
+                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
+                st.session_state.last_search_filters = current_filters
+                # --- END PAGINATION LOGIC ---
                 
                 risultati_df = archivio_df.copy()
                 if pdl_search: risultati_df = risultati_df[risultati_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
@@ -1363,12 +1385,25 @@ def main_app(nome_utente_autenticato, ruolo):
                 if not risultati_df.empty:
                     pdl_unici_df = risultati_df.sort_values(by='Data_Riferimento_dt', ascending=False).drop_duplicates(subset=['PdL'], keep='first')
                     st.info(f"Trovati {len(risultati_df)} interventi, raggruppati in {len(pdl_unici_df)} PdL unici.")
-                    for _, riga_pdl in pdl_unici_df.iterrows():
+
+                    # Applica la paginazione
+                    items_to_display_df = pdl_unici_df.head(st.session_state.num_items_to_show)
+
+                    for _, riga_pdl in items_to_display_df.iterrows():
                         pdl_corrente = riga_pdl['PdL']
                         descrizione_recente = riga_pdl.get('Descrizione', '')
                         with st.expander(f"**PdL {pdl_corrente}** | *{str(descrizione_recente)[:60]}...*"):
                             interventi_per_pdl_df = risultati_df[risultati_df['PdL'] == pdl_corrente].sort_values(by='Data_Riferimento_dt', ascending=False)
                             visualizza_storico_organizzato(interventi_per_pdl_df.to_dict('records'), pdl_corrente)
+
+                    # --- PAGINATION BUTTON ---
+                    total_results = len(pdl_unici_df)
+                    if st.session_state.num_items_to_show < total_results:
+                        st.divider()
+                        if st.button("Carica Altri Risultati..."):
+                            st.session_state.num_items_to_show += ITEMS_PER_PAGE
+                            st.rerun()
+                    # --- END PAGINATION BUTTON ---
                 else:
                     st.info("Nessun record trovato.")
 
