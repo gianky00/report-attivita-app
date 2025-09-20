@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import threading
 import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
+import bcrypt
 from modules.auth import authenticate_user
 import config
 from modules.data_manager import (
@@ -25,6 +26,7 @@ from modules.data_manager import (
     scrivi_o_aggiorna_risposta
 )
 from modules.shift_management import (
+    sync_oncall_shifts,
     prenota_turno_logic,
     cancella_prenotazione_logic,
     richiedi_sostituzione_logic,
@@ -614,6 +616,130 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                     if richiedi_sostituzione_logic(gestionale, nome_utente_autenticato, ricevente, turno['ID_Turno']):
                         salva_gestionale_async(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
 
+def render_gestione_account(gestionale_data):
+    df_contatti = gestionale_data['contatti']
+
+    # --- Modifica Utenti Esistenti ---
+    st.subheader("Modifica Utenti Esistenti")
+
+    if 'editing_user' not in st.session_state:
+        st.session_state.editing_user = None
+
+    # Se un utente è in modifica, mostra solo il form di modifica
+    if st.session_state.editing_user:
+        user_to_edit_series = df_contatti[df_contatti['Nome Cognome'] == st.session_state.editing_user]
+        if not user_to_edit_series.empty:
+            user_to_edit = user_to_edit_series.iloc[0]
+            with st.form(key="edit_user_form"):
+                st.subheader(f"Modifica Utente: {st.session_state.editing_user}")
+
+                ruoli_disponibili = ["Tecnico", "Aiutante", "Amministratore"]
+                try:
+                    current_role_index = ruoli_disponibili.index(user_to_edit['Ruolo'])
+                except ValueError:
+                    current_role_index = 0 # Default a Tecnico se il ruolo non è standard
+
+                new_role = st.selectbox("Nuovo Ruolo", options=ruoli_disponibili, index=current_role_index)
+
+                is_placeholder_current = pd.isna(user_to_edit.get('PasswordHash')) and pd.isna(user_to_edit.get('Password'))
+                is_placeholder_new = st.checkbox("Imposta come Utente Placeholder (senza accesso)", value=is_placeholder_current)
+
+                new_password = ""
+                if not is_placeholder_new:
+                    new_password = st.text_input("Nuova Password (lasciare vuoto per non modificare)", type="password")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.form_submit_button("Salva Modifiche", type="primary"):
+                        user_idx = df_contatti[df_contatti['Nome Cognome'] == st.session_state.editing_user].index[0]
+                        df_contatti.loc[user_idx, 'Ruolo'] = new_role
+
+                        if is_placeholder_new:
+                            df_contatti.loc[user_idx, 'PasswordHash'] = None
+                            if 'Password' in df_contatti.columns:
+                                df_contatti.loc[user_idx, 'Password'] = None
+                            st.success(f"L'utente {st.session_state.editing_user} è stato impostato come Placeholder.")
+                        elif new_password:
+                            hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+                            df_contatti.loc[user_idx, 'PasswordHash'] = hashed.decode('utf-8')
+                            if 'Password' in df_contatti.columns:
+                                df_contatti.loc[user_idx, 'Password'] = None
+                            st.success(f"Password per {st.session_state.editing_user} aggiornata.")
+
+                        salva_gestionale_async(gestionale_data)
+                        st.session_state.editing_user = None
+                        st.toast("Modifiche salvate!")
+                        st.rerun()
+
+                with col2:
+                    if st.form_submit_button("Annulla"):
+                        st.session_state.editing_user = None
+                        st.rerun()
+        else:
+            st.error("Utente non trovato. Ricaricamento...")
+            st.session_state.editing_user = None
+            st.rerun()
+
+    # Altrimenti, mostra la lista di tutti gli utenti
+    else:
+        for index, user in df_contatti.iterrows():
+            user_name = user['Nome Cognome']
+            with st.container(border=True):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                with col1:
+                    st.markdown(f"**{user_name}**")
+                with col2:
+                    is_placeholder = pd.isna(user.get('PasswordHash')) and pd.isna(user.get('Password'))
+                    status = "Placeholder (senza accesso)" if is_placeholder else "Attivo"
+                    st.markdown(f"*{user['Ruolo']}* - Stato: *{status}*")
+                with col3:
+                    if st.button("Modifica", key=f"edit_{user_name}"):
+                        st.session_state.editing_user = user_name
+                        st.rerun()
+
+    st.divider()
+
+    # --- Crea Nuovo Utente Placeholder ---
+    with st.expander("Crea Nuovo Utente Placeholder"):
+        with st.form("new_user_form", clear_on_submit=True):
+            st.subheader("Dati Nuovo Utente")
+            c1, c2 = st.columns(2)
+            new_nome = c1.text_input("Nome")
+            new_cognome = c2.text_input("Cognome")
+            new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante", "Amministratore"])
+
+            submitted_new_user = st.form_submit_button("Crea Utente")
+
+            if submitted_new_user:
+                if new_nome and new_cognome:
+                    nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
+                    if nome_completo in df_contatti['Nome Cognome'].tolist():
+                        st.error(f"Errore: L'utente '{nome_completo}' esiste già.")
+                    else:
+                        new_user_data = {
+                            'Nome Cognome': nome_completo,
+                            'Ruolo': new_ruolo,
+                            'Password': None,
+                            'PasswordHash': None,
+                            'Link Attività': ''
+                        }
+                        # Assicura che tutte le colonne esistenti siano presenti per evitare errori di concat
+                        for col in df_contatti.columns:
+                            if col not in new_user_data:
+                                new_user_data[col] = None
+
+                        nuovo_utente_df = pd.DataFrame([new_user_data])
+                        gestionale_data['contatti'] = pd.concat([df_contatti, nuovo_utente_df], ignore_index=True)
+
+                        if salva_gestionale_async(gestionale_data):
+                            st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
+                            st.rerun()
+                        else:
+                            st.error("Errore durante il salvataggio del nuovo utente.")
+                else:
+                    st.warning("Nome e Cognome sono obbligatori.")
+
+
 def render_technician_detail_view():
     """Mostra la vista di dettaglio per un singolo tecnico."""
     tecnico = st.session_state['detail_technician']
@@ -694,14 +820,181 @@ def render_technician_detail_view():
     else:
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
+def render_reperibilita_tab(gestionale_data, nome_utente_autenticato):
+    st.subheader("📅 Calendario Reperibilità Settimanale")
 
-def render_guida_tab():
+    # --- DATI E CONFIGURAZIONE ---
+    # Festività italiane per il 2025
+    HOLIDAYS_2025 = [
+        datetime.date(2025, 1, 1),   # Capodanno
+        datetime.date(2025, 1, 6),   # Epifania
+        datetime.date(2025, 4, 20),  # Pasqua
+        datetime.date(2025, 4, 21),  # Lunedì dell'Angelo
+        datetime.date(2025, 4, 25),  # Festa della Liberazione
+        datetime.date(2025, 5, 1),   # Festa del Lavoro
+        datetime.date(2025, 6, 2),   # Festa della Repubblica
+        datetime.date(2025, 8, 15),  # Ferragosto
+        datetime.date(2025, 11, 1),  # Tutti i Santi
+        datetime.date(2025, 12, 8),  # Immacolata Concezione
+        datetime.date(2025, 12, 25), # Natale
+        datetime.date(2025, 12, 26), # Santo Stefano
+    ]
+    WEEKDAY_NAMES_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
+    today = datetime.date.today()
+
+    # --- STATO DELLA SESSIONE PER LA NAVIGAZIONE ---
+    if 'week_start_date' not in st.session_state:
+        st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
+
+    # --- LOGICA DI NAVIGAZIONE ---
+    col_nav1, col_nav2, col_nav3, col_nav4, col_nav5 = st.columns([1.5, 1, 1, 1, 1.5])
+
+    with col_nav1:
+        if st.button("⬅️ Settimana Prec."):
+            st.session_state.week_start_date -= datetime.timedelta(weeks=1)
+            st.rerun()
+
+    with col_nav5:
+        if st.button("Settimana Succ. ➡️"):
+            st.session_state.week_start_date += datetime.timedelta(weeks=1)
+            st.rerun()
+
+    with col_nav3:
+        if st.button("Oggi"):
+            st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
+            st.rerun()
+
+    # Gestione Anni Bisestili per il selettore del mese
+    year_for_month_selection = st.session_state.week_start_date.year
+
+    with col_nav2:
+        selected_month = st.selectbox("Mese", range(1, 13), format_func=lambda m: datetime.date(year_for_month_selection, m, 1).strftime('%B'), index=st.session_state.week_start_date.month - 1, key="month_select")
+
+    with col_nav4:
+        selected_year = st.selectbox("Anno", range(2024, 2027), index=st.session_state.week_start_date.year - 2024, key="year_select")
+
+    # Se mese o anno cambiano, aggiorna la data di inizio settimana
+    if selected_year != st.session_state.week_start_date.year or selected_month != st.session_state.week_start_date.month:
+        new_date = datetime.date(selected_year, selected_month, 1)
+        st.session_state.week_start_date = new_date - datetime.timedelta(days=new_date.weekday())
+        st.rerun()
+
+    st.divider()
+
+    # --- RECUPERO DATI REPERIBILITÀ ---
+    df_turni = gestionale_data['turni']
+    df_prenotazioni = gestionale_data['prenotazioni']
+    oncall_shifts_df = df_turni[df_turni['Tipo'] == 'Reperibilità'].copy()
+    oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data']) # Assicura che la colonna sia datetime
+    oncall_shifts_df['date_only'] = oncall_shifts_df['Data'].dt.date
+
+    # --- VISUALIZZAZIONE CALENDARIO ---
+    week_dates = [st.session_state.week_start_date + datetime.timedelta(days=i) for i in range(7)]
+    cols = st.columns(7)
+
+    for i, day in enumerate(week_dates):
+        with cols[i]:
+            # Stile del giorno
+            border_style = "2px solid #1E90FF" if day == today else "1px solid #d3d3d3"
+            background_color = "#f0f2f6" if day == today else "white"
+            day_color = "red" if day in HOLIDAYS_2025 else "inherit"
+
+            st.markdown(
+                f"""
+                <div style="border: {border_style}; border-radius: 5px; padding: 10px; text-align: center; background-color: {background_color};">
+                    <p style="font-weight: bold; color: {day_color}; margin: 0;">{WEEKDAY_NAMES_IT[day.weekday()]}</p>
+                    <h3 style="margin: 0; color: {day_color};">{day.day}</h3>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            # Trova il turno e i tecnici per il giorno corrente
+            shift_today = oncall_shifts_df[oncall_shifts_df['date_only'] == day]
+            if not shift_today.empty:
+                shift_id = shift_today.iloc[0]['ID_Turno']
+                prenotazioni_today = df_prenotazioni[df_prenotazioni['ID_Turno'] == shift_id]
+
+                user_is_on_call = False
+                if not prenotazioni_today.empty:
+                    for _, booking in prenotazioni_today.iterrows():
+                        technician_name = booking['Nome Cognome']
+                        # Mostra solo il cognome in maiuscolo
+                        surname = technician_name.split()[-1].upper()
+                        st.markdown(f"<h5 style='text-align: center;'>{surname}</h5>", unsafe_allow_html=True)
+                        if technician_name == nome_utente_autenticato:
+                            user_is_on_call = True
+
+                    if user_is_on_call:
+                        if st.button("Gestisci Turno", key=f"manage_{day}", use_container_width=True):
+                            st.session_state['managing_oncall_shift_id'] = shift_id
+                            st.rerun()
+            else:
+                st.markdown("<p style='text-align: center; color: grey;'>-</p>", unsafe_allow_html=True)
+
+    # --- LOGICA MODALE "GESTISCI TURNO" ---
+    if 'managing_oncall_shift_id' in st.session_state and st.session_state.managing_oncall_shift_id:
+        shift_id_to_manage = st.session_state.managing_oncall_shift_id
+
+        # Aggiungi un overlay semi-trasparente per l'effetto modale
+        st.markdown(
+            """
+            <style>
+            .overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.5);
+                z-index: 99;
+            }
+            .modal-content {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background-color: white;
+                padding: 20px;
+                border-radius: 10px;
+                z-index: 100;
+                width: 80%;
+                max-width: 500px;
+            }
+            </style>
+            <div class="overlay"></div>
+            <div class="modal-content">
+            """,
+            unsafe_allow_html=True
+        )
+
+        with st.container():
+            st.subheader("Gestione Turno di Reperibilità")
+            st.info("Dato che i turni di reperibilità sono assegnati d'ufficio, puoi solo pubblicarlo in bacheca per trovare un sostituto.")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📢 Pubblica in Bacheca", key=f"pub_{shift_id_to_manage}", help="Rilascia il tuo turno e rendilo disponibile a tutti.", use_container_width=True, type="primary"):
+                    if pubblica_turno_in_bacheca_logic(gestionale_data, nome_utente_autenticato, shift_id_to_manage):
+                        salva_gestionale_async(gestionale_data)
+                        del st.session_state['managing_oncall_shift_id']
+                        st.rerun()
+
+            with col2:
+                if st.button("Annulla", key=f"cancel_manage_{shift_id_to_manage}", use_container_width=True):
+                    del st.session_state['managing_oncall_shift_id']
+                    st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_guida_tab(ruolo):
     st.title("❓ Guida & Istruzioni")
     st.write("Benvenuto nella guida utente! Qui troverai le istruzioni per usare al meglio l'applicazione.")
-    st.info("Usa i menù a tendina qui sotto per esplorare le diverse sezioni e funzionalità dell'app.")
+    st.info("Usa i menù a tendina qui sotto per esplorare le diverse sezioni e funzionalità dell'app. La tua sessione ora rimane attiva anche se aggiorni la pagina!")
 
     # Sezione Attività
-    with st.expander("📝 Le Tue Attività (Oggi e Giorno Precedente)", expanded=True):
+    with st.expander("📝 Le Tue Attività (Oggi e Giorno Precedente)"):
         st.subheader("Compilare un Report")
         st.markdown("""
         In questa sezione vedi le attività che ti sono state assegnate per la giornata.
@@ -715,8 +1008,24 @@ def render_guida_tab():
         st.subheader("Vedere lo Storico")
         st.markdown("Sotto ogni attività, puoi espandere la sezione 'Mostra cronologia interventi' per vedere tutti i report passati relativi a quel PdL. Questo è utile per capire i problemi ricorrenti.")
 
-    # Sezione Gestione Turni
-    with st.expander("📅 Gestione Turni"):
+    # Sezione Reperibilità
+    with st.expander("🗓️ Calendario Reperibilità", expanded=True):
+        st.subheader("Visualizzare il Calendario")
+        st.markdown("""
+        Questa sezione mostra il calendario delle reperibilità con una vista settimanale.
+        - **Navigazione**: Usa i pulsanti **⬅️** e **➡️** per muoverti tra le settimane, oppure seleziona un Mese e Anno specifici dai menu a tendina.
+        - **Evidenziazione**: Il giorno corrente è cerchiato in blu, mentre i giorni festivi sono segnati in rosso.
+        - **Tecnici di Turno**: Sotto ogni giorno, vedrai i cognomi dei tecnici incaricati per la reperibilità.
+        """)
+        st.subheader("Gestire il Tuo Turno di Reperibilità")
+        st.markdown("""
+        Se sei di turno in un determinato giorno, vedrai apparire il pulsante **"Gestisci Turno"**.
+        - Dato che i turni di reperibilità sono assegnati d'ufficio, l'unica azione disponibile è **"📢 Pubblica in Bacheca"**.
+        - Cliccando questo pulsante, il tuo posto nel turno di reperibilità viene messo a disposizione di tutti i colleghi, che potranno prenderlo dalla sezione **Turni > Bacheca**.
+        """)
+
+    # Sezione Turni
+    with st.expander("📅 Turni (Assistenza e Straordinari)"):
         st.subheader("Prenotare un Turno")
         st.markdown("""
         Nella sotto-sezione "Turni Disponibili", puoi vedere tutti i turni di assistenza o straordinario a cui puoi partecipare.
@@ -755,6 +1064,20 @@ def render_guida_tab():
         - Clicca sul pulsante **"letto"** per marcare una notifica come letta e farla sparire dal conteggio.
         """)
 
+    # Sezione Admin (visibile solo agli admin)
+    if ruolo == "Amministratore":
+        with st.expander("🔑 Gestione Account (Solo Admin)"):
+            st.subheader("Modificare un Utente")
+            st.markdown("""
+            Nella `Dashboard Admin > Gestione Account`, vedrai l'elenco di tutti gli utenti.
+            - Clicca su **"Modifica"** per cambiare i dati di un utente.
+            - **Cambiare Ruolo**: Puoi promuovere un utente a "Amministratore" o cambiarne il ruolo.
+            - **Reset Password**: Inserisci una nuova password nel campo apposito per aggiornarla.
+            - **Utente Placeholder**: Spunta la casella "Imposta come Utente Placeholder" per trasformare un account in un utente "esterno". Questo utente non potrà accedere all'applicazione, ma il suo nome potrà essere ancora assegnato ai turni. Per riattivare l'utente, togli la spunta e assegnagli una nuova password.
+            """)
+            st.subheader("Creare un Utente Placeholder")
+            st.markdown("Usa il modulo in fondo alla pagina per creare rapidamente un nuovo utente esterno che non necessita di accesso, ma che deve comparire nel sistema.")
+
     # Sezione Archivio
     with st.expander("🗂️ Ricerca nell'Archivio"):
         st.subheader("Trovare Vecchi Report")
@@ -766,11 +1089,74 @@ def render_guida_tab():
         """)
 
 
+# --- GESTIONE SESSIONE ---
+SESSION_FILE = f"session_{os.getlogin()}.json"
+SESSION_DURATION_HOURS = 8
+
+def save_session(username, role):
+    """Salva la sessione utente su un file."""
+    session_data = {
+        'authenticated_user': username,
+        'ruolo': role,
+        'timestamp': datetime.datetime.now().isoformat()
+    }
+    try:
+        with open(SESSION_FILE, 'w') as f:
+            json.dump(session_data, f)
+    except IOError as e:
+        st.error(f"Impossibile salvare la sessione: {e}")
+
+def load_session():
+    """Carica la sessione utente da un file se valida e non scaduta."""
+    if st.session_state.get('authenticated_user'):
+        return
+
+    if os.path.exists(SESSION_FILE):
+        try:
+            with open(SESSION_FILE, 'r') as f:
+                session_data = json.load(f)
+
+            session_time = datetime.datetime.fromisoformat(session_data['timestamp'])
+            if datetime.datetime.now() - datetime.timedelta(hours=SESSION_DURATION_HOURS) < session_time:
+                st.session_state.authenticated_user = session_data['authenticated_user']
+                st.session_state.ruolo = session_data['ruolo']
+            else:
+                # Sessione scaduta, pulisci
+                delete_session()
+        except (IOError, json.JSONDecodeError, KeyError):
+            # File corrotto, pulisci
+            delete_session()
+
+def delete_session():
+    """Cancella il file di sessione e pulisce lo stato di streamlit."""
+    if os.path.exists(SESSION_FILE):
+        try:
+            os.remove(SESSION_FILE)
+        except OSError:
+            pass  # Ignora errori in cancellazione se il file è bloccato
+
+    # Pulisce completamente lo stato della sessione per un logout sicuro
+    keys_to_clear = [k for k in st.session_state.keys()]
+    for key in keys_to_clear:
+        del st.session_state[key]
+
+
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
 
     gestionale_data = carica_gestionale()
+
+    # Sincronizza automaticamente i turni di reperibilità all'avvio
+    today = datetime.date.today()
+    start_sync_date = today.replace(day=1)
+    # Calcola una finestra di sincronizzazione di circa 2 mesi (mese corrente + prossimo)
+    end_sync_date = (start_sync_date + datetime.timedelta(days=35)).replace(day=1) + datetime.timedelta(days=31)
+
+    if sync_oncall_shifts(gestionale_data, start_date=start_sync_date, end_date=end_sync_date):
+        # Se sono stati aggiunti nuovi turni, salva il file gestionale
+        salva_gestionale_async(gestionale_data)
+        st.toast("Calendario reperibilità sincronizzato.")
 
     if st.session_state.get('editing_turno_id'):
         render_edit_shift_form(gestionale_data)
@@ -794,13 +1180,7 @@ def main_app(nome_utente_autenticato, ruolo):
             st.write("")
             st.write("")
             if st.button("Logout", type="secondary"):
-                # Pulisce lo stato della sessione per il logout
-                st.session_state.authenticated_user = None
-                st.session_state.ruolo = None
-                # Rimuove anche altre chiavi di sessione per una pulizia completa
-                for key in list(st.session_state.keys()):
-                    if key not in ['authenticated_user', 'ruolo']:
-                        del st.session_state[key]
+                delete_session()
                 st.rerun()
 
         oggi = datetime.date.today()
@@ -818,7 +1198,7 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Gestione Turni", "❓ Guida & Istruzioni"]
+        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Reperibilità", "Turni", "❓ Guida & Istruzioni"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
         
@@ -898,7 +1278,10 @@ def main_app(nome_utente_autenticato, ruolo):
                     st.info("Nessun record trovato.")
 
         with tabs[3]:
-            st.subheader("Gestione Turni Personale")
+            render_reperibilita_tab(gestionale_data, nome_utente_autenticato)
+
+        with tabs[4]:
+            st.subheader("Turni")
             # The 'gestionale_data' is already loaded at the top of main_app.
             # No need to load it again here.
             turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni Disponibili", "📢 Bacheca", "🔄 Gestione Sostituzioni"])
@@ -972,11 +1355,11 @@ def main_app(nome_utente_autenticato, ruolo):
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
         
-        with tabs[4]:
-            render_guida_tab()
+        with tabs[5]:
+            render_guida_tab(ruolo)
 
-        if len(tabs) > 5 and ruolo == "Amministratore":
-            with tabs[5]:
+        if len(tabs) > 6 and ruolo == "Amministratore":
+            with tabs[6]:
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
@@ -984,7 +1367,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     render_technician_detail_view()
                 else:
                     # Altrimenti, mostra le tab principali della dashboard
-                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze", "Crea Nuovo Turno", "Gestione Personale"])
+                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze", "Crea Nuovo Turno", "Gestione Account"])
 
                     with admin_tabs[0]: # Performance Team
                         archivio_df_perf = carica_archivio_completo()
@@ -1133,31 +1516,8 @@ def main_app(nome_utente_autenticato, ruolo):
                                     else:
                                         st.error("Errore nel salvataggio del nuovo turno.")
 
-                    with admin_tabs[3]: # Gestione Personale
-                        with st.form("new_user_form", clear_on_submit=True):
-                            st.subheader("Crea Nuovo Utente Placeholder")
-                            c1, c2 = st.columns(2)
-                            new_nome = c1.text_input("Nome")
-                            new_cognome = c2.text_input("Cognome")
-                            new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante"])
-
-                            submitted_new_user = st.form_submit_button("Crea Utente")
-
-                            if submitted_new_user:
-                                if new_nome and new_cognome:
-                                    nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
-                                    if nome_completo in gestionale_data['contatti']['Nome Cognome'].tolist():
-                                        st.error(f"Errore: L'utente '{nome_completo}' esiste già.")
-                                    else:
-                                        nuovo_utente = pd.DataFrame([{'Nome Cognome': nome_completo, 'Ruolo': new_ruolo, 'Password': None, 'Link Attività': ''}])
-                                        gestionale_data['contatti'] = pd.concat([gestionale_data['contatti'], nuovo_utente], ignore_index=True)
-                                        if salva_gestionale_async(gestionale_data):
-                                            st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
-                                            st.rerun()
-                                        else:
-                                            st.error("Errore durante il salvataggio del nuovo utente.")
-                                else:
-                                    st.warning("Nome e Cognome sono obbligatori.")
+                    with admin_tabs[3]: # Gestione Account
+                        render_gestione_account(gestionale_data)
 
 
 # --- GESTIONE LOGIN ---
@@ -1169,6 +1529,9 @@ keys_to_initialize = {
 for key, default_value in keys_to_initialize.items():
     if key not in st.session_state:
         st.session_state[key] = default_value
+
+# Prova a caricare una sessione esistente all'avvio
+load_session()
 
 # Main application logic
 if st.session_state.get('authenticated_user'):
@@ -1190,9 +1553,10 @@ else:
             if gestionale and 'contatti' in gestionale:
                 nome, ruolo = authenticate_user(username_inserito, password_inserita, gestionale['contatti'])
                 if nome:
-                    # Imposta i dati dell'utente nello stato della sessione
+                    # Imposta i dati dell'utente e salva la sessione
                     st.session_state.authenticated_user = nome
                     st.session_state.ruolo = ruolo
+                    save_session(nome, ruolo)
                     st.rerun()
                 else:
                     st.error("Credenziali non valide.")
