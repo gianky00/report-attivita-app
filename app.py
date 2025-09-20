@@ -1247,7 +1247,7 @@ def main_app(nome_utente_autenticato, ruolo):
         # Header con titolo, notifiche e pulsante di logout
         col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
         with col1:
-            st.title(f"Report Attività")
+            st.title(f"Gestionale Operativo")
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
         with col2:
@@ -1277,95 +1277,42 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Reperibilità", "Turni", "❓ Guida & Istruzioni"]
+        # --- Definizione Tab Principali ---
+        main_tabs_list = ["Giornaliere", "Turni", "Ricerca nell'Archivio", "❓ Guida"]
         if ruolo == "Amministratore":
-            lista_tab.append("Dashboard Admin")
+            main_tabs_list.append("Dashboard Admin")
         
-        tabs = st.tabs(lista_tab)
-        
-        with tabs[0]:
-            st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-            lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
-            disegna_sezione_attivita(lista_attivita, "today", ruolo)
-        
-        with tabs[1]:
-            st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
-            archivio_df = carica_archivio_completo()
-            pdl_compilati_ieri = set()
-            if not archivio_df.empty:
-                report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
-                pdl_compilati_ieri = set(report_compilati['PdL'])
-            
-            attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
-            disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
+        main_tabs = st.tabs(main_tabs_list)
 
-        with tabs[2]:
-            st.subheader("Ricerca nell'Archivio")
-            archivio_df = carica_archivio_completo()
-            if archivio_df.empty:
-                st.warning("L'archivio è vuoto o non caricabile.")
-            else:
-                # --- PAGINATION LOGIC ---
-                ITEMS_PER_PAGE = 20
-                if 'num_items_to_show' not in st.session_state:
-                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
-                if 'last_search_filters' not in st.session_state:
-                    st.session_state.last_search_filters = (None, None, None)
+        # --- Tab 1: Giornaliere (con sotto-tab) ---
+        with main_tabs[0]:
+            giornaliere_tabs = st.tabs(["Attività di Oggi", "Attività Giorno Precedente"])
+            with giornaliere_tabs[0]:
+                st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
+                lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+                disegna_sezione_attivita(lista_attivita, "today", ruolo)
 
-                col1, col2, col3 = st.columns(3)
-                with col1: pdl_search = st.text_input("Filtra per PdL", key="pdl_search")
-                with col2: desc_search = st.text_input("Filtra per Descrizione", key="desc_search")
-                with col3:
-                    lista_tecnici = sorted(list(archivio_df['Tecnico'].dropna().unique()))
-                    tec_search = st.multiselect("Filtra per Tecnico/i", options=lista_tecnici, key="tec_search")
-
-                current_filters = (pdl_search, desc_search, tuple(sorted(tec_search)))
-                if current_filters != st.session_state.last_search_filters:
-                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
-                st.session_state.last_search_filters = current_filters
-                # --- END PAGINATION LOGIC ---
+            with giornaliere_tabs[1]:
+                st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
+                lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
+                archivio_df = carica_archivio_completo()
+                pdl_compilati_ieri = set()
+                if not archivio_df.empty:
+                    report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
+                    pdl_compilati_ieri = set(report_compilati['PdL'])
                 
-                risultati_df = archivio_df.copy()
-                if pdl_search: risultati_df = risultati_df[risultati_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
-                if desc_search: risultati_df = risultati_df[risultati_df['Descrizione'].astype(str).str.contains(desc_search, case=False, na=False)]
-                if tec_search: risultati_df = risultati_df[risultati_df['Tecnico'].isin(tec_search)]
-                
-                if not risultati_df.empty:
-                    pdl_unici_df = risultati_df.sort_values(by='Data_Riferimento_dt', ascending=False).drop_duplicates(subset=['PdL'], keep='first')
-                    st.info(f"Trovati {len(risultati_df)} interventi, raggruppati in {len(pdl_unici_df)} PdL unici.")
+                attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
+                disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
-                    # Applica la paginazione
-                    items_to_display_df = pdl_unici_df.head(st.session_state.num_items_to_show)
+        # --- Tab 2: Turni (con sotto-tab) ---
+        with main_tabs[1]:
+            st.header("Gestione Turni")
+            turni_tabs = st.tabs(["📅 Reperibilità", "📝 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
 
-                    for _, riga_pdl in items_to_display_df.iterrows():
-                        pdl_corrente = riga_pdl['PdL']
-                        descrizione_recente = riga_pdl.get('Descrizione', '')
-                        with st.expander(f"**PdL {pdl_corrente}** | *{str(descrizione_recente)[:60]}...*"):
-                            interventi_per_pdl_df = risultati_df[risultati_df['PdL'] == pdl_corrente].sort_values(by='Data_Riferimento_dt', ascending=False)
-                            visualizza_storico_organizzato(interventi_per_pdl_df.to_dict('records'), pdl_corrente)
+            with turni_tabs[0]: # Reperibilità
+                render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
 
-                    # --- PAGINATION BUTTON ---
-                    total_results = len(pdl_unici_df)
-                    if st.session_state.num_items_to_show < total_results:
-                        st.divider()
-                        if st.button("Carica Altri Risultati..."):
-                            st.session_state.num_items_to_show += ITEMS_PER_PAGE
-                            st.rerun()
-                    # --- END PAGINATION BUTTON ---
-                else:
-                    st.info("Nessun record trovato.")
-
-        with tabs[3]:
-            render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
-
-        with tabs[4]:
-            st.subheader("Turni")
-            # The 'gestionale_data' is already loaded at the top of main_app.
-            # No need to load it again here.
-            turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni Disponibili", "📢 Bacheca", "🔄 Gestione Sostituzioni"])
-
-            with turni_disponibili_tab:
+            with turni_tabs[1]: # Turni Standard (ex "Turni Disponibili")
                 assistenza_tab, straordinario_tab = st.tabs(["Turni Assistenza", "Turni Straordinario"])
                 df_turni_totale = gestionale_data['turni'].copy()
                 df_turni_totale.dropna(subset=['ID_Turno'], inplace=True)
@@ -1378,7 +1325,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
                     render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
 
-            with bacheca_tab:
+            with turni_tabs[2]: # Bacheca
                 st.subheader("Turni Liberi in Bacheca")
                 df_bacheca = gestionale_data.get('bacheca', pd.DataFrame())
                 turni_disponibili_bacheca = df_bacheca[df_bacheca['Stato'] == 'Disponibile'].sort_values(by='Timestamp_Pubblicazione', ascending=False)
@@ -1408,8 +1355,7 @@ def main_app(nome_utente_autenticato, ruolo):
                         except IndexError:
                             st.warning(f"Dettagli non trovati per il turno ID {bacheca_entry['ID_Turno']}. Potrebbe essere stato rimosso.")
 
-
-            with sostituzioni_tab:
+            with turni_tabs[3]: # Sostituzioni
                 st.subheader("Richieste di Sostituzione")
                 df_sostituzioni = gestionale_data['sostituzioni']
                 st.markdown("#### 📥 Richieste Ricevute")
@@ -1433,12 +1379,66 @@ def main_app(nome_utente_autenticato, ruolo):
                 if richieste_inviate.empty: st.info("Nessuna richiesta di sostituzione inviata.")
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
-        
-        with tabs[5]:
+
+        # --- Tab 3: Archivio ---
+        with main_tabs[2]:
+            st.subheader("Ricerca nell'Archivio")
+            archivio_df = carica_archivio_completo()
+            if archivio_df.empty:
+                st.warning("L'archivio è vuoto o non caricabile.")
+            else:
+                ITEMS_PER_PAGE = 20
+                if 'num_items_to_show' not in st.session_state:
+                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
+                if 'last_search_filters' not in st.session_state:
+                    st.session_state.last_search_filters = (None, None, None)
+
+                col1, col2, col3 = st.columns(3)
+                with col1: pdl_search = st.text_input("Filtra per PdL", key="pdl_search")
+                with col2: desc_search = st.text_input("Filtra per Descrizione", key="desc_search")
+                with col3:
+                    lista_tecnici = sorted(list(archivio_df['Tecnico'].dropna().unique()))
+                    tec_search = st.multiselect("Filtra per Tecnico/i", options=lista_tecnici, key="tec_search")
+
+                current_filters = (pdl_search, desc_search, tuple(sorted(tec_search)))
+                if current_filters != st.session_state.last_search_filters:
+                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
+                st.session_state.last_search_filters = current_filters
+
+                risultati_df = archivio_df.copy()
+                if pdl_search: risultati_df = risultati_df[risultati_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
+                if desc_search: risultati_df = risultati_df[risultati_df['Descrizione'].astype(str).str.contains(desc_search, case=False, na=False)]
+                if tec_search: risultati_df = risultati_df[risultati_df['Tecnico'].isin(tec_search)]
+
+                if not risultati_df.empty:
+                    pdl_unici_df = risultati_df.sort_values(by='Data_Riferimento_dt', ascending=False).drop_duplicates(subset=['PdL'], keep='first')
+                    st.info(f"Trovati {len(risultati_df)} interventi, raggruppati in {len(pdl_unici_df)} PdL unici.")
+
+                    items_to_display_df = pdl_unici_df.head(st.session_state.num_items_to_show)
+
+                    for _, riga_pdl in items_to_display_df.iterrows():
+                        pdl_corrente = riga_pdl['PdL']
+                        descrizione_recente = riga_pdl.get('Descrizione', '')
+                        with st.expander(f"**PdL {pdl_corrente}** | *{str(descrizione_recente)[:60]}...*"):
+                            interventi_per_pdl_df = risultati_df[risultati_df['PdL'] == pdl_corrente].sort_values(by='Data_Riferimento_dt', ascending=False)
+                            visualizza_storico_organizzato(interventi_per_pdl_df.to_dict('records'), pdl_corrente)
+
+                    total_results = len(pdl_unici_df)
+                    if st.session_state.num_items_to_show < total_results:
+                        st.divider()
+                        if st.button("Carica Altri Risultati..."):
+                            st.session_state.num_items_to_show += ITEMS_PER_PAGE
+                            st.rerun()
+                else:
+                    st.info("Nessun record trovato.")
+
+        # --- Tab 4: Guida ---
+        with main_tabs[3]:
             render_guida_tab(ruolo)
 
-        if len(tabs) > 6 and ruolo == "Amministratore":
-            with tabs[6]:
+        # --- Tab 5: Admin (condizionale) ---
+        if ruolo == "Amministratore":
+            with main_tabs[4]:
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala

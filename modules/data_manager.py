@@ -26,12 +26,19 @@ def carica_gestionale():
     with config.EXCEL_LOCK:
         try:
             xls = pd.ExcelFile(config.PATH_GESTIONALE)
-            data = {
-                'contatti': pd.read_excel(xls, sheet_name='Contatti'),
-                'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
-                'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
-                'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
-            }
+            sheet_names = ['Contatti', 'TurniDisponibili', 'Prenotazioni', 'SostituzioniPendenti']
+            data = {}
+            for sheet in sheet_names:
+                df = pd.read_excel(xls, sheet_name=sheet)
+                df.columns = df.columns.str.strip()
+                data[sheet.lower().replace('disponibili', '')] = df
+
+            # Rinomina per coerenza con il codice esistente
+            if 'turnidisponibili' in data:
+                data['turni'] = data.pop('turnidisponibili')
+            if 'sostituzionipendenti' in data:
+                data['sostituzioni'] = data.pop('sostituzionipendenti')
+
 
             # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
             if 'Tipo' not in data['turni'].columns:
