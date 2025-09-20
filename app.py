@@ -27,6 +27,7 @@ from modules.data_manager import (
 )
 from modules.shift_management import (
     sync_oncall_shifts,
+    log_shift_change,
     prenota_turno_logic,
     cancella_prenotazione_logic,
     richiedi_sostituzione_logic,
@@ -483,11 +484,28 @@ def render_edit_shift_form(gestionale_data):
         df_turni.loc[df_turni['ID_Turno'] == turno_id, 'PostiAiutante'] = posti_aiut
         df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Tipo'] = tipo_turno
 
-        # 2. Calcola le modifiche al personale
+        # 2. Calcola le modifiche al personale e registra i log
         personale_originale = set(personale_nel_turno['Nome Cognome'].tolist())
         personale_nuovo = set(tecnici_selezionati + aiutanti_selezionati)
+        admin_user = st.session_state.get('authenticated_user', 'N/D')
 
         personale_rimosso = personale_originale - personale_nuovo
+        for utente in personale_rimosso:
+            log_shift_change(
+                turno_id=turno_id,
+                azione="Rimozione Admin",
+                utente_originale=utente,
+                eseguito_da=admin_user
+            )
+
+        personale_aggiunto = personale_nuovo - personale_originale
+        for utente in personale_aggiunto:
+            log_shift_change(
+                turno_id=turno_id,
+                azione="Aggiunta Admin",
+                utente_subentrante=utente,
+                eseguito_da=admin_user
+            )
 
         # 3. Aggiorna le prenotazioni
         # Rimuovi tutte le vecchie prenotazioni per questo turno
@@ -820,63 +838,60 @@ def render_technician_detail_view():
     else:
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
-def render_reperibilita_tab(gestionale_data, nome_utente_autenticato):
+def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_utente):
     st.subheader("📅 Calendario Reperibilità Settimanale")
 
     # --- DATI E CONFIGURAZIONE ---
-    # Festività italiane per il 2025
     HOLIDAYS_2025 = [
-        datetime.date(2025, 1, 1),   # Capodanno
-        datetime.date(2025, 1, 6),   # Epifania
-        datetime.date(2025, 4, 20),  # Pasqua
-        datetime.date(2025, 4, 21),  # Lunedì dell'Angelo
-        datetime.date(2025, 4, 25),  # Festa della Liberazione
-        datetime.date(2025, 5, 1),   # Festa del Lavoro
-        datetime.date(2025, 6, 2),   # Festa della Repubblica
-        datetime.date(2025, 8, 15),  # Ferragosto
-        datetime.date(2025, 11, 1),  # Tutti i Santi
-        datetime.date(2025, 12, 8),  # Immacolata Concezione
-        datetime.date(2025, 12, 25), # Natale
-        datetime.date(2025, 12, 26), # Santo Stefano
+        datetime.date(2025, 1, 1), datetime.date(2025, 1, 6), datetime.date(2025, 4, 20),
+        datetime.date(2025, 4, 21), datetime.date(2025, 4, 25), datetime.date(2025, 5, 1),
+        datetime.date(2025, 6, 2), datetime.date(2025, 8, 15), datetime.date(2025, 11, 1),
+        datetime.date(2025, 12, 8), datetime.date(2025, 12, 25), datetime.date(2025, 12, 26),
     ]
     WEEKDAY_NAMES_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
     today = datetime.date.today()
 
-    # --- STATO DELLA SESSIONE PER LA NAVIGAZIONE ---
+    # --- STATO DELLA SESSIONE ---
     if 'week_start_date' not in st.session_state:
         st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
 
-    # --- LOGICA DI NAVIGAZIONE ---
-    col_nav1, col_nav2, col_nav3, col_nav4, col_nav5 = st.columns([1.5, 1, 1, 1, 1.5])
+    # --- LOGICA DI NAVIGAZIONE (Layout Verticale) ---
+    current_year = st.session_state.week_start_date.year
+    selected_month = st.selectbox(
+        "Mese", range(1, 13),
+        format_func=lambda m: datetime.date(current_year, m, 1).strftime('%B'),
+        index=st.session_state.week_start_date.month - 1,
+        key="month_select"
+    )
+    selected_year = st.selectbox(
+        "Anno", range(2024, 2027),
+        index=current_year - 2024,
+        key="year_select"
+    )
 
-    with col_nav1:
-        if st.button("⬅️ Settimana Prec."):
-            st.session_state.week_start_date -= datetime.timedelta(weeks=1)
-            st.rerun()
-
-    with col_nav5:
-        if st.button("Settimana Succ. ➡️"):
-            st.session_state.week_start_date += datetime.timedelta(weeks=1)
-            st.rerun()
-
-    with col_nav3:
-        if st.button("Oggi"):
-            st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
-            st.rerun()
-
-    # Gestione Anni Bisestili per il selettore del mese
-    year_for_month_selection = st.session_state.week_start_date.year
-
-    with col_nav2:
-        selected_month = st.selectbox("Mese", range(1, 13), format_func=lambda m: datetime.date(year_for_month_selection, m, 1).strftime('%B'), index=st.session_state.week_start_date.month - 1, key="month_select")
-
-    with col_nav4:
-        selected_year = st.selectbox("Anno", range(2024, 2027), index=st.session_state.week_start_date.year - 2024, key="year_select")
-
-    # Se mese o anno cambiano, aggiorna la data di inizio settimana
+    # Se mese o anno cambiano, aggiorna e ricarica
     if selected_year != st.session_state.week_start_date.year or selected_month != st.session_state.week_start_date.month:
         new_date = datetime.date(selected_year, selected_month, 1)
         st.session_state.week_start_date = new_date - datetime.timedelta(days=new_date.weekday())
+        st.rerun()
+
+    # Navigazione settimanale
+    col_nav1, col_nav2, col_nav3 = st.columns([1, 5, 1])
+    with col_nav1:
+        if st.button("⬅️", help="Settimana precedente", use_container_width=True):
+            st.session_state.week_start_date -= datetime.timedelta(weeks=1)
+            st.rerun()
+    with col_nav2:
+        week_start = st.session_state.week_start_date
+        week_end = week_start + datetime.timedelta(days=6)
+        st.markdown(f"<div style='text-align: center; font-weight: bold; margin-top: 8px;'>{week_start.strftime('%d %b')} — {week_end.strftime('%d %b %Y')}</div>", unsafe_allow_html=True)
+    with col_nav3:
+        if st.button("➡️", help="Settimana successiva", use_container_width=True):
+            st.session_state.week_start_date += datetime.timedelta(weeks=1)
+            st.rerun()
+
+    if st.button("Vai a Oggi", use_container_width=True):
+        st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
         st.rerun()
 
     st.divider()
@@ -885,7 +900,7 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato):
     df_turni = gestionale_data['turni']
     df_prenotazioni = gestionale_data['prenotazioni']
     oncall_shifts_df = df_turni[df_turni['Tipo'] == 'Reperibilità'].copy()
-    oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data']) # Assicura che la colonna sia datetime
+    oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'])
     oncall_shifts_df['date_only'] = oncall_shifts_df['Data'].dt.date
 
     # --- VISUALIZZAZIONE CALENDARIO ---
@@ -894,96 +909,133 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato):
 
     for i, day in enumerate(week_dates):
         with cols[i]:
-            # Stile del giorno
-            border_style = "2px solid #1E90FF" if day == today else "1px solid #d3d3d3"
-            background_color = "#f0f2f6" if day == today else "white"
-            day_color = "red" if day in HOLIDAYS_2025 else "inherit"
+            is_today = (day == today)
+            is_weekend = day.weekday() in [5, 6]
+            is_holiday = day in HOLIDAYS_2025
 
-            st.markdown(
-                f"""
-                <div style="border: {border_style}; border-radius: 5px; padding: 10px; text-align: center; background-color: {background_color};">
-                    <p style="font-weight: bold; color: {day_color}; margin: 0;">{WEEKDAY_NAMES_IT[day.weekday()]}</p>
-                    <h3 style="margin: 0; color: {day_color};">{day.day}</h3>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            border_style = "2px solid #1E90FF" if is_today else "1px solid #d3d3d3"
+            day_color = "red" if is_holiday else "inherit"
 
-            # Trova il turno e i tecnici per il giorno corrente
+            if is_today:
+                background_color = "#e0f7fa"  # Celeste per oggi
+            elif is_weekend:
+                background_color = "#fff0f0"  # Rosso chiaro per weekend
+            else:
+                background_color = "white"
+
+            # Fetch dei tecnici per il giorno
+            technicians_html = ""
             shift_today = oncall_shifts_df[oncall_shifts_df['date_only'] == day]
-            if not shift_today.empty:
-                shift_id = shift_today.iloc[0]['ID_Turno']
-                prenotazioni_today = df_prenotazioni[df_prenotazioni['ID_Turno'] == shift_id]
+            user_is_on_call = False
+            shift_id_today = None
+            managed_user_name = nome_utente_autenticato
 
-                user_is_on_call = False
+            if not shift_today.empty:
+                shift_id_today = shift_today.iloc[0]['ID_Turno']
+                prenotazioni_today = df_prenotazioni[df_prenotazioni['ID_Turno'] == shift_id_today]
+
                 if not prenotazioni_today.empty:
+                    tech_surnames = []
                     for _, booking in prenotazioni_today.iterrows():
                         technician_name = booking['Nome Cognome']
-                        # Mostra solo il cognome in maiuscolo
                         surname = technician_name.split()[-1].upper()
-                        st.markdown(f"<h5 style='text-align: center;'>{surname}</h5>", unsafe_allow_html=True)
+                        tech_surnames.append(surname)
                         if technician_name == nome_utente_autenticato:
                             user_is_on_call = True
 
-                    if user_is_on_call:
-                        if st.button("Gestisci Turno", key=f"manage_{day}", use_container_width=True):
-                            st.session_state['managing_oncall_shift_id'] = shift_id
-                            st.rerun()
+                    if tech_surnames:
+                         # Salva il nome del primo tecnico per la gestione admin
+                        managed_user_name = prenotazioni_today.iloc[0]['Nome Cognome']
+
+                    technicians_html = "<br>".join([f"<div style='font-size: 1.1em; font-weight: 500; line-height: 1.2;'>{s}</div>" for s in tech_surnames])
+                else:
+                    technicians_html = "<span style='color: grey; font-style: italic;'>Libero</span>"
             else:
-                st.markdown("<p style='text-align: center; color: grey;'>-</p>", unsafe_allow_html=True)
+                 technicians_html = "<span style='color: grey; font-style: italic;'>N/D</span>"
+
+            # Box del giorno
+            st.markdown(
+                f"""
+                <div style="border: {border_style}; border-radius: 8px; padding: 8px; text-align: center; background-color: {background_color}; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <p style="font-weight: bold; color: {day_color}; margin: 0; font-size: 0.9em;">{WEEKDAY_NAMES_IT[day.weekday()]}</p>
+                        <h3 style="margin: 0; color: {day_color};">{day.day}</h3>
+                    </div>
+                    <div style='margin-top: 10px;'>
+                        {technicians_html}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True
+            )
+
+            # Pulsante Gestisci (visibile a utente di turno o admin)
+            can_manage = (user_is_on_call or ruolo_utente == "Amministratore") and shift_id_today
+            if can_manage:
+                if st.button("Gestisci", key=f"manage_{day}", use_container_width=True):
+                    st.session_state.managing_oncall_shift_id = shift_id_today
+                    st.session_state.managing_oncall_user = managed_user_name
+                    st.rerun()
 
     # --- LOGICA MODALE "GESTISCI TURNO" ---
     if 'managing_oncall_shift_id' in st.session_state and st.session_state.managing_oncall_shift_id:
         shift_id_to_manage = st.session_state.managing_oncall_shift_id
+        user_to_manage = st.session_state.managing_oncall_user
 
-        # Aggiungi un overlay semi-trasparente per l'effetto modale
+        # Aggiungi un overlay per l'effetto modale
         st.markdown(
             """
             <style>
-            .overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0,0,0,0.5);
-                z-index: 99;
-            }
-            .modal-content {
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background-color: white;
-                padding: 20px;
-                border-radius: 10px;
-                z-index: 100;
-                width: 80%;
-                max-width: 500px;
-            }
+            .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 99; }
+            .modal-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; padding: 25px; border-radius: 10px; z-index: 100; width: 90%; max-width: 550px; }
             </style>
             <div class="overlay"></div>
             <div class="modal-content">
-            """,
-            unsafe_allow_html=True
+            """, unsafe_allow_html=True
         )
 
         with st.container():
-            st.subheader("Gestione Turno di Reperibilità")
-            st.info("Dato che i turni di reperibilità sono assegnati d'ufficio, puoi solo pubblicarlo in bacheca per trovare un sostituto.")
+            st.subheader(f"Gestisci Reperibilità di {user_to_manage.split(' ')[-1]}")
 
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("📢 Pubblica in Bacheca", key=f"pub_{shift_id_to_manage}", help="Rilascia il tuo turno e rendilo disponibile a tutti.", use_container_width=True, type="primary"):
-                    if pubblica_turno_in_bacheca_logic(gestionale_data, nome_utente_autenticato, shift_id_to_manage):
-                        salva_gestionale_async(gestionale_data)
-                        del st.session_state['managing_oncall_shift_id']
+            if st.session_state.get('oncall_swap_mode'):
+                st.markdown("**A chi vuoi chiedere il cambio?**")
+                # Escludi l'utente stesso e utenti senza password (placeholder)
+                contatti_validi = gestionale_data['contatti'][
+                    (gestionale_data['contatti']['Nome Cognome'] != user_to_manage) &
+                    (gestionale_data['contatti']['PasswordHash'].notna())
+                ]
+                ricevente = st.selectbox("Seleziona collega:", contatti_validi['Nome Cognome'].tolist(), key=f"swap_select_{shift_id_to_manage}")
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Invia Richiesta", key=f"swap_confirm_{shift_id_to_manage}", use_container_width=True):
+                        if richiedi_sostituzione_logic(gestionale_data, user_to_manage, ricevente, shift_id_to_manage):
+                            salva_gestionale_async(gestionale_data)
+                            del st.session_state.managing_oncall_shift_id
+                            del st.session_state.oncall_swap_mode
+                            st.rerun()
+                with c2:
+                    if st.button("Annulla Scambio", use_container_width=True):
+                        del st.session_state.oncall_swap_mode
+                        st.rerun()
+            else:
+                st.info("Cosa vuoi fare con questo turno?")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("📢 Pubblica in Bacheca", use_container_width=True, type="primary"):
+                        if pubblica_turno_in_bacheca_logic(gestionale_data, user_to_manage, shift_id_to_manage):
+                            salva_gestionale_async(gestionale_data)
+                            del st.session_state.managing_oncall_shift_id
+                            st.rerun()
+                with col2:
+                    if st.button("🔄 Chiedi Sostituzione", use_container_width=True):
+                        st.session_state.oncall_swap_mode = True
                         st.rerun()
 
-            with col2:
-                if st.button("Annulla", key=f"cancel_manage_{shift_id_to_manage}", use_container_width=True):
-                    del st.session_state['managing_oncall_shift_id']
-                    st.rerun()
+            if st.button("Chiudi", key=f"cancel_manage_{shift_id_to_manage}", use_container_width=True):
+                if 'managing_oncall_shift_id' in st.session_state: del st.session_state.managing_oncall_shift_id
+                if 'managing_oncall_user' in st.session_state: del st.session_state.managing_oncall_user
+                if 'oncall_swap_mode' in st.session_state: del st.session_state.oncall_swap_mode
+                st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
 

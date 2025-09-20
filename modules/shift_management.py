@@ -2,6 +2,43 @@ import streamlit as st
 import pandas as pd
 import datetime
 from modules.notifications import crea_notifica
+import os
+
+# --- LOGICA DI AUDITING ---
+LOG_FILE_PATH = 'Storico_Modifiche_Turni.xlsx'
+
+def log_shift_change(turno_id, azione, utente_originale=None, utente_subentrante=None, eseguito_da=None):
+    """
+    Registra una modifica a un turno in un file Excel per l'auditing.
+    """
+    try:
+        # Carica il file di log se esiste, altrimenti crea un nuovo DataFrame
+        if os.path.exists(LOG_FILE_PATH):
+            log_df = pd.read_excel(LOG_FILE_PATH)
+        else:
+            log_df = pd.DataFrame(columns=[
+                'ID_Modifica', 'Timestamp', 'ID_Turno', 'Azione',
+                'UtenteOriginale', 'UtenteSubentrante', 'EseguitoDa'
+            ])
+
+        # Crea la nuova voce di log
+        new_log_entry = {
+            'ID_Modifica': f"M_{int(datetime.datetime.now().timestamp())}",
+            'Timestamp': datetime.datetime.now(),
+            'ID_Turno': turno_id,
+            'Azione': azione,
+            'UtenteOriginale': utente_originale,
+            'UtenteSubentrante': utente_subentrante,
+            'EseguitoDa': eseguito_da
+        }
+
+        # Aggiungi la nuova voce e salva il file
+        log_df = pd.concat([log_df, pd.DataFrame([new_log_entry])], ignore_index=True)
+        log_df.to_excel(LOG_FILE_PATH, index=False)
+        return True
+    except Exception as e:
+        st.error(f"Errore durante la registrazione della modifica: {e}")
+        return False
 
 # --- LOGICA DI BUSINESS PER LA REPERIBILITÀ ---
 
@@ -108,21 +145,38 @@ def prenota_turno_logic(gestionale_data, utente, turno_id, ruolo_scelto):
     prenotazioni_per_turno = df_prenotazioni[df_prenotazioni['ID_Turno'] == turno_id]
     tecnici_prenotati = len(prenotazioni_per_turno[prenotazioni_per_turno['RuoloOccupato'] == 'Tecnico'])
     aiutanti_prenotati = len(prenotazioni_per_turno[prenotazioni_per_turno['RuoloOccupato'] == 'Aiutante'])
+
+    success = False
     if ruolo_scelto == 'Tecnico' and tecnici_prenotati < posti_tecnico:
         nuova_riga = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()}
         gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, pd.DataFrame([nuova_riga])], ignore_index=True)
-        st.success("Turno prenotato come Tecnico!"); return True
+        st.success("Turno prenotato come Tecnico!"); success = True
     elif ruolo_scelto == 'Aiutante' and aiutanti_prenotati < posti_aiutante:
         nuova_riga = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Aiutante', 'Timestamp': datetime.datetime.now()}
         gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, pd.DataFrame([nuova_riga])], ignore_index=True)
-        st.success("Turno prenotato come Aiutante!"); return True
+        st.success("Turno prenotato come Aiutante!"); success = True
     else:
         st.error("Tutti i posti per il ruolo selezionato sono esauriti!"); return False
+
+    if success:
+        log_shift_change(
+            turno_id=turno_id,
+            azione="Prenotazione",
+            utente_subentrante=utente,
+            eseguito_da=utente
+        )
+    return success
 
 def cancella_prenotazione_logic(gestionale_data, utente, turno_id):
     index_to_drop = gestionale_data['prenotazioni'][(gestionale_data['prenotazioni']['ID_Turno'] == turno_id) & (gestionale_data['prenotazioni']['Nome Cognome'] == utente)].index
     if not index_to_drop.empty:
         gestionale_data['prenotazioni'].drop(index_to_drop, inplace=True)
+        log_shift_change(
+            turno_id=turno_id,
+            azione="Cancellazione",
+            utente_originale=utente,
+            eseguito_da=utente
+        )
         st.success("Prenotazione cancellata."); return True
     st.error("Prenotazione non trovata."); return False
 
@@ -167,6 +221,13 @@ def rispondi_sostituzione_logic(gestionale_data, id_richiesta, utente_che_rispon
 
     if not idx_richiedente_originale.empty:
         prenotazioni_df.loc[idx_richiedente_originale, 'Nome Cognome'] = utente_che_risponde
+        log_shift_change(
+            turno_id=turno_id,
+            azione="Sostituzione Accettata",
+            utente_originale=richiedente,
+            utente_subentrante=utente_che_risponde,
+            eseguito_da=utente_che_risponde
+        )
         st.success("Sostituzione (subentro) effettuata con successo!")
         st.toast("Sostituzione effettuata! Il richiedente è stato notificato.")
         return True
@@ -176,43 +237,32 @@ def rispondi_sostituzione_logic(gestionale_data, id_richiesta, utente_che_rispon
 
 def pubblica_turno_in_bacheca_logic(gestionale_data, utente_richiedente, turno_id):
     df_prenotazioni = gestionale_data['prenotazioni']
-
-    # Trova la prenotazione dell'utente per il turno specificato
     idx_prenotazione = df_prenotazioni[(df_prenotazioni['Nome Cognome'] == utente_richiedente) & (df_prenotazioni['ID_Turno'] == turno_id)].index
 
     if idx_prenotazione.empty:
         st.error("Errore: Prenotazione non trovata per pubblicare in bacheca.")
         return False
 
-    # Ottieni i dettagli della prenotazione prima di rimuoverla
     prenotazione_rimossa = df_prenotazioni.loc[idx_prenotazione].iloc[0]
     ruolo_originale = prenotazione_rimossa['RuoloOccupato']
-
-    # Rimuovi la vecchia prenotazione
     gestionale_data['prenotazioni'].drop(idx_prenotazione, inplace=True)
 
-    # Aggiungi il turno alla bacheca
     df_bacheca = gestionale_data.get('bacheca', pd.DataFrame(columns=['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']))
     nuovo_id_bacheca = f"B_{int(datetime.datetime.now().timestamp())}"
-    nuova_voce_bacheca = pd.DataFrame([{
-        'ID_Bacheca': nuovo_id_bacheca,
-        'ID_Turno': turno_id,
-        'Tecnico_Originale': utente_richiedente,
-        'Ruolo_Originale': ruolo_originale,
-        'Timestamp_Pubblicazione': datetime.datetime.now(),
-        'Stato': 'Disponibile',
-        'Tecnico_Subentrante': None,
-        'Timestamp_Assegnazione': None
-    }])
+    nuova_voce_bacheca = pd.DataFrame([{'ID_Bacheca': nuovo_id_bacheca, 'ID_Turno': turno_id, 'Tecnico_Originale': utente_richiedente, 'Ruolo_Originale': ruolo_originale, 'Timestamp_Pubblicazione': datetime.datetime.now(), 'Stato': 'Disponibile', 'Tecnico_Subentrante': None, 'Timestamp_Assegnazione': None}])
     gestionale_data['bacheca'] = pd.concat([df_bacheca, nuova_voce_bacheca], ignore_index=True)
 
-    # Invia notifica a tutti gli altri utenti
+    log_shift_change(
+        turno_id=turno_id,
+        azione="Pubblicazione in Bacheca",
+        utente_originale=utente_richiedente,
+        eseguito_da=utente_richiedente
+    )
+
     df_turni = gestionale_data['turni']
     desc_turno = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]['Descrizione']
     data_turno = pd.to_datetime(df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]['Data']).strftime('%d/%m')
-
     messaggio = f"📢 Turno libero in bacheca: '{desc_turno}' del {data_turno} ({ruolo_originale})."
-
     utenti_da_notificare = gestionale_data['contatti']['Nome Cognome'].tolist()
     for utente in utenti_da_notificare:
         if utente != utente_richiedente:
@@ -225,52 +275,44 @@ def pubblica_turno_in_bacheca_logic(gestionale_data, utente_richiedente, turno_i
 
 def prendi_turno_da_bacheca_logic(gestionale_data, utente_subentrante, ruolo_utente, id_bacheca):
     df_bacheca = gestionale_data['bacheca']
-
-    # Trova la voce in bacheca
     idx_bacheca = df_bacheca[df_bacheca['ID_Bacheca'] == id_bacheca].index
     if idx_bacheca.empty:
-        st.error("Questo turno non è più disponibile in bacheca.")
-        return False
+        st.error("Questo turno non è più disponibile in bacheca."); return False
 
     voce_bacheca = df_bacheca.loc[idx_bacheca.iloc[0]]
-
     if voce_bacheca['Stato'] != 'Disponibile':
-        st.warning("Qualcuno è stato più veloce! Questo turno è già stato assegnato.")
-        return False
+        st.warning("Qualcuno è stato più veloce! Questo turno è già stato assegnato."); return False
 
     ruolo_richiesto = voce_bacheca['Ruolo_Originale']
-
-    # Controlla l'idoneità del ruolo
     if ruolo_richiesto == 'Tecnico' and ruolo_utente == 'Aiutante':
-        st.error(f"Non sei idoneo per questo turno. È richiesto il ruolo 'Tecnico'.")
-        return False
+        st.error(f"Non sei idoneo per questo turno. È richiesto il ruolo 'Tecnico'."); return False
 
-    # Assegna il turno
+    tecnico_originale = voce_bacheca['Tecnico_Originale']
+    turno_id = voce_bacheca['ID_Turno']
+
     df_bacheca.loc[idx_bacheca, 'Stato'] = 'Assegnato'
     df_bacheca.loc[idx_bacheca, 'Tecnico_Subentrante'] = utente_subentrante
     df_bacheca.loc[idx_bacheca, 'Timestamp_Assegnazione'] = datetime.datetime.now()
 
-    # Aggiungi la nuova prenotazione
     df_prenotazioni = gestionale_data['prenotazioni']
-    nuova_prenotazione = pd.DataFrame([{
-        'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}",
-        'ID_Turno': voce_bacheca['ID_Turno'],
-        'Nome Cognome': utente_subentrante,
-        'RuoloOccupato': ruolo_richiesto, # L'utente prende il ruolo che si è liberato
-        'Timestamp': datetime.datetime.now()
-    }])
+    nuova_prenotazione = pd.DataFrame([{'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente_subentrante, 'RuoloOccupato': ruolo_richiesto, 'Timestamp': datetime.datetime.now()}])
     gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, nuova_prenotazione], ignore_index=True)
 
-    # Invia notifiche di conferma
-    tecnico_originale = voce_bacheca['Tecnico_Originale']
+    log_shift_change(
+        turno_id=turno_id,
+        azione="Preso da Bacheca",
+        utente_originale=tecnico_originale,
+        utente_subentrante=utente_subentrante,
+        eseguito_da=utente_subentrante
+    )
+
     df_turni = gestionale_data['turni']
-    turno_info = df_turni[df_turni['ID_Turno'] == voce_bacheca['ID_Turno']].iloc[0]
+    turno_info = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]
     desc_turno = turno_info['Descrizione']
     data_turno = pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')
 
     messaggio_subentrante = f"Hai preso con successo il turno '{desc_turno}' del {data_turno} dalla bacheca."
     crea_notifica(gestionale_data, utente_subentrante, messaggio_subentrante)
-
     messaggio_originale = f"Il tuo turno '{desc_turno}' del {data_turno} è stato preso da {utente_subentrante}."
     crea_notifica(gestionale_data, tecnico_originale, messaggio_originale)
 
