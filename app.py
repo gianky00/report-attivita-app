@@ -23,7 +23,8 @@ from modules.data_manager import (
     salva_gestionale_async,
     carica_archivio_completo,
     trova_attivita,
-    scrivi_o_aggiorna_risposta
+    scrivi_o_aggiorna_risposta,
+    carica_dati_attivita_programmate
 )
 from modules.shift_management import (
     sync_oncall_shifts,
@@ -1212,6 +1213,124 @@ def delete_session():
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
+def render_situazione_impianti_tab():
+    st.header("📊 Situazione Generale Impianti")
+
+    # Carica i dati aggiornati
+    df = carica_dati_attivita_programmate()
+
+    if df.empty:
+        st.warning("Non sono stati trovati dati sulle attività programmate. Verificare il file Excel.")
+        st.info("Questa sezione mostra lo stato di avanzamento delle attività (es. SOSPESO, COMPLETATO) raggruppate per Area e TCL.")
+        return
+
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_tcl = st.multiselect(
+            "Filtra per TCL",
+            options=sorted(df['TCL'].unique()),
+            default=sorted(df['TCL'].unique()),
+            key="tcl_filter"
+        )
+    with col2:
+        selected_area = st.multiselect(
+            "Filtra per Area",
+            options=sorted(df['Area'].unique()),
+            default=sorted(df['Area'].unique()),
+            key="area_filter"
+        )
+
+    if not selected_tcl or not selected_area:
+        st.warning("Seleziona almeno un TCL e un'Area per visualizzare i dati.")
+        return
+
+    # Applica i filtri
+    filtered_df = df[df['TCL'].isin(selected_tcl) & df['Area'].isin(selected_area)].copy()
+
+    if filtered_df.empty:
+        st.info("Nessuna attività corrisponde ai filtri selezionati.")
+        return
+
+    # --- Visualizzazione Dati ---
+    st.subheader("Riepilogo Attività per Stato")
+
+    # Calcola le metriche
+    total_activities = len(filtered_df)
+    status_counts = filtered_df['Stato'].value_counts()
+
+    # Se la colonna STATO non è ancora stata definita, mostra un avviso
+    if "Non Definito" in status_counts.index:
+        st.info("NOTA: La colonna 'Stato' non è stata ancora configurata. I dati seguenti sono aggregati su un valore di default.")
+
+    st.metric("Totale Attività Filtrate", total_activities)
+
+    st.markdown("##### Conteggio per Stato")
+    st.dataframe(status_counts)
+
+    # Grafico a barre
+    if not (status_counts.index == "Non Definito").all():
+        st.bar_chart(status_counts)
+
+    st.subheader("Dettaglio Attività Filtrate")
+    # Migliora la visualizzazione del dataframe
+    st.dataframe(
+        filtered_df[['PdL', 'Impianto', 'Stato', 'TCL', 'Area', 'GiorniProgrammati']],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+def render_programmazione_tab():
+    st.header("🗓️ Programmazione Attività Settimanale")
+
+    df = carica_dati_attivita_programmate()
+
+    if df.empty:
+        st.warning("Non sono stati trovati dati sulle attività programmate.")
+        return
+
+    # Filtra per mostrare solo le attività effettivamente programmate
+    scheduled_df = df[df['GiorniProgrammati'] != 'Non Programmato'].copy()
+
+    if scheduled_df.empty:
+        st.info("Nessuna attività risulta programmata per la settimana corrente nel file Excel.")
+        return
+
+    st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
+
+    # Filtri per restringere la ricerca
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        pdl_filter = st.text_input("Filtra per PdL...", key="prog_pdl_filter")
+    with col2:
+        area_filter = st.multiselect("Filtra per Area", options=sorted(scheduled_df['Area'].unique()), key="prog_area_filter")
+    with col3:
+        tcl_filter = st.multiselect("Filtra per TCL", options=sorted(scheduled_df['TCL'].unique()), key="prog_tcl_filter")
+
+    # Applica filtri testuali e multiselect
+    if pdl_filter:
+        scheduled_df = scheduled_df[scheduled_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
+    if area_filter:
+        scheduled_df = scheduled_df[scheduled_df['Area'].isin(area_filter)]
+    if tcl_filter:
+        scheduled_df = scheduled_df[scheduled_df['TCL'].isin(tcl_filter)]
+
+    st.divider()
+
+    # Layout a card, mobile-friendly
+    for _, row in scheduled_df.iterrows():
+        with st.container(border=True):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"#### PdL `{row['PdL']}`")
+                st.markdown(f"**Impianto:** {row['Impianto']} | **Area:** {row['Area']} | **TCL:** {row['TCL']}")
+            with col2:
+                st.markdown(f"**Stato Attuale**")
+                st.info(f"_{row['Stato']}_")
+
+            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
+
+
 def main_app(nome_utente_autenticato, ruolo):
     st.set_page_config(layout="wide", page_title="Report Attività")
 
@@ -1268,7 +1387,7 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "Ricerca nell'Archivio", "Reperibilità", "Turni", "❓ Guida & Istruzioni"]
+        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "📊 Situazione Impianti", "🗓️ Programmazione Attività", "Ricerca nell'Archivio", "Reperibilità", "Turni", "❓ Guida & Istruzioni"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
         
@@ -1292,6 +1411,12 @@ def main_app(nome_utente_autenticato, ruolo):
             disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
         with tabs[2]:
+            render_situazione_impianti_tab()
+
+        with tabs[3]:
+            render_programmazione_tab()
+
+        with tabs[4]:
             st.subheader("Ricerca nell'Archivio")
             archivio_df = carica_archivio_completo()
             if archivio_df.empty:
@@ -1347,10 +1472,10 @@ def main_app(nome_utente_autenticato, ruolo):
                 else:
                     st.info("Nessun record trovato.")
 
-        with tabs[3]:
+        with tabs[5]:
             render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
 
-        with tabs[4]:
+        with tabs[6]:
             st.subheader("Turni")
             # The 'gestionale_data' is already loaded at the top of main_app.
             # No need to load it again here.
@@ -1425,11 +1550,11 @@ def main_app(nome_utente_autenticato, ruolo):
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
         
-        with tabs[5]:
+        with tabs[7]:
             render_guida_tab(ruolo)
 
-        if len(tabs) > 6 and ruolo == "Amministratore":
-            with tabs[6]:
+        if len(tabs) > 8 and ruolo == "Amministratore":
+            with tabs[8]:
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
