@@ -326,7 +326,8 @@ def carica_dati_attivita_programmate():
 
             # Le colonne richieste ora dovrebbero corrispondere a quelle lette da Pandas.
             # Manteniamo la logica di validazione per sicurezza.
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
+            # Correzione finale: I giorni della settimana sono in MAIUSCOLO.
+            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
             if not all(col in df.columns for col in required_cols):
                 # Aggiungiamo un log per il debug se le colonne non corrispondono (ora commentato).
                 # st.warning(f"Foglio '{sheet_name}' saltato: colonne mancanti. Trovate: {list(df.columns)}. Richieste: {required_cols}")
