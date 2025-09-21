@@ -326,11 +326,14 @@ def carica_dati_attivita_programmate():
             if len(data) < 2:
                 continue
             
-            header = [str(h) for h in data[0]]
+            header = [str(h).replace('\n', ' ').strip() for h in data[0]]
             df = pd.DataFrame(data[1:], columns=header)
             
-            required_cols = ['PdL', 'Impianto', 'DESCRIZIONE ESTESA', 'Stato OdL', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
+            # Aggiornato in base al feedback dell'utente sui nomi effettivi delle colonne nel file Excel.
+            required_cols = ['PdL', 'IMP.', "DESCRIZIONE ATTIVITA'", "STATO PdL", 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
             if not all(col in df.columns for col in required_cols):
+                # Aggiungiamo un log per il debug se le colonne non corrispondono
+                # st.warning(f"Foglio '{sheet_name}' saltato: colonne mancanti. Trovate: {list(df.columns)}. Richieste: {required_cols}")
                 continue
 
             df = df.dropna(subset=['PdL'])
@@ -338,6 +341,7 @@ def carica_dati_attivita_programmate():
                 continue
 
             df_filtered = df[required_cols].copy()
+            # Rinomina le colonne per coerenza interna con il resto dell'applicazione.
             df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
             
             df_filtered['PdL'] = df_filtered['PdL'].astype(str)
