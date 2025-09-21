@@ -100,14 +100,40 @@ def salva_gestionale_async(data):
     return True # Ritorna immediatamente
 
 def carica_archivio_completo():
+    """
+    Carica l'archivio storico completo dal file Excel specificato in configurazione.
+    Include una gestione degli errori robusta per notificare problemi all'utente.
+    """
+    storico_path = config.PATH_STORICO_DB
     try:
-        df = pd.read_excel(config.PATH_STORICO_DB)
+        # Usiamo ExcelFile per ispezionare prima di leggere
+        xls = pd.ExcelFile(storico_path)
+        sheet_name = xls.sheet_names[0]
+        st.info(f"Tentativo di caricamento dell'archivio dal foglio: '{sheet_name}'")
+
+        df = pd.read_excel(xls, sheet_name=sheet_name)
+
+        # Verifica delle colonne necessarie
+        required_cols = ['Data_Riferimento', 'Data_Compilazione', 'PdL', 'Tecnico']
+        if not all(col in df.columns for col in required_cols):
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            st.error(f"Errore nell'archivio: Colonne richieste mancanti nel foglio '{sheet_name}'. Colonne mancanti: {missing_cols}")
+            return pd.DataFrame()
+
         df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce')
         df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
         df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
         df.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
         return df
-    except Exception:
+
+    except FileNotFoundError:
+        st.error(f"File archivio non trovato al percorso: {storico_path}. Verificare il percorso in `secrets.toml` e la connessione di rete.")
+        return pd.DataFrame()
+    except IndexError:
+        st.error(f"Errore nell'archivio: Il file Excel '{os.path.basename(storico_path)}' sembra essere vuoto (non contiene fogli).")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Errore imprevisto durante il caricamento del file di archivio: {e}")
         return pd.DataFrame()
 
 def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
@@ -312,8 +338,16 @@ def carica_dati_attivita_programmate():
         latest_status = {}
 
     status_map = {
-        'DA EMETTERE': 'Pianificato', 'EMESSO': 'In Corso', 'DA CHIUDERE': 'Terminata',
-        'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato'
+        # Mappatura esistente
+        'DA EMETTERE': 'Pianificato',
+        'CHIUSO': 'Completato',
+        'ANNULLATO': 'Annullato',
+        # Nuova mappatura richiesta dall'utente
+        'INTERROTTO': 'Sospeso',
+        'RICHIESTO': 'Da processare',
+        'EMESSO': 'Processato',      # Sostituisce 'In Corso'
+        'IN CORSO': 'Aperto',
+        'DA CHIUDERE': 'Terminata'   # Già presente, ma confermato
     }
 
     for sheet_name, metadata in sheets_to_read.items():
