@@ -318,9 +318,8 @@ def carica_dati_attivita_programmate():
 
     for sheet_name, metadata in sheets_to_read.items():
         try:
-            # Correzione: Utilizza pandas per leggere direttamente il file, specificando che l'header è alla 4ª riga (indice 3).
-            # Questo risolve il problema principale identificato dall'utente.
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=3)
+            # Correzione Definitiva: L'header è alla 3ª riga (indice 2), non alla 4ª.
+            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
             
             # Pulisce i nomi delle colonne letti da Pandas per rimuovere spazi e gestire i newline.
             df.columns = [str(col).strip() for col in df.columns]
@@ -329,7 +328,7 @@ def carica_dati_attivita_programmate():
             # Manteniamo la logica di validazione per sicurezza.
             required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
             if not all(col in df.columns for col in required_cols):
-                # Aggiungiamo un log per il debug se le colonne non corrispondono
+                # Aggiungiamo un log per il debug se le colonne non corrispondono (ora commentato).
                 # st.warning(f"Foglio '{sheet_name}' saltato: colonne mancanti. Trovate: {list(df.columns)}. Richieste: {required_cols}")
                 continue
 
