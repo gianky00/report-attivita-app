@@ -318,19 +318,15 @@ def carica_dati_attivita_programmate():
 
     for sheet_name, metadata in sheets_to_read.items():
         try:
-            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
-            if sheet_name not in wb.sheetnames:
-                continue
-            ws = wb[sheet_name]
-            data = list(ws.values)
-            if len(data) < 2:
-                continue
+            # Correzione: Utilizza pandas per leggere direttamente il file, specificando che l'header è alla 4ª riga (indice 3).
+            # Questo risolve il problema principale identificato dall'utente.
+            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=3)
             
-            # Rimuove solo spazi bianchi extra, mantenendo i newline che sono parte dei nomi di colonna.
-            header = [str(h).strip() for h in data[0]]
-            df = pd.DataFrame(data[1:], columns=header)
-            
-            # Aggiornato per includere i caratteri newline (\n) come specificato dall'utente.
+            # Pulisce i nomi delle colonne letti da Pandas per rimuovere spazi e gestire i newline.
+            df.columns = [str(col).strip() for col in df.columns]
+
+            # Le colonne richieste ora dovrebbero corrispondere a quelle lette da Pandas.
+            # Manteniamo la logica di validazione per sicurezza.
             required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
             if not all(col in df.columns for col in required_cols):
                 # Aggiungiamo un log per il debug se le colonne non corrispondono
