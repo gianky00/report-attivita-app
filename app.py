@@ -1334,12 +1334,25 @@ def render_situazione_impianti_tab():
         st.bar_chart(status_counts)
 
     st.subheader("Dettaglio Attività Filtrate")
-    # Migliora la visualizzazione del dataframe
-    st.dataframe(
-        filtered_df[['PdL', 'Impianto', 'Stato', 'TCL', 'Area', 'GiorniProgrammati']],
-        use_container_width=True,
-        hide_index=True,
-    )
+    # Sostituisce la tabella con un layout a card per coerenza e per includere lo storico.
+    for index, row in filtered_df.iterrows():
+        with st.container(border=True):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"#### PdL `{row['PdL']}`")
+                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
+            with col2:
+                st.markdown(f"**Stato Attuale**")
+                st.info(f"_{row['Stato']}_")
+
+            if pd.notna(row['Descrizione']):
+                st.caption(f"Descrizione: {row['Descrizione']}")
+
+            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
+
+            # Mostra storico interventi
+            if row['Storico']:
+                visualizza_storico_organizzato(row['Storico'], row['PdL'])
 
 
 def render_programmazione_tab():

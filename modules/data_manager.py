@@ -99,41 +99,107 @@ def salva_gestionale_async(data):
     thread.start()
     return True # Ritorna immediatamente
 
+def crea_storico_da_programmazione():
+    """
+    Crea uno storico "fittizio" basato sui dati del file delle attività programmate.
+    Questo serve per popolare l'archivio con interventi passati non registrati tramite l'app.
+    """
+    excel_path = get_attivita_programmate_path()
+    all_backfill_data = []
+
+    sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
+    backfill_cols = ['PdL', 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', "DESCRIZIONE\nATTIVITA'"]
+
+    for sheet_name in sheets_to_read:
+        try:
+            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
+            df.columns = [str(col).strip() for col in df.columns]
+
+            if not all(col in df.columns for col in backfill_cols):
+                continue
+
+            df_filtered = df[backfill_cols].copy()
+            df_filtered.dropna(subset=['PdL', 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO'], inplace=True)
+            if df_filtered.empty:
+                continue
+
+            all_backfill_data.append(df_filtered)
+        except Exception:
+            continue # Ignora fogli mancanti o con errori di formato
+
+    if not all_backfill_data:
+        return pd.DataFrame()
+
+    df_backfill = pd.concat(all_backfill_data, ignore_index=True)
+
+    # Rinomina le colonne per corrispondere allo schema dell'archivio
+    df_backfill.rename(columns={
+        "DATA\nCONTROLLO": "Data_Riferimento",
+        "PERSONALE\nIMPIEGATO": "Tecnico",
+        "DESCRIZIONE\nATTIVITA'": "Report"
+    }, inplace=True)
+
+    # Aggiungi colonne mancanti con valori di default
+    df_backfill['Data_Compilazione'] = pd.to_datetime(df_backfill['Data_Riferimento'], errors='coerce')
+    df_backfill['Stato'] = 'Storico Importato'
+    df_backfill['Descrizione'] = "Intervento importato da storico programmazione"
+
+    return df_backfill
+
+
 def carica_archivio_completo():
     """
-    Carica l'archivio storico completo dal file Excel specificato in configurazione.
-    Include una gestione degli errori robusta per notificare problemi all'utente.
+    Carica l'archivio storico completo, unendo i report reali con lo storico
+    importato dal file di programmazione per completezza.
     """
     storico_path = config.PATH_STORICO_DB
+    df_reale = pd.DataFrame()
+    df_backfill = pd.DataFrame()
+
+    # 1. Carica l'archivio reale dei report compilati
     try:
-        # Usa il nome del foglio corretto, come specificato dall'utente.
         sheet_name = 'Database_Attivita'
-        st.info(f"Tentativo di caricamento dell'archivio dal foglio: '{sheet_name}'")
-
-        df = pd.read_excel(storico_path, sheet_name=sheet_name)
-
-        # Verifica delle colonne necessarie
-        required_cols = ['Data_Riferimento', 'Data_Compilazione', 'PdL', 'Tecnico']
-        if not all(col in df.columns for col in required_cols):
-            missing_cols = [col for col in required_cols if col not in df.columns]
-            st.error(f"Errore nell'archivio: Colonne richieste mancanti nel foglio '{sheet_name}'. Colonne mancanti: {missing_cols}")
-            return pd.DataFrame()
-
-        df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce')
-        df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
-        df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
-        df.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
-        return df
-
+        df_reale = pd.read_excel(storico_path, sheet_name=sheet_name)
+        df_reale['Data_Riferimento_dt'] = pd.to_datetime(df_reale['Data_Riferimento'], errors='coerce')
     except FileNotFoundError:
-        st.error(f"File archivio non trovato al percorso: {storico_path}. Verificare il percorso in `secrets.toml` e la connessione di rete.")
-        return pd.DataFrame()
-    except IndexError:
-        st.error(f"Errore nell'archivio: Il file Excel '{os.path.basename(storico_path)}' sembra essere vuoto (non contiene fogli).")
-        return pd.DataFrame()
+        st.warning(f"File archivio '{os.path.basename(storico_path)}' non trovato. Verrà usato solo lo storico da programmazione.")
     except Exception as e:
         st.error(f"Errore imprevisto durante il caricamento del file di archivio: {e}")
+        return pd.DataFrame() # Errore bloccante
+
+    # 2. Crea lo storico dal file di programmazione
+    df_backfill = crea_storico_da_programmazione()
+    if not df_backfill.empty:
+        df_backfill['Data_Riferimento_dt'] = pd.to_datetime(df_backfill['Data_Riferimento'], errors='coerce')
+
+    # 3. Unisci i due DataFrame, dando priorità ai dati reali
+    if not df_reale.empty and not df_backfill.empty:
+        # Crea una chiave univoca (PdL + Data) per la de-duplicazione
+        df_reale['join_key'] = df_reale['PdL'].astype(str) + '_' + df_reale['Data_Riferimento_dt'].dt.strftime('%Y-%m-%d')
+        df_backfill['join_key'] = df_backfill['PdL'].astype(str) + '_' + df_backfill['Data_Riferimento_dt'].dt.strftime('%Y-%m-%d')
+
+        # Filtra i dati di backfill per mantenere solo quelli non presenti nei dati reali
+        df_backfill_filtered = df_backfill[~df_backfill['join_key'].isin(df_reale['join_key'])]
+
+        # Concatena e rimuovi la colonna chiave
+        df_finale = pd.concat([df_reale, df_backfill_filtered], ignore_index=True)
+        df_finale.drop(columns=['join_key'], inplace=True, errors='ignore')
+
+    elif not df_reale.empty:
+        df_finale = df_reale
+    elif not df_backfill.empty:
+        df_finale = df_backfill
+    else:
         return pd.DataFrame()
+
+    # 4. Pulisci e ordina il DataFrame finale
+    df_finale['Data_Riferimento_dt'] = pd.to_datetime(df_finale['Data_Riferimento'], errors='coerce')
+    df_finale.dropna(subset=['Data_Riferimento_dt'], inplace=True)
+    df_finale.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
+    # Rimuovi eventuali duplicati residui (anche se la logica di join dovrebbe averli già gestiti)
+    df_finale.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
+
+    return df_finale
 
 def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
     try:
