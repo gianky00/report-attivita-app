@@ -326,11 +326,12 @@ def carica_dati_attivita_programmate():
             if len(data) < 2:
                 continue
             
-            header = [str(h).replace('\n', ' ').strip() for h in data[0]]
+            # Rimuove solo spazi bianchi extra, mantenendo i newline che sono parte dei nomi di colonna.
+            header = [str(h).strip() for h in data[0]]
             df = pd.DataFrame(data[1:], columns=header)
             
-            # Aggiornato in base al feedback dell'utente sui nomi effettivi delle colonne nel file Excel.
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE ATTIVITA'", "STATO PdL", 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
+            # Aggiornato per includere i caratteri newline (\n) come specificato dall'utente.
+            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
             if not all(col in df.columns for col in required_cols):
                 # Aggiungiamo un log per il debug se le colonne non corrispondono
                 # st.warning(f"Foglio '{sheet_name}' saltato: colonne mancanti. Trovate: {list(df.columns)}. Richieste: {required_cols}")
