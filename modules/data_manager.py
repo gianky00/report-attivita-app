@@ -194,6 +194,8 @@ def carica_archivio_completo():
 
     # 4. Pulisci e ordina il DataFrame finale
     df_finale['Data_Riferimento_dt'] = pd.to_datetime(df_finale['Data_Riferimento'], errors='coerce')
+    # Assicura che la colonna di compilazione sia di tipo datetime per un ordinamento corretto
+    df_finale['Data_Compilazione'] = pd.to_datetime(df_finale['Data_Compilazione'], errors='coerce')
     df_finale.dropna(subset=['Data_Riferimento_dt'], inplace=True)
     df_finale.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
     # Rimuovi eventuali duplicati residui (anche se la logica di join dovrebbe averli già gestiti)
