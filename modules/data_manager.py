@@ -100,14 +100,39 @@ def salva_gestionale_async(data):
     return True # Ritorna immediatamente
 
 def carica_archivio_completo():
+    """
+    Carica l'archivio storico completo dal file Excel specificato in configurazione.
+    Include una gestione degli errori robusta per notificare problemi all'utente.
+    """
+    storico_path = config.PATH_STORICO_DB
     try:
-        df = pd.read_excel(config.PATH_STORICO_DB)
+        # Usa il nome del foglio corretto, come specificato dall'utente.
+        sheet_name = 'Database_Attivita'
+        st.info(f"Tentativo di caricamento dell'archivio dal foglio: '{sheet_name}'")
+
+        df = pd.read_excel(storico_path, sheet_name=sheet_name)
+
+        # Verifica delle colonne necessarie
+        required_cols = ['Data_Riferimento', 'Data_Compilazione', 'PdL', 'Tecnico']
+        if not all(col in df.columns for col in required_cols):
+            missing_cols = [col for col in required_cols if col not in df.columns]
+            st.error(f"Errore nell'archivio: Colonne richieste mancanti nel foglio '{sheet_name}'. Colonne mancanti: {missing_cols}")
+            return pd.DataFrame()
+
         df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce')
         df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
         df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
         df.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
         return df
-    except Exception:
+
+    except FileNotFoundError:
+        st.error(f"File archivio non trovato al percorso: {storico_path}. Verificare il percorso in `secrets.toml` e la connessione di rete.")
+        return pd.DataFrame()
+    except IndexError:
+        st.error(f"Errore nell'archivio: Il file Excel '{os.path.basename(storico_path)}' sembra essere vuoto (non contiene fogli).")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Errore imprevisto durante il caricamento del file di archivio: {e}")
         return pd.DataFrame()
 
 def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
@@ -296,43 +321,41 @@ def carica_dati_attivita_programmate():
     all_data = []
     giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
     
-    try:
-        df_storico_full = pd.read_excel(storico_path, sheet_name='DB')
-        df_storico_full['PdL'] = df_storico_full['PdL'].astype(str)
-        # Convert Data_Riferimento for sorting
-        df_storico_full['Data_Riferimento_dt'] = pd.to_datetime(df_storico_full['Data_Riferimento'], errors='coerce')
+    # Refactoring: Chiama la funzione centralizzata per caricare lo storico, garantendo coerenza.
+    df_storico_full = carica_archivio_completo()
+    if not df_storico_full.empty:
         latest_status = df_storico_full.sort_values('Data_Compilazione').drop_duplicates('PdL', keep='last')
         latest_status = latest_status.set_index('PdL')['Stato'].to_dict()
-    except FileNotFoundError:
-        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
-        latest_status = {}
-    except Exception as e:
-        st.warning(f"Errore nel caricamento dello storico: {e}")
-        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
+    else:
         latest_status = {}
 
     status_map = {
-        'DA EMETTERE': 'Pianificato', 'EMESSO': 'In Corso', 'DA CHIUDERE': 'Terminata',
-        'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato'
+        # Mappatura esistente
+        'DA EMETTERE': 'Pianificato',
+        'CHIUSO': 'Completato',
+        'ANNULLATO': 'Annullato',
+        # Nuova mappatura richiesta dall'utente
+        'INTERROTTO': 'Sospeso',
+        'RICHIESTO': 'Da processare',
+        'EMESSO': 'Processato',      # Sostituisce 'In Corso'
+        'IN CORSO': 'Aperto',
+        'DA CHIUDERE': 'Terminata'   # Già presente, ma confermato
     }
 
     for sheet_name, metadata in sheets_to_read.items():
         try:
-            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
-            if sheet_name not in wb.sheetnames:
-                continue
-            ws = wb[sheet_name]
-            data = list(ws.values)
-            if len(data) < 2:
-                continue
+            # Correzione Definitiva: L'header è alla 3ª riga (indice 2), non alla 4ª.
+            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
             
-            header = [str(h).replace('\n', ' ').strip() for h in data[0]]
-            df = pd.DataFrame(data[1:], columns=header)
-            
-            # Aggiornato in base al feedback dell'utente sui nomi effettivi delle colonne nel file Excel.
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE ATTIVITA'", "STATO PdL", 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
+            # Pulisce i nomi delle colonne letti da Pandas per rimuovere spazi e gestire i newline.
+            df.columns = [str(col).strip() for col in df.columns]
+
+            # Le colonne richieste ora dovrebbero corrispondere a quelle lette da Pandas.
+            # Manteniamo la logica di validazione per sicurezza.
+            # Correzione finale: I giorni della settimana sono in MAIUSCOLO.
+            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
             if not all(col in df.columns for col in required_cols):
-                # Aggiungiamo un log per il debug se le colonne non corrispondono
+                # Aggiungiamo un log per il debug se le colonne non corrispondono (ora commentato).
                 # st.warning(f"Foglio '{sheet_name}' saltato: colonne mancanti. Trovate: {list(df.columns)}. Richieste: {required_cols}")
                 continue
 
