@@ -106,12 +106,11 @@ def carica_archivio_completo():
     """
     storico_path = config.PATH_STORICO_DB
     try:
-        # Usiamo ExcelFile per ispezionare prima di leggere
-        xls = pd.ExcelFile(storico_path)
-        sheet_name = xls.sheet_names[0]
+        # Usa il nome del foglio corretto, come specificato dall'utente.
+        sheet_name = 'Database_Attivita'
         st.info(f"Tentativo di caricamento dell'archivio dal foglio: '{sheet_name}'")
 
-        df = pd.read_excel(xls, sheet_name=sheet_name)
+        df = pd.read_excel(storico_path, sheet_name=sheet_name)
 
         # Verifica delle colonne necessarie
         required_cols = ['Data_Riferimento', 'Data_Compilazione', 'PdL', 'Tecnico']
@@ -322,28 +321,12 @@ def carica_dati_attivita_programmate():
     all_data = []
     giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
     
-    try:
-        # Modifica per robustezza: ispeziona il file e usa il primo foglio disponibile invece di 'DB' hardcoded.
-        xls_storico = pd.ExcelFile(storico_path)
-        if xls_storico.sheet_names:
-            sheet_name_storico = xls_storico.sheet_names[0]
-            df_storico_full = pd.read_excel(xls_storico, sheet_name=sheet_name_storico)
-            df_storico_full['PdL'] = df_storico_full['PdL'].astype(str)
-            # Convert Data_Riferimento for sorting
-            df_storico_full['Data_Riferimento_dt'] = pd.to_datetime(df_storico_full['Data_Riferimento'], errors='coerce')
-            latest_status = df_storico_full.sort_values('Data_Compilazione').drop_duplicates('PdL', keep='last')
-            latest_status = latest_status.set_index('PdL')['Stato'].to_dict()
-        else:
-            # Se il file non ha fogli, inizializza vuoto
-            df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
-            latest_status = {}
-    except FileNotFoundError:
-        # Se il file non esiste, inizializza vuoto (non è un errore bloccante per questa vista)
-        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
-        latest_status = {}
-    except Exception as e:
-        st.warning(f"Errore non critico durante il caricamento dello storico: {e}")
-        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
+    # Refactoring: Chiama la funzione centralizzata per caricare lo storico, garantendo coerenza.
+    df_storico_full = carica_archivio_completo()
+    if not df_storico_full.empty:
+        latest_status = df_storico_full.sort_values('Data_Compilazione').drop_duplicates('PdL', keep='last')
+        latest_status = latest_status.set_index('PdL')['Stato'].to_dict()
+    else:
         latest_status = {}
 
     status_map = {
