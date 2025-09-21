@@ -363,10 +363,23 @@ def carica_dati_attivita_programmate():
             df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
 
             all_data.append(df_filtered)
+        except FileNotFoundError:
+            st.error(f"Impossibile trovare il file delle attività programmate nel percorso specificato: {excel_path}")
+            # Se il file non viene trovato, è inutile continuare a ciclare.
+            break
+        except PermissionError:
+            st.error(f"Errore di permessi. Impossibile accedere al file: {excel_path}. Verificare i permessi di lettura.")
+            # Se c'è un errore di permessi, è inutile continuare.
+            break
         except Exception as e:
-            pass
+            # Stampa un avviso per fogli specifici che potrebbero avere problemi, ma continua il ciclo.
+            st.warning(f"Si è verificato un errore durante l'elaborazione del foglio '{sheet_name}' dal file {os.path.basename(excel_path)}: {e}")
+            continue
 
     if not all_data:
+        # Se dopo tutti i tentativi non ci sono dati, informa l'utente.
+        # Questo messaggio apparirà solo se il file esiste ma è vuoto o non contiene fogli validi.
+        st.warning("Non sono stati trovati dati validi sulle attività programmate. Verificare che il file Excel non sia vuoto e che i fogli ('A1', 'A2', ecc.) siano formattati correttamente.")
         return pd.DataFrame()
 
     final_df = pd.concat(all_data, ignore_index=True)
