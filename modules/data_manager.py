@@ -336,7 +336,7 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
                 if nome_membro not in attivita_collezionate[activity_key]['team_members']:
                     ruolo_membro = "Sconosciuto"
                     if df_contatti is not None and not df_contatti.empty:
-                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
+                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower().str.contains(nome_membro.lower(), na=False)]
                         if not matching_user.empty:
                             ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
                     attivita_collezionate[activity_key]['team_members'][nome_membro] = {
