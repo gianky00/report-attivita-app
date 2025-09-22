@@ -1386,29 +1386,31 @@ def render_programmazione_tab():
 
         submitted = st.form_submit_button("Applica Filtri")
 
+    # Modifica: logica per mostrare i dati di default e filtrare solo su submit
     if not submitted:
-        st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
-        return
-
-    # Applica filtri
-    if pdl_filter:
-        scheduled_df = scheduled_df[scheduled_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
-    if area_filter:
-        scheduled_df = scheduled_df[scheduled_df['Area'].isin(area_filter)]
-    if tcl_filter:
-        scheduled_df = scheduled_df[scheduled_df['TCL'].isin(tcl_filter)]
-    if day_filter:
-        day_regex = '|'.join(day_filter)
-        scheduled_df = scheduled_df[scheduled_df['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
+        df_to_show = scheduled_df
+    else:
+        # Applica filtri
+        filtered_df = scheduled_df.copy()
+        if pdl_filter:
+            filtered_df = filtered_df[filtered_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
+        if area_filter:
+            filtered_df = filtered_df[filtered_df['Area'].isin(area_filter)]
+        if tcl_filter:
+            filtered_df = filtered_df[filtered_df['TCL'].isin(tcl_filter)]
+        if day_filter:
+            day_regex = '|'.join(day_filter)
+            filtered_df = filtered_df[filtered_df['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
+        df_to_show = filtered_df
 
     st.divider()
 
-    if scheduled_df.empty:
+    if df_to_show.empty:
         st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
         return
 
     # Layout a card, mobile-friendly
-    for index, row in scheduled_df.iterrows():
+    for index, row in df_to_show.iterrows():
         with st.container(border=True):
             col1, col2 = st.columns([3, 1])
             with col1:
@@ -1484,36 +1486,40 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività di Oggi", "Attività Giorno Precedente", "📊 Situazione Impianti", "🗓️ Programmazione Attività", "Ricerca nell'Archivio", "📅 Gestione Turni", "❓ Guida"]
+        lista_tab = ["Attività Assegnate", "📊 Situazione Impianti", "🗓️ Programmazione Attività", "Ricerca nell'Archivio", "📅 Gestione Turni", "❓ Guida"]
         if ruolo == "Amministratore":
             lista_tab.append("Dashboard Admin")
         
         tabs = st.tabs(lista_tab)
         
         with tabs[0]:
-            st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-            lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
-            disegna_sezione_attivita(lista_attivita, "today", ruolo)
-        
-        with tabs[1]:
-            st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
-            archivio_df = carica_archivio_completo()
-            pdl_compilati_ieri = set()
-            if not archivio_df.empty:
-                report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
-                pdl_compilati_ieri = set(report_compilati['PdL'])
-            
-            attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
-            disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
+            #st.header("Attività Assegnate")
+            sub_tabs = st.tabs(["Attività di Oggi", "Attività Giorno Precedente"])
 
-        with tabs[2]:
+            with sub_tabs[0]:
+                st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
+                lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+                disegna_sezione_attivita(lista_attivita, "today", ruolo)
+            
+            with sub_tabs[1]:
+                st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
+                lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
+                archivio_df = carica_archivio_completo()
+                pdl_compilati_ieri = set()
+                if not archivio_df.empty:
+                    report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
+                    pdl_compilati_ieri = set(report_compilati['PdL'])
+
+                attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
+                disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
+
+        with tabs[1]:
             render_situazione_impianti_tab()
 
-        with tabs[3]:
+        with tabs[2]:
             render_programmazione_tab()
 
-        with tabs[4]:
+        with tabs[3]:
             st.subheader("Ricerca nell'Archivio")
             archivio_df = carica_archivio_completo()
             if archivio_df.empty:
@@ -1569,7 +1575,7 @@ def main_app(nome_utente_autenticato, ruolo):
                 else:
                     st.info("Nessun record trovato.")
 
-        with tabs[5]:
+        with tabs[4]:
             st.subheader("Gestione Turni")
             # Modifica: Rimosso 'Turni Reperibilità' dalle tab principali
             turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
@@ -1648,11 +1654,11 @@ def main_app(nome_utente_autenticato, ruolo):
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
 
-        with tabs[6]:
+        with tabs[5]:
             render_guida_tab(ruolo)
 
-        if len(tabs) > 7 and ruolo == "Amministratore":
-            with tabs[7]:
+        if len(tabs) > 6 and ruolo == "Amministratore":
+            with tabs[6]:
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
