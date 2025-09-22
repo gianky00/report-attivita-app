@@ -84,6 +84,14 @@ def display_expandable_activity_card(activity_group, key_prefix, container=st):
     expander_title_l1 = f"{pdl} - {descrizione} - [Stato: {stato_pdl}]"
     with container.expander(expander_title_l1):
 
+        # Aggiungi la visualizzazione dei giorni programmati
+        col_giorni = _find_column(activity_group, ['giorni', 'programmati'])
+        if col_giorni:
+            giorni_programmati = latest_activity.get(col_giorni, 'N/D')
+            if giorni_programmati not in ['N/D', 'Non Programmato']:
+                 st.markdown(f"**Programmato per:** 🗓️ `{giorni_programmati}`")
+                 st.divider()
+
         # Ordina gli interventi per data, dal più recente al più vecchio
         sorted_interventions = activity_group.sort_values(by=col_data, ascending=False) if col_data else activity_group
 

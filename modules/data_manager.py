@@ -247,9 +247,13 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
                 if nome_membro not in attivita_collezionate[activity_key]['team_members']:
                     ruolo_membro = "Sconosciuto"
                     if df_contatti is not None and not df_contatti.empty:
-                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
-                        if not matching_user.empty:
-                            ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
+                        # Logica di matching flessibile
+                        nome_membro_clean = nome_membro.lower().strip()
+                        for _, contact_row in df_contatti.iterrows():
+                            contact_name_clean = str(contact_row['Nome Cognome']).lower().strip()
+                            if nome_membro_clean in contact_name_clean:
+                                ruolo_membro = contact_row.get('Ruolo', 'Tecnico')
+                                break # Trovato, esci dal loop
 
                     attivita_collezionate[activity_key]['team_members'][nome_membro] = {
                         'ruolo': ruolo_membro,
@@ -367,5 +371,19 @@ def carica_dati_attivita_programmate():
     date_col = next((col for col in final_df.columns if 'data' in col.lower() and 'controllo' in col.lower()), None)
     if date_col:
         final_df[date_col] = pd.to_datetime(final_df[date_col], errors='coerce')
+
+    # --- Creazione colonna Giorni Programmati ---
+    day_columns = [col for col in final_df.columns if col.strip().lower() in ['lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì']]
+
+    def get_scheduled_days(row):
+        days = [day.strip().capitalize() for day in day_columns if pd.notna(row[day]) and str(row[day]).strip().lower() == 'x']
+        return ', '.join(days) if days else 'Non Programmato'
+
+    if day_columns:
+        final_df['Giorni Programmati'] = final_df.apply(get_scheduled_days, axis=1)
+    else:
+        st.warning("Nessuna colonna per i giorni della settimana trovata. La programmazione non può essere visualizzata.")
+        final_df['Giorni Programmati'] = 'N/D'
+
 
     return final_df

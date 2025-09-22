@@ -1285,31 +1285,33 @@ def render_situazione_impianti_tab():
 
         submitted = st.form_submit_button("Applica Filtri")
 
-    if not submitted:
+    if submitted:
+        # Applica i filtri
+        filtered_df = df[
+            df['TCL'].isin(selected_tcl) &
+            df['Area'].isin(selected_area) &
+            df['Stato'].isin(selected_stato)
+        ].copy()
+
+        if filtered_df.empty:
+            st.info("Nessuna attività corrisponde ai filtri selezionati.")
+        else:
+            # --- VISUALIZZAZIONE ---
+            st.subheader("Riepilogo Attività per Stato")
+            status_counts = filtered_df['Stato'].value_counts()
+            st.bar_chart(status_counts)
+
+            st.subheader(f"Dettaglio Attività Trovate: {len(filtered_df)}")
+            st.divider()
+
+            # Raggruppa gli interventi per PdL
+            activities_by_pdl = filtered_df.groupby('PdL')
+
+            for pdl, group in activities_by_pdl:
+                # Passiamo l'intero gruppo di interventi per un PdL alla card
+                display_expandable_activity_card(group, f"situazione_{pdl}")
+    else:
         st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
-        st.stop()
-
-    # Applica i filtri
-    filtered_df = df[
-        df['TCL'].isin(selected_tcl) &
-        df['Area'].isin(selected_area) &
-        df['Stato'].isin(selected_stato)
-    ].copy()
-
-    if filtered_df.empty:
-        st.info("Nessuna attività corrisponde ai filtri selezionati.")
-        st.stop()
-
-    # --- VISUALIZZAZIONE ---
-    st.subheader(f"Trovate {len(filtered_df)} attività")
-    st.divider()
-
-    # Raggruppa gli interventi per PdL
-    activities_by_pdl = filtered_df.groupby('PdL')
-
-    for pdl, group in activities_by_pdl:
-        # Passiamo l'intero gruppo di interventi per un PdL alla card
-        display_expandable_activity_card(group, f"situazione_{pdl}")
 
 
 def render_programmazione_tab():
@@ -1339,35 +1341,33 @@ def render_programmazione_tab():
 
         submitted = st.form_submit_button("Applica Filtri")
 
-    if not submitted:
+    if submitted:
+        # Applica filtri
+        filtered_df = df.copy()
+        if pdl_filter:
+            filtered_df = filtered_df[filtered_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
+        if area_filter:
+            filtered_df = filtered_df[filtered_df['Area'].isin(area_filter)]
+        if tcl_filter:
+            filtered_df = filtered_df[filtered_df['TCL'].isin(tcl_filter)]
+        if day_filter and days_col:
+            day_regex = '|'.join(day_filter)
+            filtered_df = filtered_df[filtered_df[days_col].str.contains(day_regex, case=False, na=False)]
+
+        st.divider()
+
+        if filtered_df.empty:
+            st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
+        else:
+            # --- VISUALIZZAZIONE ---
+            st.subheader(f"Trovate {len(filtered_df)} attività programmate")
+            st.divider()
+
+            activities_by_pdl = filtered_df.groupby('PdL')
+            for pdl, group in activities_by_pdl:
+                display_expandable_activity_card(group, f"programmazione_{pdl}")
+    else:
         st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
-        st.stop()
-
-    # Applica filtri
-    filtered_df = df.copy()
-    if pdl_filter:
-        filtered_df = filtered_df[filtered_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
-    if area_filter:
-        filtered_df = filtered_df[filtered_df['Area'].isin(area_filter)]
-    if tcl_filter:
-        filtered_df = filtered_df[filtered_df['TCL'].isin(tcl_filter)]
-    if day_filter and days_col:
-        day_regex = '|'.join(day_filter)
-        filtered_df = filtered_df[filtered_df[days_col].str.contains(day_regex, case=False, na=False)]
-
-    st.divider()
-
-    if filtered_df.empty:
-        st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
-        return
-
-    # --- VISUALIZZAZIONE ---
-    st.subheader(f"Trovate {len(filtered_df)} attività programmate")
-    st.divider()
-
-    activities_by_pdl = filtered_df.groupby('PdL')
-    for pdl, group in activities_by_pdl:
-        display_expandable_activity_card(group, f"programmazione_{pdl}")
 
 
 def main_app(nome_utente_autenticato, ruolo):
@@ -1487,51 +1487,50 @@ def main_app(nome_utente_autenticato, ruolo):
 
                 submitted = st.form_submit_button("Cerca nell'Archivio")
 
-            if not submitted:
-                st.info("Usa i filtri e clicca su 'Cerca nell'Archivio' per visualizzare i dati.")
-                st.stop()
+            if submitted:
+                # Applica filtri
+                filtered_df = df.copy()
 
-            # Applica filtri
-            filtered_df = df.copy()
+                if keyword_search:
+                    # Cerca la keyword in più colonne
+                    search_cols = ['PdL']
+                    if desc_col: search_cols.append(desc_col)
+                    # Aggiungi anche la colonna del report se esiste
+                    report_col = next((col for col in df.columns if 'stato' in col.lower() and 'attivita' in col.lower()), None)
+                    if report_col: search_cols.append(report_col)
 
-            if keyword_search:
-                # Cerca la keyword in più colonne
-                search_cols = ['PdL']
-                if desc_col: search_cols.append(desc_col)
-                # Aggiungi anche la colonna del report se esiste
-                report_col = next((col for col in df.columns if 'stato' in col.lower() and 'attivita' in col.lower()), None)
-                if report_col: search_cols.append(report_col)
+                    filtered_df = filtered_df[
+                        filtered_df[search_cols].apply(
+                            lambda row: row.astype(str).str.contains(keyword_search, case=False, na=False).any(),
+                            axis=1
+                        )
+                    ]
 
-                filtered_df = filtered_df[
-                    filtered_df[search_cols].apply(
-                        lambda row: row.astype(str).str.contains(keyword_search, case=False, na=False).any(),
-                        axis=1
-                    )
-                ]
+                if personnel_search and personnel_col:
+                    filtered_df = filtered_df[filtered_df[personnel_col].astype(str).str.contains(personnel_search, case=False, na=False)]
 
-            if personnel_search and personnel_col:
-                filtered_df = filtered_df[filtered_df[personnel_col].astype(str).str.contains(personnel_search, case=False, na=False)]
+                if date_col and start_date and end_date:
+                    # Converte le date del form in datetime per il confronto
+                    start_date_dt = pd.to_datetime(start_date)
+                    end_date_dt = pd.to_datetime(end_date)
+                    # Filtra le righe dove la data di controllo è nell'intervallo
+                    filtered_df = filtered_df[
+                        (filtered_df[date_col] >= start_date_dt) & (filtered_df[date_col] <= end_date_dt)
+                    ]
 
-            if date_col and start_date and end_date:
-                # Converte le date del form in datetime per il confronto
-                start_date_dt = pd.to_datetime(start_date)
-                end_date_dt = pd.to_datetime(end_date)
-                # Filtra le righe dove la data di controllo è nell'intervallo
-                filtered_df = filtered_df[
-                    (filtered_df[date_col] >= start_date_dt) & (filtered_df[date_col] <= end_date_dt)
-                ]
+                st.divider()
 
-            st.divider()
+                if filtered_df.empty:
+                    st.info("Nessuna attività trovata con i criteri di ricerca specificati.")
+                else:
+                    st.success(f"Trovati {len(filtered_df)} interventi. Vengono mostrati raggruppati per PdL.")
 
-            if filtered_df.empty:
-                st.info("Nessuna attività trovata con i criteri di ricerca specificati.")
+                    # Raggruppa per PdL e mostra le card
+                    activities_by_pdl = filtered_df.groupby('PdL')
+                    for pdl, group in activities_by_pdl:
+                        display_expandable_activity_card(group, f"archivio_{pdl}")
             else:
-                st.success(f"Trovati {len(filtered_df)} interventi. Vengono mostrati raggruppati per PdL.")
-
-                # Raggruppa per PdL e mostra le card
-                activities_by_pdl = filtered_df.groupby('PdL')
-                for pdl, group in activities_by_pdl:
-                    display_expandable_activity_card(group, f"archivio_{pdl}")
+                st.info("Usa i filtri e clicca su 'Cerca nell'Archivio' per visualizzare i dati.")
 
         with tabs[5]:
             st.subheader("Gestione Turni")
