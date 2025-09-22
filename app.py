@@ -1455,9 +1455,12 @@ def render_programmazione_tab():
     # --- INIZIO CODICE PER GRAFICO A BARRE ---
     st.subheader("Carico di Lavoro Settimanale per Area")
 
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-    area_counts_per_day = {day: defaultdict(int) for day in giorni_settimana}
+    # Definisci i nomi dei giorni completi e abbreviati
+    giorni_settimana_full = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+    giorni_settimana_short = ["LUN", "MAR", "MER", "GIO", "VEN"]
 
+    # Esegui il conteggio usando i nomi completi dei giorni per la corrispondenza con i dati
+    area_counts_per_day = {day: defaultdict(int) for day in giorni_settimana_full}
     for _, row in scheduled_df.iterrows():
         area = row['Area']
         days = [day.strip() for day in row['GiorniProgrammati'].split(',')]
@@ -1465,15 +1468,21 @@ def render_programmazione_tab():
             if day in area_counts_per_day:
                 area_counts_per_day[day][area] += 1
 
-    chart_df_wide = pd.DataFrame(area_counts_per_day).T.reindex(giorni_settimana).fillna(0).astype(int)
+    # Crea il DataFrame, assicurando l'ordine corretto con i nomi completi
+    chart_df_wide = pd.DataFrame(area_counts_per_day).T.reindex(giorni_settimana_full).fillna(0).astype(int)
+
+    # Mappa l'indice ai nomi abbreviati per la visualizzazione
+    chart_df_wide.index = chart_df_wide.index.map(dict(zip(giorni_settimana_full, giorni_settimana_short)))
 
     if not chart_df_wide.empty:
+        # Trasforma il DataFrame nel formato "lungo" richiesto da Vega-Lite
         chart_df_long = chart_df_wide.reset_index().rename(columns={'index': 'Giorno'}).melt(
             id_vars='Giorno',
             var_name='Area',
             value_name='Conteggio'
         )
 
+        # Crea la specifica Vega-Lite
         spec = {
             "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
             "data": {"values": chart_df_long.to_dict('records')},
@@ -1482,7 +1491,7 @@ def render_programmazione_tab():
                 "x": {
                     "field": "Giorno",
                     "type": "ordinal",
-                    "sort": giorni_settimana,
+                    "sort": giorni_settimana_short,  # Usa la lista di nomi abbreviati per l'ordinamento
                     "axis": {"title": "Giorno della Settimana", "labelAngle": 0}
                 },
                 "y": {
