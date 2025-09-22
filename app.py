@@ -1452,6 +1452,41 @@ def render_programmazione_tab():
 
     st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
 
+    # --- INIZIO CODICE PER GRAFICO A BARRE ---
+    st.subheader("Carico di Lavoro Settimanale per Area")
+
+    # Definisci i giorni della settimana in ordine
+    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+
+    # Prepara la struttura dati per il grafico
+    # Usiamo un dizionario di dizionari: { 'Lunedì': {'Area 1': 2, 'Area 2': 1}, 'Martedì': ... }
+    area_counts_per_day = {day: defaultdict(int) for day in giorni_settimana}
+
+    # Popola i conteggi
+    for _, row in scheduled_df.iterrows():
+        area = row['Area']
+        days = [day.strip() for day in row['GiorniProgrammati'].split(',')]
+        for day in days:
+            if day in area_counts_per_day:
+                area_counts_per_day[day][area] += 1
+
+    # Converti in DataFrame per il grafico
+    chart_df = pd.DataFrame(area_counts_per_day).T.fillna(0).astype(int)
+
+    # Assicura che l'ordine dei giorni sia corretto
+    if not chart_df.empty:
+        chart_df = chart_df.reindex(giorni_settimana)
+
+    if not chart_df.empty:
+        # Usa `use_container_width=True` per una migliore responsività mobile
+        st.bar_chart(chart_df, use_container_width=True)
+    else:
+        st.info("Nessun dato da visualizzare nel grafico.")
+
+    st.divider()
+    # --- FINE CODICE PER GRAFICO A BARRE ---
+
+
     with st.form("programmazione_filters_form"):
         col1, col2, col3, col4 = st.columns(4)
         with col1:
