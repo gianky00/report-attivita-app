@@ -1471,11 +1471,10 @@ def render_programmazione_tab():
                 area_counts_per_day[day][area] += 1
 
     # Converti in DataFrame per il grafico
-    chart_df = pd.DataFrame(area_counts_per_day).T.fillna(0).astype(int)
+    chart_df = pd.DataFrame(area_counts_per_day).T
 
-    # Assicura che l'ordine dei giorni sia corretto
-    if not chart_df.empty:
-        chart_df = chart_df.reindex(giorni_settimana)
+    # Assicura che l'ordine dei giorni sia corretto e riempi i giorni mancanti
+    chart_df = chart_df.reindex(giorni_settimana).fillna(0).astype(int)
 
     if not chart_df.empty:
         # Usa `use_container_width=True` per una migliore responsività mobile
