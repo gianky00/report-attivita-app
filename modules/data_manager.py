@@ -268,6 +268,37 @@ def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_rif
         st.error(f"Errore salvataggio GSheets: {e}")
         return None
 
+def _match_partial_name(partial_name, full_name):
+    """
+    Intelligently matches a partial name (e.g., 'Garro L.') with a full name (e.g., 'Luca Garro').
+    """
+    if not partial_name or not full_name:
+        return False
+
+    # Normalize and split names into parts
+    partial_parts = [p.replace('.', '') for p in partial_name.lower().split()]
+    full_parts = full_name.lower().split()
+
+    # Separate names and initials from the partial name
+    partial_initials = {p for p in partial_parts if len(p) == 1}
+    partial_names = {p for p in partial_parts if len(p) > 1}
+
+    # All name parts from the partial name must be in the full name
+    if not partial_names.issubset(set(full_parts)):
+        return False
+
+    # Get the parts of the full name that are not in the partial name (potential first names)
+    remaining_full_parts = set(full_parts) - partial_names
+
+    # Get the initials of the remaining parts
+    remaining_initials = {p[0] for p in remaining_full_parts}
+
+    # All initials from the partial name must match the initials of the remaining parts
+    if not partial_initials.issubset(remaining_initials):
+        return False
+
+    return True
+
 def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
     try:
         path_giornaliera_mensile = os.path.join(config.PATH_GIORNALIERA_BASE, f"Giornaliera {mese:02d}-{anno}.xlsm")
@@ -336,9 +367,11 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
                 if nome_membro not in attivita_collezionate[activity_key]['team_members']:
                     ruolo_membro = "Sconosciuto"
                     if df_contatti is not None and not df_contatti.empty:
-                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
-                        if not matching_user.empty:
-                            ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
+                        for _, contact_row in df_contatti.iterrows():
+                            full_name = contact_row['Nome Cognome']
+                            if _match_partial_name(nome_membro, full_name):
+                                ruolo_membro = contact_row.get('Ruolo', 'Tecnico')
+                                break
                     attivita_collezionate[activity_key]['team_members'][nome_membro] = {
                         'ruolo': ruolo_membro,
                         'orari': set()
