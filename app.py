@@ -1452,71 +1452,6 @@ def render_programmazione_tab():
 
     st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
 
-    # --- INIZIO CODICE PER GRAFICO A BARRE ---
-    st.subheader("Carico di Lavoro Settimanale per Area")
-
-    # Definisci i nomi dei giorni completi e abbreviati
-    giorni_settimana_full = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-    giorni_settimana_short = ["LUN", "MAR", "MER", "GIO", "VEN"]
-
-    # Esegui il conteggio usando i nomi completi dei giorni per la corrispondenza con i dati
-    area_counts_per_day = {day: defaultdict(int) for day in giorni_settimana_full}
-    for _, row in scheduled_df.iterrows():
-        area = row['Area']
-        days = [day.strip() for day in row['GiorniProgrammati'].split(',')]
-        for day in days:
-            if day in area_counts_per_day:
-                area_counts_per_day[day][area] += 1
-
-    # Crea il DataFrame, assicurando l'ordine corretto con i nomi completi
-    chart_df_wide = pd.DataFrame(area_counts_per_day).T.reindex(giorni_settimana_full).fillna(0).astype(int)
-
-    # Mappa l'indice ai nomi abbreviati per la visualizzazione
-    chart_df_wide.index = chart_df_wide.index.map(dict(zip(giorni_settimana_full, giorni_settimana_short)))
-
-    if not chart_df_wide.empty:
-        # Trasforma il DataFrame nel formato "lungo" richiesto da Vega-Lite
-        chart_df_long = chart_df_wide.reset_index().rename(columns={'index': 'Giorno'}).melt(
-            id_vars='Giorno',
-            var_name='Area',
-            value_name='Conteggio'
-        )
-
-        # Crea la specifica Vega-Lite
-        spec = {
-            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-            "data": {"values": chart_df_long.to_dict('records')},
-            "mark": "bar",
-            "encoding": {
-                "x": {
-                    "field": "Giorno",
-                    "type": "ordinal",
-                    "sort": giorni_settimana_short,  # Usa la lista di nomi abbreviati per l'ordinamento
-                    "axis": {"title": "Giorno della Settimana", "labelAngle": 0}
-                },
-                "y": {
-                    "field": "Conteggio",
-                    "type": "quantitative",
-                    "axis": {"title": "Numero di Attività"}
-                },
-                "color": {
-                    "field": "Area",
-                    "type": "nominal",
-                    "legend": {"title": "Area"}
-                }
-            },
-            "config": {
-                "view": {"stroke": "transparent"}
-            }
-        }
-        st.vega_lite_chart(spec, use_container_width=True)
-    else:
-        st.info("Nessun dato da visualizzare nel grafico.")
-
-    st.divider()
-    # --- FINE CODICE PER GRAFICO A BARRE ---
-
-
     with st.form("programmazione_filters_form"):
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -1635,22 +1570,21 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        main_tabs_list = ["Attività Assegnate", "📊 Situazione Impianti", "🗓️ Programmazione Attività", "Ricerca nell'Archivio", "📅 Gestione Turni", "❓ Guida"]
+        # Lista delle schede principali con i nuovi nomi e la nuova struttura
+        main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "❓ Guida"]
 
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
         
         tabs = st.tabs(main_tabs_list)
         
+        # Scheda 0: Attività Assegnate (invariata)
         with tabs[0]:
-            #st.header("Attività Assegnate")
             sub_tabs = st.tabs(["Attività di Oggi", "Attività Giorno Precedente"])
-
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
                 lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
                 disegna_sezione_attivita(lista_attivita, "today", ruolo)
-            
             with sub_tabs[1]:
                 st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
                 lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
@@ -1659,23 +1593,27 @@ def main_app(nome_utente_autenticato, ruolo):
                 if not archivio_df.empty:
                     report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
                     pdl_compilati_ieri = set(report_compilati['PdL'])
-
                 attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
+        # Scheda 1: Nuova sezione "Pianificazione e Controllo" con sotto-schede
         with tabs[1]:
-            render_situazione_impianti_tab()
+            st.header("Pianificazione e Controllo")
+            sub_tabs_pianificazione = st.tabs(["Controllo", "Pianificazione"])
+            with sub_tabs_pianificazione[0]:
+                # "Controllo" (precedentemente "Situazione Impianti")
+                render_situazione_impianti_tab()
+            with sub_tabs_pianificazione[1]:
+                # "Pianificazione" (precedentemente "Programmazione Attività")
+                render_programmazione_tab()
 
+        # Scheda 2: Database (precedentemente "Ricerca nell'Archivio")
         with tabs[2]:
-            render_programmazione_tab()
-
-        with tabs[3]:
-            st.subheader("Ricerca nell'Archivio")
+            st.subheader("Ricerca nel Database") # Titolo aggiornato
             archivio_df = carica_archivio_completo()
             if archivio_df.empty:
                 st.warning("L'archivio è vuoto o non caricabile.")
             else:
-                # --- PAGINATION LOGIC ---
                 ITEMS_PER_PAGE = 20
                 if 'num_items_to_show' not in st.session_state:
                     st.session_state.num_items_to_show = ITEMS_PER_PAGE
@@ -1693,7 +1631,6 @@ def main_app(nome_utente_autenticato, ruolo):
                 if current_filters != st.session_state.last_search_filters:
                     st.session_state.num_items_to_show = ITEMS_PER_PAGE
                 st.session_state.last_search_filters = current_filters
-                # --- END PAGINATION LOGIC ---
                 
                 risultati_df = archivio_df.copy()
                 if pdl_search: risultati_df = risultati_df[risultati_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
@@ -1704,7 +1641,6 @@ def main_app(nome_utente_autenticato, ruolo):
                     pdl_unici_df = risultati_df.sort_values(by='Data_Riferimento_dt', ascending=False).drop_duplicates(subset=['PdL'], keep='first')
                     st.info(f"Trovati {len(risultati_df)} interventi, raggruppati in {len(pdl_unici_df)} PdL unici.")
 
-                    # Applica la paginazione
                     items_to_display_df = pdl_unici_df.head(st.session_state.num_items_to_show)
 
                     for _, riga_pdl in items_to_display_df.iterrows():
@@ -1714,45 +1650,35 @@ def main_app(nome_utente_autenticato, ruolo):
                             interventi_per_pdl_df = risultati_df[risultati_df['PdL'] == pdl_corrente].sort_values(by='Data_Riferimento_dt', ascending=False)
                             visualizza_storico_organizzato(interventi_per_pdl_df.to_dict('records'), pdl_corrente)
 
-                    # --- PAGINATION BUTTON ---
                     total_results = len(pdl_unici_df)
                     if st.session_state.num_items_to_show < total_results:
                         st.divider()
                         if st.button("Carica Altri Risultati..."):
                             st.session_state.num_items_to_show += ITEMS_PER_PAGE
                             st.rerun()
-                    # --- END PAGINATION BUTTON ---
                 else:
                     st.info("Nessun record trovato.")
 
-        with tabs[4]:
+        # Scheda 3: Gestione Turni (precedentemente indice 4)
+        with tabs[3]:
             st.subheader("Gestione Turni")
-            # Modifica: Rimosso 'Turni Reperibilità' dalle tab principali
             turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
-
             with turni_disponibili_tab:
-                # Modifica: Aggiunto 'Turni Reperibilità' come sotto-tab
                 assistenza_tab, straordinario_tab, reperibilita_tab = st.tabs(["Turni Assistenza", "Turni Straordinario", "Turni Reperibilità"])
                 df_turni_totale = gestionale_data['turni'].copy()
                 df_turni_totale.dropna(subset=['ID_Turno'], inplace=True)
-
                 with assistenza_tab:
                     df_assistenza = df_turni_totale[df_turni_totale['Tipo'] == 'Assistenza']
                     render_turni_list(df_assistenza, gestionale_data, nome_utente_autenticato, ruolo, "assistenza")
-
                 with straordinario_tab:
                     df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
                     render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
-
                 with reperibilita_tab:
-                    # Modifica: La funzione per la reperibilità è ora chiamata qui
                     render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
-
             with bacheca_tab:
                 st.subheader("Turni Liberi in Bacheca")
                 df_bacheca = gestionale_data.get('bacheca', pd.DataFrame())
                 turni_disponibili_bacheca = df_bacheca[df_bacheca['Stato'] == 'Disponibile'].sort_values(by='Timestamp_Pubblicazione', ascending=False)
-
                 if turni_disponibili_bacheca.empty:
                     st.info("Al momento non ci sono turni liberi in bacheca.")
                 else:
@@ -1764,10 +1690,8 @@ def main_app(nome_utente_autenticato, ruolo):
                                 st.markdown(f"**{turno_details['Descrizione']}** ({bacheca_entry['Ruolo_Originale']})")
                                 st.caption(f"Data: {pd.to_datetime(turno_details['Data']).strftime('%d/%m/%Y')} | Orario: {turno_details['OrarioInizio']} - {turno_details['OrarioFine']}")
                                 st.write(f"Pubblicato da: {bacheca_entry['Tecnico_Originale']} il {pd.to_datetime(bacheca_entry['Timestamp_Pubblicazione']).strftime('%d/%m %H:%M')}")
-
                                 ruolo_richiesto = bacheca_entry['Ruolo_Originale']
                                 is_eligible = not (ruolo_richiesto == 'Tecnico' and ruolo == 'Aiutante')
-
                                 if is_eligible:
                                     if st.button("Prendi questo turno", key=f"take_{bacheca_entry['ID_Bacheca']}"):
                                         if prendi_turno_da_bacheca_logic(gestionale_data, nome_utente_autenticato, ruolo, bacheca_entry['ID_Bacheca']):
@@ -1777,8 +1701,6 @@ def main_app(nome_utente_autenticato, ruolo):
                                     st.info("Non hai il ruolo richiesto per questo turno.")
                         except IndexError:
                             st.warning(f"Dettagli non trovati per il turno ID {bacheca_entry['ID_Turno']}. Potrebbe essere stato rimosso.")
-
-
             with sostituzioni_tab:
                 st.subheader("Richieste di Sostituzione")
                 df_sostituzioni = gestionale_data['sostituzioni']
@@ -1804,7 +1726,8 @@ def main_app(nome_utente_autenticato, ruolo):
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
 
-        with tabs[5]:
+        # Scheda 4: Guida (precedentemente indice 5)
+        with tabs[4]:
             render_guida_tab(ruolo)
 
         if ruolo == "Amministratore":
