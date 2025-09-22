@@ -33,6 +33,7 @@ from modules.data_manager import (
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate
 )
+from learning_module import load_report_knowledge_base
 from modules.shift_management import (
     sync_oncall_shifts,
     log_shift_change,
@@ -94,6 +95,44 @@ CRONOLOGIA:
         return json.loads(cleaned_response)
     except Exception as e:
         return {"error": f"Errore durante l'analisi IA: {str(e)}"}
+
+@st.cache_data(show_spinner=False)
+def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
+    """
+    Usa l'IA per revisionare una relazione tecnica basandosi su una base di conoscenza.
+    """
+    if not GEMINI_API_KEY:
+        return {"error": "La chiave API di Gemini non è configurata."}
+    if not _testo_originale.strip():
+        return {"info": "Il testo della relazione è vuoto."}
+
+    # Per evitare un prompt troppo lungo, usiamo un campione della base di conoscenza
+    # (es. 5000 caratteri)
+    knowledge_sample = _knowledge_base[:5000] if _knowledge_base else "Nessun esempio fornito."
+
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        prompt = f"""
+        Sei un revisore esperto di relazioni tecniche in ambito industriale. Il tuo compito è revisionare e migliorare il seguente testo scritto da un tecnico, mantenendo un tono professionale, chiaro e conciso. Correggi eventuali errori grammaticali o di battitura e assicurati che lo stile sia coerente con gli esempi forniti.
+
+        **STILE E TERMINOLOGIA DA SEGUIRE (ESEMPI):**
+        ---
+        {knowledge_sample}
+        ---
+
+        **RELAZIONE DA REVISIONARE:**
+        ---
+        {_testo_originale}
+        ---
+
+        **RELAZIONE REVISIONATA (restituisci solo il testo corretto, senza aggiungere titoli o commenti):**
+        """
+
+        response = model.generate_content(prompt)
+        return {"success": True, "text": response.text}
+    except Exception as e:
+        return {"error": f"Errore durante la revisione IA: {str(e)}"}
+
 
 @st.cache_data
 def to_csv(df):
@@ -1578,9 +1617,15 @@ def main_app(nome_utente_autenticato, ruolo):
         
         tabs = st.tabs(main_tabs_list)
         
-        # Scheda 0: Attività Assegnate (invariata)
+        # Scheda 0: Attività Assegnate (modificata per aggiungere "Compila Relazione")
         with tabs[0]:
-            sub_tabs = st.tabs(["Attività di Oggi", "Attività Giorno Precedente"])
+            sub_tab_list = ["Attività di Oggi", "Attività Giorno Precedente"]
+            # Aggiungi la scheda solo se l'utente è un Tecnico o Amministratore
+            if ruolo in ["Tecnico", "Amministratore"]:
+                sub_tab_list.append("Compila Relazione")
+
+            sub_tabs = st.tabs(sub_tab_list)
+
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
                 lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
@@ -1595,6 +1640,74 @@ def main_app(nome_utente_autenticato, ruolo):
                     pdl_compilati_ieri = set(report_compilati['PdL'])
                 attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
+
+            # Contenuto per la nuova scheda "Compila Relazione"
+            if ruolo in ["Tecnico", "Amministratore"] and len(sub_tabs) > 2:
+                with sub_tabs[2]:
+                    st.header("Compila Relazione di Reperibilità")
+
+                    # Inizializza lo stato della sessione se non esiste
+                    if 'relazione_testo' not in st.session_state:
+                        st.session_state.relazione_testo = ""
+                    if 'relazione_partner' not in st.session_state:
+                        st.session_state.relazione_partner = None
+                    if 'relazione_revisionata' not in st.session_state:
+                        st.session_state.relazione_revisionata = ""
+
+                    # Carica la lista dei contatti per il selettore del partner
+                    contatti_df = gestionale_data.get('contatti', pd.DataFrame())
+                    # Escludi l'utente corrente dalla lista dei partner selezionabili
+                    lista_partner = contatti_df[contatti_df['Nome Cognome'] != nome_utente_autenticato]['Nome Cognome'].tolist()
+
+                    with st.form("form_relazione"):
+                        st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
+
+                        # Nuovi campi data e ora
+                        c1, c2, c3 = st.columns(3)
+                        data_intervento = c1.date_input("Data Intervento*", help="Questo campo è obbligatorio.")
+                        ora_inizio = c2.text_input("Ora Inizio", placeholder="HH:MM o 'non ricordo'")
+                        ora_fine = c3.text_input("Ora Fine", placeholder="HH:MM o 'non ricordo'")
+
+                        st.session_state.relazione_partner = st.selectbox(
+                            "Seleziona Partner (opzionale)",
+                            options=["Nessuno"] + sorted(lista_partner),
+                            index=0
+                        )
+                        st.session_state.relazione_testo = st.text_area("Corpo della Relazione", height=250, value=st.session_state.get('relazione_testo', ''))
+
+                        # Pulsanti del form
+                        submit_ai_button = st.form_submit_button("🤖 Correggi con IA")
+                        # submit_save_button = st.form_submit_button("Salva Relazione Finale") # Logica futura
+
+                    if submit_ai_button:
+                        if not st.session_state.relazione_testo.strip():
+                            st.warning("Per favore, scrivi il corpo della relazione prima di chiedere la correzione.")
+                        elif not data_intervento:
+                            st.error("Il campo 'Data Intervento' è obbligatorio.")
+                        else:
+                            with st.spinner("L'IA sta revisionando la tua relazione..."):
+                                knowledge_base = load_report_knowledge_base()
+                                if not knowledge_base:
+                                    st.warning("La base di conoscenza delle relazioni non è stata trovata. La revisione IA potrebbe essere meno accurata.")
+
+                                result = revisiona_relazione_con_ia(st.session_state.relazione_testo, knowledge_base)
+
+                                if result.get("success"):
+                                    st.session_state.relazione_revisionata = result["text"]
+                                    st.success("Relazione corretta con successo!")
+                                elif "error" in result:
+                                    st.error(f"**Errore IA:** {result['error']}")
+                                else:
+                                    st.info(result.get("info", "Nessun suggerimento dall'IA."))
+
+                    if st.session_state.get('relazione_revisionata'):
+                        st.subheader("Testo corretto dall'IA")
+                        st.info(st.session_state.relazione_revisionata)
+                        if st.button("📝 Usa Testo Corretto"):
+                            st.session_state.relazione_testo = st.session_state.relazione_revisionata
+                            st.session_state.relazione_revisionata = "" # Pulisci dopo aver copiato
+                            st.rerun()
+
 
         # Scheda 1: Nuova sezione "Pianificazione e Controllo" con sotto-schede
         with tabs[1]:
