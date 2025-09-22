@@ -271,7 +271,26 @@ def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_rif
 def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
     try:
         path_giornaliera_mensile = os.path.join(config.PATH_GIORNALIERA_BASE, f"Giornaliera {mese:02d}-{anno}.xlsm")
-        df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=str(giorno), engine='openpyxl', header=None)
+
+        target_sheet = str(giorno) # Default to original behavior
+        try:
+            # Try to find a better matching sheet name
+            workbook = openpyxl.load_workbook(path_giornaliera_mensile, read_only=True)
+            day_str = str(giorno)
+            for sheet_name in workbook.sheetnames:
+                # Check if the day number is a whole word in the sheet name
+                # e.g. "LUN 22" -> split -> ["LUN", "22"]. "22" is in it.
+                # e.g. "22" -> split -> ["22"]. "22" is in it.
+                # e.g. "Foglio22" -> split -> ["Foglio22"]. "22" is not in it.
+                if day_str in sheet_name.split():
+                    target_sheet = sheet_name
+                    break
+        except Exception:
+            # If openpyxl fails for any reason (e.g. file not found, corrupted),
+            # we just proceed with the default target_sheet, and let pandas handle the error.
+            pass
+
+        df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=target_sheet, engine='openpyxl', header=None)
         df_range = df_giornaliera.iloc[3:45]
 
         # 1. Trova tutti i PdL per l'utente corrente
