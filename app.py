@@ -1552,7 +1552,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     del st.session_state[key]
 
                 # Rimuove il token dall'URL
-                st.experimental_set_query_params()
+                st.query_params.clear()
                 st.rerun()
 
         oggi = datetime.date.today()
@@ -1945,14 +1945,13 @@ for key, default_value in keys_to_initialize.items():
 # --- Logica di avvio e caricamento sessione ---
 # Se l'utente non è già loggato in st.session_state, prova a caricarlo dal token nell'URL
 if not st.session_state.get('authenticated_user'):
-    query_params = st.experimental_get_query_params()
-    token = query_params.get("session_token", [None])[0]
+    token = st.query_params.get("session_token")
     if token:
         if load_session(token):
             st.session_state.session_token = token # Mantieni il token in stato
         else:
             # Se il token non è valido, pulisci i query params per evitare loop
-            st.experimental_set_query_params()
+            st.query_params.clear()
 
 
 # --- UI LOGIC ---
@@ -1999,7 +1998,7 @@ else:
                             st.session_state.authenticated_user = nome_completo
                             st.session_state.ruolo = ruolo
                             st.session_state.session_token = token
-                            st.experimental_set_query_params(session_token=token)
+                            st.query_params['session_token'] = token
                             st.rerun()
                         else:
                             st.error("Impossibile creare una sessione.")
@@ -2048,7 +2047,7 @@ else:
                             st.session_state.login_state = 'logged_in'
                             st.session_state.authenticated_user = user_to_setup
                             st.session_state.session_token = token
-                            st.experimental_set_query_params(session_token=token)
+                            st.query_params['session_token'] = token
                             st.rerun()
                         else:
                             st.error("Impossibile creare una sessione dopo la configurazione 2FA.")
@@ -2077,7 +2076,7 @@ else:
                         st.session_state.authenticated_user = user_to_verify
                         st.session_state.ruolo = ruolo
                         st.session_state.session_token = token
-                        st.experimental_set_query_params(session_token=token)
+                        st.query_params['session_token'] = token
                         st.rerun()
                     else:
                         st.error("Impossibile creare una sessione dopo la verifica 2FA.")
