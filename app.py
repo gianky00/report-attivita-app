@@ -33,7 +33,7 @@ from modules.data_manager import (
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate
 )
-from learning_module import load_report_knowledge_base
+from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
     sync_oncall_shifts,
     log_shift_change,
@@ -1655,6 +1655,13 @@ def main_app(nome_utente_autenticato, ruolo):
             if ruolo in ["Tecnico", "Amministratore"] and len(sub_tabs) > 2:
                 with sub_tabs[2]:
                     st.header("Compila Relazione di Reperibilità")
+
+                    # Mostra il numero di documenti nella base di conoscenza
+                    kb_count = get_report_knowledge_base_count()
+                    if kb_count > 0:
+                        st.caption(f"ℹ️ L'IA si basa su {kb_count} relazioni per la correzione.")
+                    else:
+                        st.caption("ℹ️ Base di conoscenza per l'IA non trovata o vuota.")
 
                     # Inizializza lo stato della sessione se non esiste
                     if 'relazione_testo' not in st.session_state:

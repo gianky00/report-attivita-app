@@ -113,3 +113,23 @@ def load_report_knowledge_base():
                         continue
 
     return knowledge_base_text
+
+def get_report_knowledge_base_count():
+    """
+    Conta in modo efficiente il numero di file .docx nella base di conoscenza
+    senza caricarli.
+    """
+    base_path = "relazioni_word"
+    file_count = 0
+
+    if not os.path.exists(base_path) or not os.path.isdir(base_path):
+        return 0
+
+    for year_folder in os.listdir(base_path):
+        reports_path = os.path.join(base_path, year_folder)
+        if os.path.isdir(reports_path):
+            for filename in os.listdir(reports_path):
+                if filename.endswith(".docx"):
+                    file_count += 1
+
+    return file_count
