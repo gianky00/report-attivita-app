@@ -6,6 +6,7 @@ import datetime
 import re
 import os
 import json
+import uuid
 from collections import defaultdict
 import requests
 import google.generativeai as genai
@@ -1271,55 +1272,63 @@ def render_guida_tab(ruolo):
 
 
 # --- GESTIONE SESSIONE ---
-SESSION_FILE = f"session_{os.getlogin()}.json"
+SESSION_DIR = "sessions"
 SESSION_DURATION_HOURS = 8
+if not os.path.exists(SESSION_DIR):
+    os.makedirs(SESSION_DIR)
 
 def save_session(username, role):
-    """Salva la sessione utente su un file."""
+    """Salva i dati di una sessione in un file basato su token e restituisce il token."""
+    token = str(uuid.uuid4())
+    session_filepath = os.path.join(SESSION_DIR, f"session_{token}.json")
     session_data = {
         'authenticated_user': username,
         'ruolo': role,
         'timestamp': datetime.datetime.now().isoformat()
     }
     try:
-        with open(SESSION_FILE, 'w') as f:
+        with open(session_filepath, 'w') as f:
             json.dump(session_data, f)
+        return token
     except IOError as e:
         st.error(f"Impossibile salvare la sessione: {e}")
+        return None
 
-def load_session():
-    """Carica la sessione utente da un file se valida e non scaduta."""
-    if st.session_state.get('authenticated_user'):
-        return
+def load_session(token):
+    """Carica una sessione da un file basato su token, se valida."""
+    if not token or not re.match(r'^[a-f0-9-]+$', token):
+        return False
 
-    if os.path.exists(SESSION_FILE):
+    session_filepath = os.path.join(SESSION_DIR, f"session_{token}.json")
+    if os.path.exists(session_filepath):
         try:
-            with open(SESSION_FILE, 'r') as f:
+            with open(session_filepath, 'r') as f:
                 session_data = json.load(f)
 
             session_time = datetime.datetime.fromisoformat(session_data['timestamp'])
             if datetime.datetime.now() - datetime.timedelta(hours=SESSION_DURATION_HOURS) < session_time:
                 st.session_state.authenticated_user = session_data['authenticated_user']
                 st.session_state.ruolo = session_data['ruolo']
+                st.session_state.login_state = 'logged_in'
+                return True
             else:
-                # Sessione scaduta, pulisci
-                delete_session()
+                delete_session(token) # Sessione scaduta
+                return False
         except (IOError, json.JSONDecodeError, KeyError):
-            # File corrotto, pulisci
-            delete_session()
+            delete_session(token) # File corrotto
+            return False
+    return False
 
-def delete_session():
-    """Cancella il file di sessione e pulisce lo stato di streamlit."""
-    if os.path.exists(SESSION_FILE):
+def delete_session(token):
+    """Cancella un file di sessione basato su token."""
+    if not token:
+        return
+    session_filepath = os.path.join(SESSION_DIR, f"session_{token}.json")
+    if os.path.exists(session_filepath):
         try:
-            os.remove(SESSION_FILE)
+            os.remove(session_filepath)
         except OSError:
-            pass  # Ignora errori in cancellazione se il file è bloccato
-
-    # Pulisce completamente lo stato della sessione per un logout sicuro
-    keys_to_clear = [k for k in st.session_state.keys()]
-    for key in keys_to_clear:
-        del st.session_state[key]
+            pass # Ignora errori
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
@@ -1534,7 +1543,16 @@ def main_app(nome_utente_autenticato, ruolo):
             st.write("")
             st.write("")
             if st.button("Logout", type="secondary"):
-                delete_session()
+                token_to_delete = st.session_state.get('session_token')
+                delete_session(token_to_delete)
+
+                # Pulisce completamente lo stato della sessione per un logout sicuro
+                keys_to_clear = [k for k in st.session_state.keys()]
+                for key in keys_to_clear:
+                    del st.session_state[key]
+
+                # Rimuove il token dall'URL
+                st.query_params.clear()
                 st.rerun()
 
         oggi = datetime.date.today()
@@ -1924,11 +1942,16 @@ for key, default_value in keys_to_initialize.items():
     if key not in st.session_state:
         st.session_state[key] = default_value
 
-# Prova a caricare una sessione esistente all'avvio
+# --- Logica di avvio e caricamento sessione ---
+# Se l'utente non è già loggato in st.session_state, prova a caricarlo dal token nell'URL
 if not st.session_state.get('authenticated_user'):
-    load_session()
-    if st.session_state.get('authenticated_user'):
-        st.session_state.login_state = 'logged_in'
+    token = st.query_params.get("session_token")
+    if token:
+        if load_session(token):
+            st.session_state.session_token = token # Mantieni il token in stato
+        else:
+            # Se il token non è valido, pulisci i query params per evitare loop
+            st.query_params.clear()
 
 
 # --- UI LOGIC ---
@@ -1969,11 +1992,16 @@ else:
                         st.rerun()
                     elif status == "SUCCESS":
                         nome_completo, ruolo = user_data
-                        st.session_state.login_state = 'logged_in'
-                        st.session_state.authenticated_user = nome_completo
-                        st.session_state.ruolo = ruolo
-                        save_session(nome_completo, ruolo)
-                        st.rerun()
+                        token = save_session(nome_completo, ruolo)
+                        if token:
+                            st.session_state.login_state = 'logged_in'
+                            st.session_state.authenticated_user = nome_completo
+                            st.session_state.ruolo = ruolo
+                            st.session_state.session_token = token
+                            st.query_params['session_token'] = token
+                            st.rerun()
+                        else:
+                            st.error("Impossibile creare una sessione.")
                     else:
                         st.error("Credenziali non valide.")
 
@@ -2014,11 +2042,15 @@ else:
 
                     if salva_gestionale_async(gestionale):
                         st.success("Configurazione 2FA completata con successo! Accesso in corso...")
-                        st.session_state.login_state = 'logged_in'
-                        st.session_state.authenticated_user = user_to_setup
-                        # il ruolo è già in sessione
-                        save_session(user_to_setup, st.session_state.ruolo)
-                        st.rerun()
+                        token = save_session(user_to_setup, st.session_state.ruolo)
+                        if token:
+                            st.session_state.login_state = 'logged_in'
+                            st.session_state.authenticated_user = user_to_setup
+                            st.session_state.session_token = token
+                            st.query_params['session_token'] = token
+                            st.rerun()
+                        else:
+                            st.error("Impossibile creare una sessione dopo la configurazione 2FA.")
                     else:
                         st.error("Errore durante il salvataggio della configurazione. Riprova.")
                 else:
@@ -2038,10 +2070,15 @@ else:
             if submitted:
                 if verify_2fa_code(secret, code):
                     st.success("Codice corretto! Accesso in corso...")
-                    st.session_state.login_state = 'logged_in'
-                    st.session_state.authenticated_user = user_to_verify
-                    st.session_state.ruolo = ruolo
-                    save_session(user_to_verify, ruolo)
-                    st.rerun()
+                    token = save_session(user_to_verify, ruolo)
+                    if token:
+                        st.session_state.login_state = 'logged_in'
+                        st.session_state.authenticated_user = user_to_verify
+                        st.session_state.ruolo = ruolo
+                        st.session_state.session_token = token
+                        st.query_params['session_token'] = token
+                        st.rerun()
+                    else:
+                        st.error("Impossibile creare una sessione dopo la verifica 2FA.")
                 else:
                     st.error("Codice non valido. Riprova.")
