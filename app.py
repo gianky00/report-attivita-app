@@ -98,7 +98,7 @@ def calculate_technician_performance(archivio_df, start_date, end_date):
     """Calcola le metriche di performance per i tecnici in un dato intervallo di tempo."""
     
     # Converte le date in formato datetime di pandas, gestendo errori
-    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce')
+    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], errors='coerce', dayfirst=True)
     # Estrae la data dalla colonna timestamp della compilazione
     archivio_df['Data_Compilazione_dt'] = pd.to_datetime(archivio_df['Data_Compilazione'], errors='coerce').dt.date
     archivio_df['Data_Compilazione_dt'] = pd.to_datetime(archivio_df['Data_Compilazione_dt']) # Riconverte a datetime64 per la sottrazione
@@ -147,7 +147,7 @@ def visualizza_storico_organizzato(storico_list, pdl):
     if storico_list:
         with st.expander(f"Mostra cronologia interventi per PdL {pdl}", expanded=True):
             for intervento in storico_list:
-                intervento['data_dt'] = pd.to_datetime(intervento.get('Data_Riferimento'), errors='coerce')
+                intervento['data_dt'] = pd.to_datetime(intervento.get('Data_Riferimento'), errors='coerce', dayfirst=True)
             
             storico_filtrato = [i for i in storico_list if pd.notna(i['data_dt'])]
             if not storico_filtrato:
@@ -1334,12 +1334,23 @@ def render_situazione_impianti_tab():
         st.bar_chart(status_counts)
 
     st.subheader("Dettaglio Attività Filtrate")
-    # Migliora la visualizzazione del dataframe
-    st.dataframe(
-        filtered_df[['PdL', 'Impianto', 'Stato', 'TCL', 'Area', 'GiorniProgrammati']],
-        use_container_width=True,
-        hide_index=True,
-    )
+    for index, row in filtered_df.iterrows():
+        with st.container(border=True):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"#### PdL `{row['PdL']}`")
+                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
+            with col2:
+                st.markdown(f"**Stato Attuale**")
+                st.info(f"_{row['Stato']}_")
+
+            if pd.notna(row['Descrizione']):
+                st.caption(f"Descrizione: {row['Descrizione']}")
+
+            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
+
+            if row['Storico']:
+                visualizza_storico_organizzato(row['Storico'], row['PdL'])
 
 
 def render_programmazione_tab():
@@ -1394,7 +1405,7 @@ def render_programmazione_tab():
         st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
         return
 
-    # Layout a card, mobile-friendly
+    # Layout a card, mobile-friendly (reso coerente con la tab Situazione Impianti)
     for index, row in scheduled_df.iterrows():
         with st.container(border=True):
             col1, col2 = st.columns([3, 1])
@@ -1558,12 +1569,10 @@ def main_app(nome_utente_autenticato, ruolo):
 
         with tabs[5]:
             st.subheader("Gestione Turni")
-            # Modifica: Rimosso 'Turni Reperibilità' dalle tab principali
-            turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
+            turni_disponibili_tab, bacheca_tab, sostituzioni_tab, reperibilita_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni", "🗓️ Turni Reperibilità"])
 
             with turni_disponibili_tab:
-                # Modifica: Aggiunto 'Turni Reperibilità' come sotto-tab
-                assistenza_tab, straordinario_tab, reperibilita_tab = st.tabs(["Turni Assistenza", "Turni Straordinario", "Turni Reperibilità"])
+                assistenza_tab, straordinario_tab = st.tabs(["Turni Assistenza", "Turni Straordinario"])
                 df_turni_totale = gestionale_data['turni'].copy()
                 df_turni_totale.dropna(subset=['ID_Turno'], inplace=True)
 
@@ -1574,10 +1583,6 @@ def main_app(nome_utente_autenticato, ruolo):
                 with straordinario_tab:
                     df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
                     render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
-
-                with reperibilita_tab:
-                    # Modifica: La funzione per la reperibilità è ora chiamata qui
-                    render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
 
             with bacheca_tab:
                 st.subheader("Turni Liberi in Bacheca")
@@ -1634,6 +1639,9 @@ def main_app(nome_utente_autenticato, ruolo):
                 if richieste_inviate.empty: st.info("Nessuna richiesta di sostituzione inviata.")
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
+
+            with reperibilita_tab:
+                render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
 
         with tabs[6]:
             render_guida_tab(ruolo)
