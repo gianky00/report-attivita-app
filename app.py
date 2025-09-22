@@ -1455,14 +1455,9 @@ def render_programmazione_tab():
     # --- INIZIO CODICE PER GRAFICO A BARRE ---
     st.subheader("Carico di Lavoro Settimanale per Area")
 
-    # Definisci i giorni della settimana in ordine
     giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-
-    # Prepara la struttura dati per il grafico
-    # Usiamo un dizionario di dizionari: { 'Lunedì': {'Area 1': 2, 'Area 2': 1}, 'Martedì': ... }
     area_counts_per_day = {day: defaultdict(int) for day in giorni_settimana}
 
-    # Popola i conteggi
     for _, row in scheduled_df.iterrows():
         area = row['Area']
         days = [day.strip() for day in row['GiorniProgrammati'].split(',')]
@@ -1470,15 +1465,42 @@ def render_programmazione_tab():
             if day in area_counts_per_day:
                 area_counts_per_day[day][area] += 1
 
-    # Converti in DataFrame per il grafico
-    chart_df = pd.DataFrame(area_counts_per_day).T
+    chart_df_wide = pd.DataFrame(area_counts_per_day).T.reindex(giorni_settimana).fillna(0).astype(int)
 
-    # Assicura che l'ordine dei giorni sia corretto e riempi i giorni mancanti
-    chart_df = chart_df.reindex(giorni_settimana).fillna(0).astype(int)
+    if not chart_df_wide.empty:
+        chart_df_long = chart_df_wide.reset_index().rename(columns={'index': 'Giorno'}).melt(
+            id_vars='Giorno',
+            var_name='Area',
+            value_name='Conteggio'
+        )
 
-    if not chart_df.empty:
-        # Usa `use_container_width=True` per una migliore responsività mobile
-        st.bar_chart(chart_df, use_container_width=True)
+        spec = {
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "data": {"values": chart_df_long.to_dict('records')},
+            "mark": "bar",
+            "encoding": {
+                "x": {
+                    "field": "Giorno",
+                    "type": "ordinal",
+                    "sort": giorni_settimana,
+                    "axis": {"title": "Giorno della Settimana", "labelAngle": 0}
+                },
+                "y": {
+                    "field": "Conteggio",
+                    "type": "quantitative",
+                    "axis": {"title": "Numero di Attività"}
+                },
+                "color": {
+                    "field": "Area",
+                    "type": "nominal",
+                    "legend": {"title": "Area"}
+                }
+            },
+            "config": {
+                "view": {"stroke": "transparent"}
+            }
+        }
+        st.vega_lite_chart(spec, use_container_width=True)
     else:
         st.info("Nessun dato da visualizzare nel grafico.")
 
