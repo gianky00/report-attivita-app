@@ -46,12 +46,13 @@ def render_status_indicator():
 
     return online_status or 'online'
 
-def display_activity_card(activity_group, container=st):
+def display_activity_card(activity_group, key_prefix, container=st):
     """
     Mostra una "card" per un gruppo di attività relative a un singolo PdL.
 
     Args:
         activity_group (pd.DataFrame): DataFrame filtrato per un unico PdL.
+        key_prefix (str): Un prefisso unico per questa sezione per evitare key duplicati.
         container: Il container Streamlit in cui renderizzare la card (es. st o una colonna).
     """
     if activity_group.empty:
@@ -68,6 +69,9 @@ def display_activity_card(activity_group, container=st):
 
     pdl = latest_activity.get('PdL', 'N/D')
     descrizione = latest_activity.get('Descrizione', 'Nessuna descrizione')
+
+    # Pulisce il PdL per usarlo in una chiave, rimuovendo caratteri non sicuri
+    safe_pdl_key = "".join(c if c.isalnum() else "_" for c in str(pdl))
 
     expander_title = f"**{pdl}** - {descrizione}"
 
@@ -90,7 +94,7 @@ def display_activity_card(activity_group, container=st):
         st.info(f"**Personale Impiegato:** {personale}")
 
         report = latest_activity.get('Report', 'Nessun report compilato.')
-        st.text_area("Report Attività", value=report, height=150, disabled=True, key=f"report_text_{pdl}")
+        st.text_area("Report Attività", value=report, height=150, disabled=True, key=f"{key_prefix}_report_text_{safe_pdl_key}")
 
         # --- Storico Interventi ---
         if len(activity_group) > 1:

@@ -1283,7 +1283,7 @@ def render_situazione_impianti_tab():
     st.info(f"Trovate {len(grouped_by_pdl)} PdL con attività in corso o da processare.")
 
     for pdl, group in grouped_by_pdl:
-        display_activity_card(group, container=st)
+        display_activity_card(group, "sit", container=st)
 
 
 def render_programmazione_tab():
@@ -1324,7 +1324,7 @@ def render_programmazione_tab():
     st.info(f"Trovate {len(grouped_by_pdl)} PdL con attività programmate per oggi.")
 
     for pdl, group in grouped_by_pdl:
-        display_activity_card(group, container=st)
+        display_activity_card(group, "prog", container=st)
 
 
 def main_app(nome_utente_autenticato, ruolo):
@@ -1430,7 +1430,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     st.info(f"Trovate {len(grouped_by_pdl)} PdL con attività terminate o sospese.")
 
                     for pdl, group in grouped_by_pdl:
-                        display_activity_card(group, container=st)
+                        display_activity_card(group, "arch", container=st)
 
         with tabs[5]:
             st.subheader("Gestione Turni")
