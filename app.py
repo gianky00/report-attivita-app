@@ -1443,6 +1443,13 @@ def main_app(nome_utente_autenticato, ruolo):
         
         tabs = st.tabs(lista_tab)
         
+def find_column_by_keywords(df, keywords):
+    """Trova il nome di una colonna che contiene tutte le keyword specificate."""
+    for col in df.columns:
+        if all(keyword.lower() in col.lower() for keyword in keywords):
+            return col
+    return None
+
         with tabs[0]:
             st.header(f"Attività di Oggi ({oggi.strftime('%d/%m/%Y')})")
             st.info("Le tue attività programmate per oggi. La vecchia logica di compilazione report è stata disattivata in questa versione.")
@@ -1455,8 +1462,15 @@ def main_app(nome_utente_autenticato, ruolo):
 
                 if today_col and today_col in full_df.columns:
                     today_df = full_df[full_df[today_col].astype(str).str.strip().str.upper() == 'X'].copy()
-                    # Filtra per utente
-                    today_df = today_df[today_df['PERSONALE IMPEGATO'].astype(str).str.contains(nome_utente_autenticato.split()[0], case=False, na=False)]
+
+                    # Trova dinamicamente la colonna del personale
+                    personale_col = find_column_by_keywords(today_df, ['personale', 'impiegato'])
+
+                    if personale_col:
+                        # Filtra per utente
+                        today_df = today_df[today_df[personale_col].astype(str).str.contains(nome_utente_autenticato.split()[0], case=False, na=False)]
+                    else:
+                        st.warning("Attenzione: Impossibile trovare la colonna del personale per filtrare le tue attività.")
 
                     if not today_df.empty:
                         st.success(f"Trovate {len(today_df)} attività per te oggi.")
@@ -1481,8 +1495,16 @@ def main_app(nome_utente_autenticato, ruolo):
 
                 if prev_day_col and prev_day_col in full_df.columns:
                     prev_day_df = full_df[full_df[prev_day_col].astype(str).str.strip().str.upper() == 'X'].copy()
-                    # Filtra per utente
-                    prev_day_df = prev_day_df[prev_day_df['PERSONALE IMPEGATO'].astype(str).str.contains(nome_utente_autenticato.split()[0], case=False, na=False)]
+
+                    # Trova dinamicamente la colonna del personale
+                    personale_col = find_column_by_keywords(prev_day_df, ['personale', 'impiegato'])
+
+                    if personale_col:
+                        # Filtra per utente
+                        prev_day_df = prev_day_df[prev_day_df[personale_col].astype(str).str.contains(nome_utente_autenticato.split()[0], case=False, na=False)]
+                    else:
+                        st.warning("Attenzione: Impossibile trovare la colonna del personale per filtrare le tue attività.")
+
                     # Filtra per stato non completato
                     prev_day_df = prev_day_df[~prev_day_df['Stato'].isin(['Terminata'])]
 
