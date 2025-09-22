@@ -291,7 +291,7 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
             pass
 
         df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=target_sheet, engine='openpyxl', header=None)
-        df_range = df_giornaliera.iloc[3:45]
+        df_range = df_giornaliera.iloc[3:]
 
         # 1. Trova tutti i PdL per l'utente corrente
         pdls_utente = set()
