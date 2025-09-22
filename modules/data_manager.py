@@ -99,109 +99,16 @@ def salva_gestionale_async(data):
     thread.start()
     return True # Ritorna immediatamente
 
-def crea_storico_da_programmazione():
-    """
-    Crea uno storico "fittizio" basato sui dati del file delle attività programmate.
-    Questo serve per popolare l'archivio con interventi passati non registrati tramite l'app.
-    """
-    excel_path = get_attivita_programmate_path()
-    all_backfill_data = []
-
-    sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-    backfill_cols = ['PdL', 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', "DESCRIZIONE\nATTIVITA'"]
-
-    for sheet_name in sheets_to_read:
-        try:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            df.columns = [str(col).strip() for col in df.columns]
-
-            if not all(col in df.columns for col in backfill_cols):
-                continue
-
-            df_filtered = df[backfill_cols].copy()
-            df_filtered.dropna(subset=['PdL', 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO'], inplace=True)
-            if df_filtered.empty:
-                continue
-
-            all_backfill_data.append(df_filtered)
-        except Exception:
-            continue # Ignora fogli mancanti o con errori di formato
-
-    if not all_backfill_data:
-        return pd.DataFrame()
-
-    df_backfill = pd.concat(all_backfill_data, ignore_index=True)
-
-    # Rinomina le colonne per corrispondere allo schema dell'archivio
-    df_backfill.rename(columns={
-        "DATA\nCONTROLLO": "Data_Riferimento",
-        "PERSONALE\nIMPIEGATO": "Tecnico",
-        "DESCRIZIONE\nATTIVITA'": "Report"
-    }, inplace=True)
-
-    # Aggiungi colonne mancanti con valori di default
-    df_backfill['Data_Compilazione'] = pd.to_datetime(df_backfill['Data_Riferimento'], errors='coerce')
-    df_backfill['Stato'] = 'Storico Importato'
-    df_backfill['Descrizione'] = "Intervento importato da storico programmazione"
-
-    return df_backfill
-
-
 def carica_archivio_completo():
-    """
-    Carica l'archivio storico completo, unendo i report reali con lo storico
-    importato dal file di programmazione per completezza.
-    """
-    storico_path = config.PATH_STORICO_DB
-    df_reale = pd.DataFrame()
-    df_backfill = pd.DataFrame()
-
-    # 1. Carica l'archivio reale dei report compilati
     try:
-        sheet_name = 'Database_Attivita'
-        df_reale = pd.read_excel(storico_path, sheet_name=sheet_name)
-        df_reale['Data_Riferimento_dt'] = pd.to_datetime(df_reale['Data_Riferimento'], errors='coerce')
-    except FileNotFoundError:
-        st.warning(f"File archivio '{os.path.basename(storico_path)}' non trovato. Verrà usato solo lo storico da programmazione.")
-    except Exception as e:
-        st.error(f"Errore imprevisto durante il caricamento del file di archivio: {e}")
-        return pd.DataFrame() # Errore bloccante
-
-    # 2. Crea lo storico dal file di programmazione
-    df_backfill = crea_storico_da_programmazione()
-    if not df_backfill.empty:
-        df_backfill['Data_Riferimento_dt'] = pd.to_datetime(df_backfill['Data_Riferimento'], errors='coerce')
-
-    # 3. Unisci i due DataFrame, dando priorità ai dati reali
-    if not df_reale.empty and not df_backfill.empty:
-        # Crea una chiave univoca (PdL + Data) per la de-duplicazione
-        df_reale['join_key'] = df_reale['PdL'].astype(str) + '_' + df_reale['Data_Riferimento_dt'].dt.strftime('%Y-%m-%d')
-        df_backfill['join_key'] = df_backfill['PdL'].astype(str) + '_' + df_backfill['Data_Riferimento_dt'].dt.strftime('%Y-%m-%d')
-
-        # Filtra i dati di backfill per mantenere solo quelli non presenti nei dati reali
-        df_backfill_filtered = df_backfill[~df_backfill['join_key'].isin(df_reale['join_key'])]
-
-        # Concatena e rimuovi la colonna chiave
-        df_finale = pd.concat([df_reale, df_backfill_filtered], ignore_index=True)
-        df_finale.drop(columns=['join_key'], inplace=True, errors='ignore')
-
-    elif not df_reale.empty:
-        df_finale = df_reale
-    elif not df_backfill.empty:
-        df_finale = df_backfill
-    else:
+        df = pd.read_excel(config.PATH_STORICO_DB)
+        df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce')
+        df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
+        df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
+        df.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
+        return df
+    except Exception:
         return pd.DataFrame()
-
-    # 4. Pulisci e ordina il DataFrame finale
-    df_finale['Data_Riferimento_dt'] = pd.to_datetime(df_finale['Data_Riferimento'], errors='coerce')
-    # Assicura che la colonna di compilazione sia di tipo datetime per un ordinamento corretto
-    df_finale['Data_Compilazione'] = pd.to_datetime(df_finale['Data_Compilazione'], errors='coerce')
-    df_finale.dropna(subset=['Data_Riferimento_dt'], inplace=True)
-    df_finale.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
-    # Rimuovi eventuali duplicati residui (anche se la logica di join dovrebbe averli già gestiti)
-    df_finale.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
-
-    return df_finale
 
 def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
     try:
@@ -389,42 +296,41 @@ def carica_dati_attivita_programmate():
     all_data = []
     giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
     
-    # Refactoring: Chiama la funzione centralizzata per caricare lo storico, garantendo coerenza.
-    df_storico_full = carica_archivio_completo()
-    if not df_storico_full.empty:
+    try:
+        df_storico_full = pd.read_excel(storico_path, sheet_name='DB')
+        df_storico_full['PdL'] = df_storico_full['PdL'].astype(str)
+        # Convert Data_Riferimento for sorting
+        df_storico_full['Data_Riferimento_dt'] = pd.to_datetime(df_storico_full['Data_Riferimento'], errors='coerce')
         latest_status = df_storico_full.sort_values('Data_Compilazione').drop_duplicates('PdL', keep='last')
         latest_status = latest_status.set_index('PdL')['Stato'].to_dict()
-    else:
+    except FileNotFoundError:
+        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
+        latest_status = {}
+    except Exception as e:
+        st.warning(f"Errore nel caricamento dello storico: {e}")
+        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
         latest_status = {}
 
     status_map = {
-        # Mappatura esistente
-        'DA EMETTERE': 'Pianificato',
-        'CHIUSO': 'Completato',
-        'ANNULLATO': 'Annullato',
-        # Nuova mappatura richiesta dall'utente
-        'INTERROTTO': 'Sospeso',
-        'RICHIESTO': 'Da processare',
-        'EMESSO': 'Processato',      # Sostituisce 'In Corso'
-        'IN CORSO': 'Aperto',
-        'DA CHIUDERE': 'Terminata'   # Già presente, ma confermato
+        'DA EMETTERE': 'Pianificato', 'EMESSO': 'In Corso', 'DA CHIUDERE': 'Terminata',
+        'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato'
     }
 
     for sheet_name, metadata in sheets_to_read.items():
         try:
-            # Correzione Definitiva: L'header è alla 3ª riga (indice 2), non alla 4ª.
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
+            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+            if sheet_name not in wb.sheetnames:
+                continue
+            ws = wb[sheet_name]
+            data = list(ws.values)
+            if len(data) < 2:
+                continue
             
-            # Pulisce i nomi delle colonne letti da Pandas per rimuovere spazi e gestire i newline.
-            df.columns = [str(col).strip() for col in df.columns]
+            header = [str(h) for h in data[0]]
+            df = pd.DataFrame(data[1:], columns=header)
 
-            # Le colonne richieste ora dovrebbero corrispondere a quelle lette da Pandas.
-            # Manteniamo la logica di validazione per sicurezza.
-            # Correzione finale: I giorni della settimana sono in MAIUSCOLO.
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
+            required_cols = ['PdL', 'Impianto', 'DESCRIZIONE ESTESA', 'Stato OdL', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
             if not all(col in df.columns for col in required_cols):
-                # Aggiungiamo un log per il debug se le colonne non corrispondono (ora commentato).
-                # st.warning(f"Foglio '{sheet_name}' saltato: colonne mancanti. Trovate: {list(df.columns)}. Richieste: {required_cols}")
                 continue
 
             df = df.dropna(subset=['PdL'])
@@ -432,7 +338,6 @@ def carica_dati_attivita_programmate():
                 continue
 
             df_filtered = df[required_cols].copy()
-            # Rinomina le colonne per coerenza interna con il resto dell'applicazione.
             df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
             
             df_filtered['PdL'] = df_filtered['PdL'].astype(str)
@@ -458,23 +363,10 @@ def carica_dati_attivita_programmate():
             df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
 
             all_data.append(df_filtered)
-        except FileNotFoundError:
-            st.error(f"Impossibile trovare il file delle attività programmate nel percorso specificato: {excel_path}")
-            # Se il file non viene trovato, è inutile continuare a ciclare.
-            break
-        except PermissionError:
-            st.error(f"Errore di permessi. Impossibile accedere al file: {excel_path}. Verificare i permessi di lettura.")
-            # Se c'è un errore di permessi, è inutile continuare.
-            break
         except Exception as e:
-            # Stampa un avviso per fogli specifici che potrebbero avere problemi, ma continua il ciclo.
-            st.warning(f"Si è verificato un errore durante l'elaborazione del foglio '{sheet_name}' dal file {os.path.basename(excel_path)}: {e}")
-            continue
+            pass
 
     if not all_data:
-        # Se dopo tutti i tentativi non ci sono dati, informa l'utente.
-        # Questo messaggio apparirà solo se il file esiste ma è vuoto o non contiene fogli validi.
-        st.warning("Non sono stati trovati dati validi sulle attività programmate. Verificare che il file Excel non sia vuoto e che i fogli ('A1', 'A2', ecc.) siano formattati correttamente.")
         return pd.DataFrame()
 
     final_df = pd.concat(all_data, ignore_index=True)

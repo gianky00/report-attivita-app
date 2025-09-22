@@ -1334,7 +1334,6 @@ def render_situazione_impianti_tab():
         st.bar_chart(status_counts)
 
     st.subheader("Dettaglio Attività Filtrate")
-    # Sostituisce la tabella con un layout a card per coerenza e per includere lo storico.
     for index, row in filtered_df.iterrows():
         with st.container(border=True):
             col1, col2 = st.columns([3, 1])
@@ -1350,7 +1349,6 @@ def render_situazione_impianti_tab():
 
             st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
 
-            # Mostra storico interventi
             if row['Storico']:
                 visualizza_storico_organizzato(row['Storico'], row['PdL'])
 
@@ -1407,7 +1405,7 @@ def render_programmazione_tab():
         st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
         return
 
-    # Layout a card, mobile-friendly
+    # Layout a card, mobile-friendly (reso coerente con la tab Situazione Impianti)
     for index, row in scheduled_df.iterrows():
         with st.container(border=True):
             col1, col2 = st.columns([3, 1])
@@ -1571,12 +1569,10 @@ def main_app(nome_utente_autenticato, ruolo):
 
         with tabs[5]:
             st.subheader("Gestione Turni")
-            # Modifica: Rimosso 'Turni Reperibilità' dalle tab principali
-            turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
+            turni_disponibili_tab, bacheca_tab, sostituzioni_tab, reperibilita_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni", "🗓️ Turni Reperibilità"])
 
             with turni_disponibili_tab:
-                # Modifica: Aggiunto 'Turni Reperibilità' come sotto-tab
-                assistenza_tab, straordinario_tab, reperibilita_tab = st.tabs(["Turni Assistenza", "Turni Straordinario", "Turni Reperibilità"])
+                assistenza_tab, straordinario_tab = st.tabs(["Turni Assistenza", "Turni Straordinario"])
                 df_turni_totale = gestionale_data['turni'].copy()
                 df_turni_totale.dropna(subset=['ID_Turno'], inplace=True)
 
@@ -1587,10 +1583,6 @@ def main_app(nome_utente_autenticato, ruolo):
                 with straordinario_tab:
                     df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
                     render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
-
-                with reperibilita_tab:
-                    # Modifica: La funzione per la reperibilità è ora chiamata qui
-                    render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
 
             with bacheca_tab:
                 st.subheader("Turni Liberi in Bacheca")
@@ -1647,6 +1639,9 @@ def main_app(nome_utente_autenticato, ruolo):
                 if richieste_inviate.empty: st.info("Nessuna richiesta di sostituzione inviata.")
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
+
+            with reperibilita_tab:
+                render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
 
         with tabs[6]:
             render_guida_tab(ruolo)
