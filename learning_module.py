@@ -83,3 +83,31 @@ def integrate_knowledge(entry_id, integration_details):
 
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+def load_report_knowledge_base():
+    """
+    Carica la base di conoscenza leggendo i file .docx da una cartella specifica
+    basata sull'anno corrente.
+    """
+    import docx # Importazione locale per evitare errori se il modulo non è usato altrove
+
+    current_year = datetime.now().year
+    reports_path = os.path.join("relazioni_word", str(current_year))
+
+    if not os.path.exists(reports_path) or not os.path.isdir(reports_path):
+        # Restituisce una stringa vuota se la cartella non esiste, gestito a monte.
+        return ""
+
+    knowledge_base_text = ""
+    for filename in os.listdir(reports_path):
+        if filename.endswith(".docx"):
+            try:
+                filepath = os.path.join(reports_path, filename)
+                doc = docx.Document(filepath)
+                for para in doc.paragraphs:
+                    knowledge_base_text += para.text + "\n"
+            except Exception:
+                # Ignora i file corrotti o illeggibili
+                continue
+
+    return knowledge_base_text
