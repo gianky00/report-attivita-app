@@ -268,75 +268,36 @@ def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_rif
         st.error(f"Errore salvataggio GSheets: {e}")
         return None
 
-def _match_partial_name(partial_name, full_name):
-    """
-    Intelligently matches a partial name (e.g., 'Garro L.') with a full name (e.g., 'Luca Garro').
-    """
-    if not partial_name or not full_name:
-        return False
-
-    # Normalize and split names into parts
-    partial_parts = [p.replace('.', '') for p in partial_name.lower().split()]
-    full_parts = full_name.lower().split()
-
-    # Separate names and initials from the partial name
-    partial_initials = {p for p in partial_parts if len(p) == 1}
-    partial_names = {p for p in partial_parts if len(p) > 1}
-
-    # All name parts from the partial name must be in the full name
-    if not partial_names.issubset(set(full_parts)):
-        return False
-
-    # Get the parts of the full name that are not in the partial name (potential first names)
-    remaining_full_parts = set(full_parts) - partial_names
-
-    # Get the initials of the remaining parts
-    remaining_initials = {p[0] for p in remaining_full_parts}
-
-    # All initials from the partial name must match the initials of the remaining parts
-    if not partial_initials.issubset(remaining_initials):
-        return False
-
-    return True
-
 def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
     try:
         path_giornaliera_mensile = os.path.join(config.PATH_GIORNALIERA_BASE, f"Giornaliera {mese:02d}-{anno}.xlsm")
-
-        target_sheet = str(giorno)
-        try:
-            workbook = openpyxl.load_workbook(path_giornaliera_mensile, read_only=True)
-            day_str = str(giorno)
-            for sheet_name in workbook.sheetnames:
-                if day_str in sheet_name.split():
-                    target_sheet = sheet_name
-                    break
-        except Exception:
-            pass
-
-        df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=target_sheet, engine='openpyxl', header=None)
+        df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=str(giorno), engine='openpyxl', header=None)
         df_range = df_giornaliera.iloc[3:45]
 
+        # 1. Trova tutti i PdL per l'utente corrente
         pdls_utente = set()
         for _, riga in df_range.iterrows():
-            if 5 < len(riga) and 9 < len(riga):
-                nome_in_giornaliera = str(riga[5]).strip().lower()
-                if nome_in_giornaliera and nome_in_giornaliera in utente_completo.lower():
-                    pdl_text = str(riga[9])
-                    if not pd.isna(pdl_text):
-                        pdls_found = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
-                        pdls_utente.update(pdls_found)
+            nome_in_giornaliera = str(riga[5]).strip().lower()
+            if utente_completo.lower() in nome_in_giornaliera:
+                pdl_text = str(riga[9])
+                if not pd.isna(pdl_text):
+                    pdls_found = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
+                    pdls_utente.update(pdls_found)
 
         if not pdls_utente:
             return []
 
-        attivita_collezionate = {}
+        # 2. Raccogli tutte le attività e i membri del team per i PdL rilevanti
+        attivita_collezionate = {} # Dizionario per raggruppare per (pdl, desc)
         df_storico_db = carica_archivio_completo()
 
         for _, riga in df_range.iterrows():
             pdl_text = str(riga[9])
             if pd.isna(pdl_text): continue
+
             lista_pdl_riga = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
+
+            # Controlla se c'è almeno un PdL rilevante in questa riga
             if not any(pdl in pdls_utente for pdl in lista_pdl_riga):
                 continue
 
@@ -345,39 +306,48 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
             start_time = str(riga[10])
             end_time = str(riga[11])
             orario = f"{start_time}-{end_time}"
+
             if pd.isna(desc_text) or not nome_membro or nome_membro.lower() == 'nan':
                 continue
+
             lista_descrizioni_riga = [line.strip() for line in desc_text.splitlines() if line.strip()]
+
             for pdl, desc in zip(lista_pdl_riga, lista_descrizioni_riga):
                 if pdl not in pdls_utente: continue
+
                 activity_key = (pdl, desc)
                 if activity_key not in attivita_collezionate:
+                    # Carica storico solo la prima volta che incontriamo l'attività
                     storico = []
                     if not df_storico_db.empty:
                         storico_df_pdl = df_storico_db[df_storico_db['PdL'] == pdl].copy()
                         if not storico_df_pdl.empty:
                             storico_df_pdl['Data_Riferimento'] = pd.to_datetime(storico_df_pdl['Data_Riferimento_dt']).dt.strftime('%d/%m/%Y')
                             storico = storico_df_pdl.to_dict('records')
+
                     attivita_collezionate[activity_key] = {
                         'pdl': pdl,
                         'attivita': desc,
                         'storico': storico,
-                        'team_members': {}
+                        'team_members': {} # Usiamo un dizionario per raggruppare gli orari per membro
                     }
+
+                # Aggiungi o aggiorna il membro del team con il suo orario
                 if nome_membro not in attivita_collezionate[activity_key]['team_members']:
                     ruolo_membro = "Sconosciuto"
                     if df_contatti is not None and not df_contatti.empty:
-                        for _, contact_row in df_contatti.iterrows():
-                            full_name = contact_row['Nome Cognome']
-                            if _match_partial_name(nome_membro, full_name):
-                                ruolo_membro = contact_row.get('Ruolo', 'Tecnico')
-                                break
+                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
+                        if not matching_user.empty:
+                            ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
+
                     attivita_collezionate[activity_key]['team_members'][nome_membro] = {
                         'ruolo': ruolo_membro,
                         'orari': set()
                     }
+
                 attivita_collezionate[activity_key]['team_members'][nome_membro]['orari'].add(orario)
 
+        # 3. Formatta l'output finale
         lista_attivita_finale = []
         for activity_data in attivita_collezionate.values():
             team_list = []
@@ -387,9 +357,11 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
                     'ruolo': details['ruolo'],
                     'orari': sorted(list(details['orari']))
                 })
+
             activity_data['team'] = team_list
-            del activity_data['team_members']
+            del activity_data['team_members'] # Pulisci la struttura intermedia
             lista_attivita_finale.append(activity_data)
+
         return lista_attivita_finale
     except FileNotFoundError:
         return []
