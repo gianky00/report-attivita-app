@@ -94,6 +94,11 @@ CRONOLOGIA:
     except Exception as e:
         return {"error": f"Errore durante l'analisi IA: {str(e)}"}
 
+@st.cache_data
+def to_csv(df):
+    # IMPORTANT: Cache the conversion to prevent computation on every rerun
+    return df.to_csv(index=False).encode('utf-8')
+
 def calculate_technician_performance(archivio_df, start_date, end_date):
     """Calcola le metriche di performance per i tecnici in un dato intervallo di tempo."""
     
@@ -552,7 +557,16 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
         return
 
     mostra_solo_disponibili = st.checkbox("Mostra solo turni con posti disponibili", key=f"filter_turni_{key_suffix}")
+
+    if ruolo == "Amministratore":
+        search_term_turni = st.text_input("Cerca per descrizione del turno...", key=f"search_turni_{key_suffix}")
+        if search_term_turni:
+            df_turni = df_turni[df_turni['Descrizione'].str.contains(search_term_turni, case=False, na=False)]
+
     st.divider()
+
+    if df_turni.empty:
+        st.info("Nessun turno corrisponde alla ricerca.")
 
     for index, turno in df_turni.iterrows():
         prenotazioni_turno = gestionale['prenotazioni'][gestionale['prenotazioni']['ID_Turno'] == turno['ID_Turno']]
@@ -606,18 +620,54 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
 
             if not prenotazione_utente.empty:
                 st.success("Sei prenotato per questo turno.")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}", help="Rimuove la tua prenotazione dal turno."):
-                        if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
-                            salva_gestionale_async(gestionale); st.rerun()
-                with col2:
-                    if st.button("📢 Pubblica in Bacheca", key=f"pub_{turno['ID_Turno']}_{key_suffix}", help="Rilascia il tuo turno e rendilo disponibile a tutti in bacheca."):
-                        if pubblica_turno_in_bacheca_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
-                            salva_gestionale_async(gestionale); st.rerun()
-                with col3:
-                    if st.button("🔄 Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}", help="Chiedi a un collega specifico di sostituirti."):
-                        st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
+
+                # Logica di conferma per azioni critiche
+                if 'confirm_action' not in st.session_state:
+                    st.session_state.confirm_action = None
+
+                is_confirmation_pending = st.session_state.confirm_action and st.session_state.confirm_action.get('turno_id') == turno['ID_Turno']
+
+                if is_confirmation_pending:
+                    action_type = st.session_state.confirm_action['type']
+                    if action_type == 'cancel':
+                        st.warning("❓ Sei sicuro di voler cancellare la tua prenotazione?")
+                    elif action_type == 'publish':
+                        st.warning("❓ Sei sicuro di voler pubblicare il tuo turno in bacheca?")
+
+                    col_yes, col_no, col_spacer = st.columns([1, 1, 2])
+                    with col_yes:
+                        if st.button("✅ Sì", key=f"confirm_yes_{turno['ID_Turno']}", use_container_width=True):
+                            success = False
+                            if action_type == 'cancel':
+                                if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
+                                    success = True
+                            elif action_type == 'publish':
+                                if pubblica_turno_in_bacheca_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
+                                    success = True
+
+                            if success:
+                                salva_gestionale_async(gestionale)
+
+                            st.session_state.confirm_action = None
+                            st.rerun()
+                    with col_no:
+                        if st.button("❌ No", key=f"confirm_no_{turno['ID_Turno']}", use_container_width=True):
+                            st.session_state.confirm_action = None
+                            st.rerun()
+                else:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}", help="Rimuove la tua prenotazione dal turno."):
+                            st.session_state.confirm_action = {'type': 'cancel', 'turno_id': turno['ID_Turno']}
+                            st.rerun()
+                    with col2:
+                        if st.button("📢 Pubblica in Bacheca", key=f"pub_{turno['ID_Turno']}_{key_suffix}", help="Rilascia il tuo turno e rendilo disponibile a tutti in bacheca."):
+                            st.session_state.confirm_action = {'type': 'publish', 'turno_id': turno['ID_Turno']}
+                            st.rerun()
+                    with col3:
+                        if st.button("🔄 Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}", help="Chiedi a un collega specifico di sostituirti."):
+                            st.session_state['sostituzione_turno_id'] = turno['ID_Turno']
+                            st.rerun()
             else:
                 opzioni = []
                 if tecnici_prenotati < posti_tecnico: opzioni.append("Tecnico")
@@ -646,6 +696,10 @@ def render_gestione_account(gestionale_data):
 
     # --- Modifica Utenti Esistenti ---
     st.subheader("Modifica Utenti Esistenti")
+
+    search_term = st.text_input("Cerca utente per nome...", key="user_search_admin")
+    if search_term:
+        df_contatti = df_contatti[df_contatti['Nome Cognome'].str.contains(search_term, case=False, na=False)]
 
     if 'editing_user' not in st.session_state:
         st.session_state.editing_user = None
@@ -822,6 +876,13 @@ def render_technician_detail_view():
     # Formatta la colonna della data prima di visualizzarla
     technician_interventions['Data'] = technician_interventions['Data_Riferimento_dt'].dt.strftime('%d/%m/%Y')
     st.dataframe(technician_interventions[['Data', 'PdL', 'Descrizione', 'Stato', 'Report']])
+
+    st.download_button(
+        label="📥 Esporta Dettaglio CSV",
+        data=to_csv(technician_interventions),
+        file_name=f"dettaglio_{tecnico}.csv",
+        mime='text/csv',
+    )
 
     # --- ANALISI AVANZATA ---
     st.markdown("---")
@@ -1077,46 +1138,48 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
 
 def render_guida_tab(ruolo):
-    st.title("❓ Guida")
+    st.title("❓ Guida del Gestionale")
     st.write("Benvenuto nella guida utente! Qui troverai le istruzioni per usare al meglio l'applicazione.")
     st.info("Usa i menù a tendina qui sotto per esplorare le diverse sezioni e funzionalità dell'app. La tua sessione ora rimane attiva anche se aggiorni la pagina!")
 
-    # Sezione Attività
-    with st.expander("📝 Le Tue Attività (Oggi e Giorno Precedente)", expanded=True):
-        st.subheader("Compilare un Report")
+    # Sezione Attività Assegnate
+    with st.expander("📝 Attività Assegnate", expanded=True):
         st.markdown("""
-        In questa sezione vedi le attività che ti sono state assegnate per la giornata.
-        - Per ogni attività, vedrai il codice **PdL** e una breve descrizione.
+        Questa è la sezione principale per la gestione delle tue attività quotidiane. È suddivisa in due sotto-schede:
+
+        - **Attività di Oggi**: Mostra l'elenco delle attività che ti sono state assegnate per la giornata corrente.
+        - **Attività Giorno Precedente**: Permette di recuperare e compilare eventuali attività non completate del giorno lavorativo precedente.
+
+        #### Come compilare un report
+        Per ogni attività in entrambe le schede, il processo è identico:
+        - Vedrai il codice **PdL** e una breve descrizione.
         - Se lavori in **Team**, vedrai i nomi dei tuoi colleghi, il loro ruolo e gli orari di lavoro per quell'attività.
         - Puoi scegliere tra due modalità di compilazione:
             - **✍️ Compila Report Guidato (IA)**: Una procedura a domande che ti aiuta a scrivere un report completo e standardizzato.
             - **📝 Compila Report Manuale**: Un campo di testo libero dove puoi scrivere il report come preferisci.
         - **Importante per gli Aiutanti**: Se fai parte di un team con più persone, solo un **Tecnico** può compilare il report. Potrai vedere l'attività e il report una volta compilato, ma non potrai inviarlo. Se lavori da solo, puoi compilare il report normalmente.
+
+        #### Vedere lo Storico
+        Sotto ogni attività, puoi espandere la sezione `"Mostra cronologia interventi"` per vedere tutti i report passati relativi a quel PdL. Questo è utile per capire i problemi ricorrenti.
         """)
-        st.subheader("Vedere lo Storico")
-        st.markdown("Sotto ogni attività, puoi espandere la sezione 'Mostra cronologia interventi' per vedere tutti i report passati relativi a quel PdL. Questo è utile per capire i problemi ricorrenti.")
 
     with st.expander("📊 Situazione Impianti"):
         st.subheader("Avere una Visione d'Insieme")
         st.markdown("""
-        Questa sezione ti offre una panoramica dello stato di tutte le attività pianificate nel file Excel, arricchite con lo stato di avanzamento reale preso dall'applicazione.
+        Questa sezione ti offre una panoramica dello stato di tutte le attività pianificate, arricchite con lo stato di avanzamento reale preso dall'applicazione.
         - **Come funziona?** Il sistema unisce i dati, dando sempre la priorità allo stato più aggiornato (quello dei report compilati).
         - **Filtri**: Puoi filtrare la vista per **TCL**, **Area** e **Stato**.
         - **Importante**: Dopo aver selezionato i filtri, clicca sul pulsante **"Applica Filtri"** per aggiornare i grafici e la tabella con i risultati.
         """)
 
     with st.expander("🗓️ Programmazione Attività"):
-        st.subheader("Vedere le Attività Programmate")
+        st.subheader("Consultare le Attività Programmate")
         st.markdown("""
-        Qui puoi vedere quali attività sono state programmate per la settimana e consultarne tutti i dettagli in un unico posto.
-        - Ogni attività è presentata in una "card" separata per una facile consultazione.
-        - **Dettagli nella Card**:
-            - Dati principali (PdL, Impianto, TCL, Area).
-            - Lo **stato attuale** dell'attività.
-            - La **descrizione completa** dell'attività.
-            - I **giorni della settimana** in cui è programmata.
-        - **Storico Interventi**: Se per un PdL sono già stati eseguiti interventi, puoi cliccare su `"Mostra cronologia interventi"` direttamente dentro la card per vedere lo storico, senza doverlo cercare nell'archivio.
-        - **Filtri**: Puoi cercare attività specifiche usando i filtri per **PdL**, **Area**, **TCL** o **Giorno** della settimana. Anche qui, ricorda di cliccare su **"Applica Filtri"** per avviare la ricerca.
+        Questa sezione mostra di default l'**elenco completo di tutte le attività programmate** per la settimana, senza bisogno di azioni preliminari.
+
+        - **Dettagli nella Card**: Ogni attività è presentata in una "card" separata per una facile consultazione, con tutti i dati principali (PdL, Impianto, TCL, Area), lo stato attuale e la descrizione completa.
+        - **Storico Interventi**: Se per un PdL sono già stati eseguiti interventi, puoi cliccare su `"Mostra cronologia interventi"` direttamente dentro la card per vedere lo storico.
+        - **Filtri**: Se desideri cercare attività specifiche, puoi usare i filtri in cima alla pagina per **PdL**, **Area**, **TCL** o **Giorno** della settimana. Dopo aver impostato i filtri, clicca su **"Applica Filtri"** per aggiornare la visualizzazione.
         """)
 
     # Sezione Turni (unificata)
@@ -1309,6 +1372,13 @@ def render_situazione_impianti_tab():
         df['Stato'].isin(selected_stato)
     ].copy()
 
+    st.download_button(
+        label="📥 Esporta Dati Filtrati CSV",
+        data=to_csv(filtered_df),
+        file_name='situazione_impianti.csv',
+        mime='text/csv',
+    )
+
     if filtered_df.empty:
         st.info("Nessuna attività corrisponde ai filtri selezionati.")
         return
@@ -1386,22 +1456,18 @@ def render_programmazione_tab():
 
         submitted = st.form_submit_button("Applica Filtri")
 
-    # Modifica: logica per mostrare i dati di default e filtrare solo su submit
-    if not submitted:
-        df_to_show = scheduled_df
-    else:
-        # Applica filtri
-        filtered_df = scheduled_df.copy()
+    df_to_show = scheduled_df.copy()
+
+    if submitted:
         if pdl_filter:
-            filtered_df = filtered_df[filtered_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
+            df_to_show = df_to_show[df_to_show['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
         if area_filter:
-            filtered_df = filtered_df[filtered_df['Area'].isin(area_filter)]
+            df_to_show = df_to_show[df_to_show['Area'].isin(area_filter)]
         if tcl_filter:
-            filtered_df = filtered_df[filtered_df['TCL'].isin(tcl_filter)]
+            df_to_show = df_to_show[df_to_show['TCL'].isin(tcl_filter)]
         if day_filter:
             day_regex = '|'.join(day_filter)
-            filtered_df = filtered_df[filtered_df['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
-        df_to_show = filtered_df
+            df_to_show = df_to_show[df_to_show['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
 
     st.divider()
 
@@ -1431,7 +1497,7 @@ def render_programmazione_tab():
 
 
 def main_app(nome_utente_autenticato, ruolo):
-    st.set_page_config(layout="wide", page_title="Report Attività")
+    st.set_page_config(layout="wide", page_title="Gestionale")
 
     gestionale_data = carica_gestionale()
 
@@ -1456,7 +1522,7 @@ def main_app(nome_utente_autenticato, ruolo):
         # Header con titolo, notifiche e pulsante di logout
         col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
         with col1:
-            st.title(f"Report Attività")
+            st.title(f"Gestionale")
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
         with col2:
@@ -1486,11 +1552,12 @@ def main_app(nome_utente_autenticato, ruolo):
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
-        lista_tab = ["Attività Assegnate", "📊 Situazione Impianti", "🗓️ Programmazione Attività", "Ricerca nell'Archivio", "📅 Gestione Turni", "❓ Guida"]
+        main_tabs_list = ["Attività Assegnate", "📊 Situazione Impianti", "🗓️ Programmazione Attività", "Ricerca nell'Archivio", "📅 Gestione Turni", "❓ Guida"]
+
         if ruolo == "Amministratore":
-            lista_tab.append("Dashboard Admin")
+            main_tabs_list.append("Dashboard Admin")
         
-        tabs = st.tabs(lista_tab)
+        tabs = st.tabs(main_tabs_list)
         
         with tabs[0]:
             #st.header("Attività Assegnate")
@@ -1657,8 +1724,8 @@ def main_app(nome_utente_autenticato, ruolo):
         with tabs[5]:
             render_guida_tab(ruolo)
 
-        if len(tabs) > 6 and ruolo == "Amministratore":
-            with tabs[6]:
+        if ruolo == "Amministratore":
+            with tabs[-1]: # Always access the last tab for admin
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
@@ -1674,25 +1741,41 @@ def main_app(nome_utente_autenticato, ruolo):
                             st.warning("Archivio storico non disponibile o vuoto. Impossibile calcolare le performance.")
                         else:
                             st.markdown("#### Seleziona Intervallo Temporale")
+
+                            # Inizializza le date in session_state se non esistono
+                            if 'perf_start_date' not in st.session_state:
+                                st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
+                            if 'perf_end_date' not in st.session_state:
+                                st.session_state.perf_end_date = datetime.date.today()
+
+                            # Pulsanti di selezione rapida
+                            c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+                            if c1.button("Oggi"):
+                                st.session_state.perf_start_date = datetime.date.today()
+                                st.session_state.perf_end_date = datetime.date.today()
+                            if c2.button("Ultimi 7 giorni"):
+                                st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7)
+                                st.session_state.perf_end_date = datetime.date.today()
+                            if c3.button("Ultimi 30 giorni"):
+                                st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
+                                st.session_state.perf_end_date = datetime.date.today()
                             
                             col1, col2 = st.columns(2)
                             with col1:
-                                start_date = st.date_input(
-                                    "Data di Inizio", 
-                                    datetime.date.today() - datetime.timedelta(days=30),
-                                    format="DD/MM/YYYY",
-                                    key="perf_start_date"
+                                st.date_input(
+                                    "Data di Inizio",
+                                    key="perf_start_date",
+                                    format="DD/MM/YYYY"
                                 )
                             with col2:
-                                end_date = st.date_input(
-                                    "Data di Fine", 
-                                    datetime.date.today(),
-                                    format="DD/MM/YYYY",
-                                    key="perf_end_date"
+                                st.date_input(
+                                    "Data di Fine",
+                                    key="perf_end_date",
+                                    format="DD/MM/YYYY"
                                 )
 
-                            start_datetime = pd.to_datetime(start_date)
-                            end_datetime = pd.to_datetime(end_date)
+                            start_datetime = pd.to_datetime(st.session_state.perf_start_date)
+                            end_datetime = pd.to_datetime(st.session_state.perf_end_date)
 
                             if st.button("📊 Calcola Performance", type="primary"):
                                 performance_df = calculate_technician_performance(archivio_df_perf, start_datetime, end_datetime)
@@ -1714,6 +1797,13 @@ def main_app(nome_utente_autenticato, ruolo):
                                 total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
                                 avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
                                 
+                                st.download_button(
+                                    label="📥 Esporta Riepilogo CSV",
+                                    data=to_csv(performance_df),
+                                    file_name='performance_team.csv',
+                                    mime='text/csv',
+                                )
+
                                 c1, c2, c3 = st.columns(3)
                                 c1.metric("Totale Interventi", f"{total_interventions_team}")
                                 c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
@@ -1848,7 +1938,7 @@ if st.session_state.login_state == 'logged_in':
 
 else:
     st.set_page_config(layout="centered", page_title="Login")
-    st.title("Accesso Area Report")
+    st.title("Accesso Area Gestionale")
     
     gestionale = carica_gestionale()
     if not gestionale or 'contatti' not in gestionale:
