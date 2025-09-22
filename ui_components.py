@@ -90,7 +90,7 @@ def display_activity_card(activity_group, container=st):
         st.info(f"**Personale Impiegato:** {personale}")
 
         report = latest_activity.get('Report', 'Nessun report compilato.')
-        st.text_area("Report Attività", value=report, height=150, disabled=True)
+        st.text_area("Report Attività", value=report, height=150, disabled=True, key=f"report_text_{pdl}")
 
         # --- Storico Interventi ---
         if len(activity_group) > 1:
