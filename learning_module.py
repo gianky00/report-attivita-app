@@ -86,28 +86,30 @@ def integrate_knowledge(entry_id, integration_details):
 
 def load_report_knowledge_base():
     """
-    Carica la base di conoscenza leggendo i file .docx da una cartella specifica
-    basata sull'anno corrente.
+    Carica la base di conoscenza leggendo i file .docx da tutte le sottocartelle
+    annuali presenti in 'relazioni_word'.
     """
-    import docx # Importazione locale per evitare errori se il modulo non è usato altrove
+    import docx
 
-    current_year = datetime.now().year
-    reports_path = os.path.join("relazioni_word", str(current_year))
+    base_path = "relazioni_word"
+    knowledge_base_text = ""
 
-    if not os.path.exists(reports_path) or not os.path.isdir(reports_path):
-        # Restituisce una stringa vuota se la cartella non esiste, gestito a monte.
+    if not os.path.exists(base_path) or not os.path.isdir(base_path):
         return ""
 
-    knowledge_base_text = ""
-    for filename in os.listdir(reports_path):
-        if filename.endswith(".docx"):
-            try:
-                filepath = os.path.join(reports_path, filename)
-                doc = docx.Document(filepath)
-                for para in doc.paragraphs:
-                    knowledge_base_text += para.text + "\n"
-            except Exception:
-                # Ignora i file corrotti o illeggibili
-                continue
+    # Scansiona tutte le sottocartelle nella cartella di base
+    for year_folder in os.listdir(base_path):
+        reports_path = os.path.join(base_path, year_folder)
+        if os.path.isdir(reports_path):
+            for filename in os.listdir(reports_path):
+                if filename.endswith(".docx"):
+                    try:
+                        filepath = os.path.join(reports_path, filename)
+                        doc = docx.Document(filepath)
+                        for para in doc.paragraphs:
+                            knowledge_base_text += para.text + "\n"
+                    except Exception:
+                        # Ignora file corrotti o illeggibili
+                        continue
 
     return knowledge_base_text

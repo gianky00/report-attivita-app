@@ -49,6 +49,7 @@ from modules.notifications import (
     crea_notifica,
     segna_notifica_letta
 )
+from modules.email_sender import invia_email_con_outlook_async
 
 
 # --- CONFIGURAZIONE ---
@@ -1201,6 +1202,15 @@ def render_guida_tab(ruolo):
 
         #### Vedere lo Storico
         Sotto ogni attività, puoi espandere la sezione `"Mostra cronologia interventi"` per vedere tutti i report passati relativi a quel PdL. Questo è utile per capire i problemi ricorrenti.
+
+        #### Compilare una Relazione di Reperibilità
+        Se sei un **Tecnico** o **Amministratore**, vedrai una terza sotto-scheda chiamata **"Compila Relazione"**. Questa sezione serve per scrivere relazioni dettagliate, ad esempio per i turni di reperibilità.
+        - **Data e Ora**: Inserisci la data (obbligatoria) e gli orari di inizio/fine del tuo intervento. Se non ricordi l'orario, puoi lasciare i campi vuoti.
+        - **Partner**: Se hai lavorato con un collega, puoi selezionarlo dall'elenco a tendina.
+        - **Corpo della Relazione**: Scrivi qui il testo del tuo report.
+        - **Correzione con IA**: Una volta scritto il testo, puoi cliccare su **"Correggi con IA"**. Il sistema analizzerà il tuo testo e ti proporrà una versione migliorata, più professionale e senza errori, basandosi sullo stile di centinaia di altre relazioni.
+        - **Usa Testo Corretto**: Dopo la correzione, apparirà il testo suggerito dall'IA e un pulsante **"Usa Testo Corretto"**. Cliccalo per copiare la versione dell'IA nel campo di testo principale.
+        - **Invia Relazione**: Quando sei soddisfatto, clicca su **"Invia Relazione"** per mandare il report finale via email.
         """)
 
     with st.expander("📊 Situazione Impianti"):
@@ -1662,25 +1672,27 @@ def main_app(nome_utente_autenticato, ruolo):
                     with st.form("form_relazione"):
                         st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
 
-                        # Nuovi campi data e ora
                         c1, c2, c3 = st.columns(3)
                         data_intervento = c1.date_input("Data Intervento*", help="Questo campo è obbligatorio.")
-                        ora_inizio = c2.text_input("Ora Inizio", placeholder="HH:MM o 'non ricordo'")
-                        ora_fine = c3.text_input("Ora Fine", placeholder="HH:MM o 'non ricordo'")
+                        ora_inizio = c2.text_input("Ora Inizio")
+                        ora_fine = c3.text_input("Ora Fine")
 
-                        st.session_state.relazione_partner = st.selectbox(
+                        partner_selezionato = st.selectbox(
                             "Seleziona Partner (opzionale)",
                             options=["Nessuno"] + sorted(lista_partner),
                             index=0
                         )
-                        st.session_state.relazione_testo = st.text_area("Corpo della Relazione", height=250, value=st.session_state.get('relazione_testo', ''))
+                        testo_relazione = st.text_area("Corpo della Relazione", height=250, value=st.session_state.get('relazione_testo', ''))
 
                         # Pulsanti del form
-                        submit_ai_button = st.form_submit_button("🤖 Correggi con IA")
-                        # submit_save_button = st.form_submit_button("Salva Relazione Finale") # Logica futura
+                        b1, b2 = st.columns(2)
+                        submit_ai_button = b1.form_submit_button("🤖 Correggi con IA")
+                        submit_save_button = b2.form_submit_button("✅ Invia Relazione", type="primary")
 
+                    # Logica dopo la sottomissione del form
                     if submit_ai_button:
-                        if not st.session_state.relazione_testo.strip():
+                        st.session_state.relazione_testo = testo_relazione # Salva il testo corrente
+                        if not testo_relazione.strip():
                             st.warning("Per favore, scrivi il corpo della relazione prima di chiedere la correzione.")
                         elif not data_intervento:
                             st.error("Il campo 'Data Intervento' è obbligatorio.")
@@ -1688,9 +1700,9 @@ def main_app(nome_utente_autenticato, ruolo):
                             with st.spinner("L'IA sta revisionando la tua relazione..."):
                                 knowledge_base = load_report_knowledge_base()
                                 if not knowledge_base:
-                                    st.warning("La base di conoscenza delle relazioni non è stata trovata. La revisione IA potrebbe essere meno accurata.")
+                                    st.warning("La base di conoscenza non è stata trovata. La revisione IA potrebbe essere meno accurata.")
 
-                                result = revisiona_relazione_con_ia(st.session_state.relazione_testo, knowledge_base)
+                                result = revisiona_relazione_con_ia(testo_relazione, knowledge_base)
 
                                 if result.get("success"):
                                     st.session_state.relazione_revisionata = result["text"]
@@ -1699,6 +1711,33 @@ def main_app(nome_utente_autenticato, ruolo):
                                     st.error(f"**Errore IA:** {result['error']}")
                                 else:
                                     st.info(result.get("info", "Nessun suggerimento dall'IA."))
+
+                    if submit_save_button:
+                        if not data_intervento:
+                            st.error("Il campo 'Data Intervento' è obbligatorio prima di inviare.")
+                        elif not testo_relazione.strip():
+                            st.error("Il corpo della relazione non può essere vuoto prima di inviare.")
+                        else:
+                            # Prepara e invia l'email
+                            partner_text = f" in coppia con {partner_selezionato}" if partner_selezionato != "Nessuno" else ""
+                            titolo_email = f"Relazione di Reperibilità del {data_intervento.strftime('%d/%m/%Y')} - {nome_utente_autenticato}"
+                            html_body = f"""
+                            <h3>Relazione di Reperibilità</h3>
+                            <p><strong>Data:</strong> {data_intervento.strftime('%d/%m/%Y')}</p>
+                            <p><strong>Tecnico:</strong> {nome_utente_autenticato}{partner_text}</p>
+                            <p><strong>Orario:</strong> Da {ora_inizio or 'N/D'} a {ora_fine or 'N/D'}</p>
+                            <hr>
+                            <h4>Testo della Relazione:</h4>
+                            <p>{testo_relazione.replace('\n', '<br>')}</p>
+                            """
+                            invia_email_con_outlook_async(titolo_email, html_body)
+                            st.success("Relazione inviata con successo!")
+                            st.balloons()
+                            # Svuota i campi dopo l'invio
+                            st.session_state.relazione_testo = ""
+                            st.session_state.relazione_revisionata = ""
+                            st.rerun()
+
 
                     if st.session_state.get('relazione_revisionata'):
                         st.subheader("Testo corretto dall'IA")
