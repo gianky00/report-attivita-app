@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import streamlit.components.v1 as components
 
 def render_status_indicator():
@@ -52,16 +53,16 @@ def _find_column(df, keywords):
             return col
     return None
 
-def display_expandable_activity_card(pdl, activity_group, key_prefix, container=st):
+def display_expandable_activity_card(activity_group, key_prefix, container=st):
     """
     Mostra una "card" per un gruppo di attività con un design a espansione nidificata.
-    Questa versione è robusta e trova i nomi delle colonne dinamicamente.
+    Questa versione è robusta, auto-contenuta e trova i nomi delle colonne dinamicamente.
     """
     if activity_group.empty:
         return
 
-    # Importa pandas qui dentro per rendere il componente autocontenuto
-    import pandas as pd
+    # Estrai il PdL dal gruppo di attività
+    pdl = activity_group['PdL'].iloc[0]
 
     # Trova dinamicamente i nomi delle colonne
     col_desc = _find_column(activity_group, ['descrizione', 'attivita'])
@@ -74,7 +75,7 @@ def display_expandable_activity_card(pdl, activity_group, key_prefix, container=
     safe_pdl_key = "".join(c if c.isalnum() else "_" for c in str(pdl))
 
     # Trova l'intervento più recente per il titolo principale
-    latest_activity = activity_group.sort_values(by=col_data, ascending=False).iloc[0] if col_data else activity_group.iloc[0]
+    latest_activity = activity_group.sort_values(by=col_data, ascending=False).iloc[0] if col_data and not activity_group[col_data].isnull().all() else activity_group.iloc[0]
 
     descrizione = latest_activity.get(col_desc, 'N/D') if col_desc else 'Descrizione non trovata'
     stato_pdl = latest_activity.get(col_stato_pdl, 'N/D') if col_stato_pdl else 'Stato non trovato'
@@ -102,7 +103,7 @@ def display_expandable_activity_card(pdl, activity_group, key_prefix, container=
                 report = intervento.get(col_report, 'Nessun report per questo intervento.') if col_report else "Colonna report non trovata"
                 st.text_area(
                     "Report:",
-                    value=report,
+                    value=str(report),
                     disabled=True,
                     height=150,
                     key=f"{key_prefix}_{safe_pdl_key}_report_{index}"

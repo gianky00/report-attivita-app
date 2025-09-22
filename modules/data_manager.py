@@ -283,20 +283,20 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
 def clean_column_names(df):
     """Pulisce i nomi delle colonne di un DataFrame, rimuovendo spazi e newline."""
     cols = df.columns
-    new_cols = [col.strip().replace('\n', ' ').replace('\r', '') for col in cols]
+    new_cols = [str(col).strip().replace('\n', ' ').replace('\r', '') for col in cols]
     df.columns = new_cols
     return df
 
 @st.cache_data(ttl=300)
-def get_processed_activities():
+def carica_dati_attivita_programmate():
     """
     Carica, aggrega e processa i dati delle attività programmate dal file Excel.
     Questa è la funzione centrale per ottenere i dati delle attività per l'intera app.
     """
     excel_path = get_attivita_programmate_path()
 
-    if not os.path.exists(excel_path):
-        st.error(f"File attività programmate non trovato al percorso: {excel_path}")
+    if not excel_path or not os.path.exists(excel_path):
+        st.error(f"File attività programmate non trovato o il percorso non è configurato.")
         return pd.DataFrame()
 
     sheets_to_read = {
@@ -309,23 +309,40 @@ def get_processed_activities():
     
     all_data_df = []
 
-    for sheet_name, metadata in sheets_to_read.items():
-        try:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            df = clean_column_names(df)
-            df['Area'] = metadata['area']
-            df['TCL'] = metadata['tcl']
-            all_data_df.append(df)
-        except Exception as e:
-            st.warning(f"Impossibile leggere il foglio '{sheet_name}' dal file: {e}")
-            continue
+    try:
+        with open(excel_path, 'rb') as f:
+            xls = pd.ExcelFile(f)
+            for sheet_name, metadata in sheets_to_read.items():
+                if sheet_name in xls.sheet_names:
+                    try:
+                        df = pd.read_excel(xls, sheet_name=sheet_name, header=2)
+                        df = clean_column_names(df)
+                        df['Area'] = metadata['area']
+                        df['TCL'] = metadata['tcl']
+                        all_data_df.append(df)
+                    except Exception as e:
+                        st.warning(f"Impossibile leggere il foglio '{sheet_name}': {e}")
+                else:
+                    st.warning(f"Il foglio '{sheet_name}' non è stato trovato nel file Excel.")
+    except FileNotFoundError:
+        st.error(f"File non trovato al percorso: {excel_path}")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Errore durante l'apertura o la lettura del file Excel: {e}")
+        return pd.DataFrame()
+
 
     if not all_data_df:
         st.warning("Nessun dato caricato. Controllare il file Excel e i nomi dei fogli.")
         return pd.DataFrame()
 
     final_df = pd.concat(all_data_df, ignore_index=True)
+
+    # Rimuovi le righe dove 'PdL' è NaN o vuoto prima di procedere
     final_df.dropna(subset=['PdL'], inplace=True)
+    # Rimuovi righe completamente vuote
+    final_df.dropna(how='all', inplace=True)
+
 
     # --- Mappatura dello Stato ---
     status_map = {
@@ -337,16 +354,17 @@ def get_processed_activities():
     }
 
     # Trova dinamicamente la colonna di stato
-    source_status_col = next((col for col in final_df.columns if 'STATO' in col and 'PdL' in col), None)
+    source_status_col = next((col for col in final_df.columns if 'stato' in col.lower() and 'pdl' in col.lower()), None)
 
     if source_status_col:
-        final_df['Stato'] = final_df[source_status_col].str.upper().map(status_map).fillna('Non Definito')
+        # Assicura che la colonna sia di tipo stringa prima di usare .str
+        final_df['Stato'] = final_df[source_status_col].astype(str).str.upper().map(status_map).fillna('Non Definito')
     else:
-        st.error("La colonna 'STATO PdL' non è stata trovata. Lo stato non può essere calcolato.")
-        final_df['Stato'] = 'Errore'
+        st.warning("La colonna 'STATO PdL' non è stata trovata. Lo stato non può essere calcolato.")
+        final_df['Stato'] = 'Non Definito'
 
     # Converte la colonna data per poterla ordinare
-    date_col = next((col for col in final_df.columns if 'DATA' in col and 'CONTROLLO' in col), None)
+    date_col = next((col for col in final_df.columns if 'data' in col.lower() and 'controllo' in col.lower()), None)
     if date_col:
         final_df[date_col] = pd.to_datetime(final_df[date_col], errors='coerce')
 
