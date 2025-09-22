@@ -1328,8 +1328,6 @@ def render_programmazione_tab():
 
 
 def main_app(nome_utente_autenticato, ruolo):
-    st.set_page_config(layout="wide", page_title="Report Attività")
-
     gestionale_data = carica_gestionale()
 
     # Sincronizza automaticamente i turni di reperibilità all'avvio
@@ -1675,7 +1673,9 @@ def main_app(nome_utente_autenticato, ruolo):
                         render_gestione_account(gestionale_data)
 
 
-# --- GESTIONE LOGIN ---
+# --- APPLICAZIONE STREAMLIT PRINCIPALE ---
+
+st.set_page_config(layout="wide", page_title="Report Attività")
 
 # Initialize session state keys if they don't exist
 keys_to_initialize = {
@@ -1703,7 +1703,6 @@ if st.session_state.login_state == 'logged_in':
     main_app(st.session_state.authenticated_user, st.session_state.ruolo)
 
 else:
-    st.set_page_config(layout="centered", page_title="Login")
     st.title("Accesso Area Report")
     
     gestionale = carica_gestionale()
