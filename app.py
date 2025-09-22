@@ -30,7 +30,8 @@ from modules.data_manager import (
     salva_gestionale_async,
     carica_archivio_completo,
     trova_attivita,
-    scrivi_o_aggiorna_risposta
+    scrivi_o_aggiorna_risposta,
+    carica_dati_attivita_programmate
 )
 from modules.shift_management import (
     sync_oncall_shifts,

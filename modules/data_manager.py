@@ -5,8 +5,10 @@ import json
 import datetime
 import re
 import threading
+import openpyxl
 
 import config
+from config import get_attivita_programmate_path, get_storico_db_path
 from modules.email_sender import invia_email_con_outlook_async
 
 @st.cache_data
@@ -273,3 +275,100 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
     except Exception as e:
         st.error(f"Errore lettura giornaliera: {e}")
         return []
+
+
+@st.cache_data(ttl=600)
+def carica_dati_attivita_programmate():
+    excel_path = get_attivita_programmate_path()
+    storico_path = get_storico_db_path()
+
+    if not os.path.exists(excel_path):
+        st.error(f"File attività programmate non trovato al percorso: {excel_path}")
+        return pd.DataFrame()
+
+    sheets_to_read = {
+        'A1': {'tcl': 'Francesco Naselli', 'area': 'Area 1'},
+        'A2': {'tcl': 'Francesco Naselli', 'area': 'Area 2'},
+        'A3': {'tcl': 'Ferdinando Caldarella', 'area': 'Area 3'},
+        'CTE': {'tcl': 'Ferdinando Caldarella', 'area': 'CTE'},
+        'BLENDING': {'tcl': 'Ivan Messina', 'area': 'BLENDING'},
+    }
+
+    all_data = []
+    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+
+    try:
+        df_storico_full = pd.read_excel(storico_path, sheet_name='DB')
+        df_storico_full['PdL'] = df_storico_full['PdL'].astype(str)
+        # Convert Data_Riferimento for sorting
+        df_storico_full['Data_Riferimento_dt'] = pd.to_datetime(df_storico_full['Data_Riferimento'], errors='coerce')
+        latest_status = df_storico_full.sort_values('Data_Compilazione').drop_duplicates('PdL', keep='last')
+        latest_status = latest_status.set_index('PdL')['Stato'].to_dict()
+    except FileNotFoundError:
+        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
+        latest_status = {}
+    except Exception as e:
+        st.warning(f"Errore nel caricamento dello storico: {e}")
+        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
+        latest_status = {}
+
+    status_map = {
+        'DA EMETTERE': 'Pianificato', 'EMESSO': 'In Corso', 'DA CHIUDERE': 'Terminata',
+        'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato'
+    }
+
+    for sheet_name, metadata in sheets_to_read.items():
+        try:
+            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
+            if sheet_name not in wb.sheetnames:
+                continue
+            ws = wb[sheet_name]
+            data = list(ws.values)
+            if len(data) < 2:
+                continue
+
+            header = [str(h) for h in data[0]]
+            df = pd.DataFrame(data[1:], columns=header)
+
+            required_cols = ['PdL', 'Impianto', 'DESCRIZIONE ESTESA', 'Stato OdL', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
+            if not all(col in df.columns for col in required_cols):
+                continue
+
+            df = df.dropna(subset=['PdL'])
+            if df.empty:
+                continue
+
+            df_filtered = df[required_cols].copy()
+            df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
+
+            df_filtered['PdL'] = df_filtered['PdL'].astype(str)
+            df_filtered['TCL'] = metadata['tcl']
+            df_filtered['Area'] = metadata['area']
+
+            giorni_programmati = df_filtered[giorni_settimana].apply(
+                lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']),
+                axis=1
+            )
+            df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
+
+            def get_status(row):
+                pdl_str = str(row['PdL']).strip()
+                if pdl_str in latest_status:
+                    return latest_status[pdl_str]
+                if pd.notna(row['Stato_OdL']):
+                    return status_map.get(str(row['Stato_OdL']).strip().upper(), 'Non Definito')
+                return 'Pianificato'
+
+            df_filtered['Stato'] = df_filtered.apply(get_status, axis=1)
+
+            df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
+
+            all_data.append(df_filtered)
+        except Exception as e:
+            pass
+
+    if not all_data:
+        return pd.DataFrame()
+
+    final_df = pd.concat(all_data, ignore_index=True)
+    return final_df
