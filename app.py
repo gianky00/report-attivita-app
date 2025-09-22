@@ -1271,55 +1271,9 @@ def render_guida_tab(ruolo):
 
 
 # --- GESTIONE SESSIONE ---
-SESSION_FILE = f"session_{os.getlogin()}.json"
-SESSION_DURATION_HOURS = 8
-
-def save_session(username, role):
-    """Salva la sessione utente su un file."""
-    session_data = {
-        'authenticated_user': username,
-        'ruolo': role,
-        'timestamp': datetime.datetime.now().isoformat()
-    }
-    try:
-        with open(SESSION_FILE, 'w') as f:
-            json.dump(session_data, f)
-    except IOError as e:
-        st.error(f"Impossibile salvare la sessione: {e}")
-
-def load_session():
-    """Carica la sessione utente da un file se valida e non scaduta."""
-    if st.session_state.get('authenticated_user'):
-        return
-
-    if os.path.exists(SESSION_FILE):
-        try:
-            with open(SESSION_FILE, 'r') as f:
-                session_data = json.load(f)
-
-            session_time = datetime.datetime.fromisoformat(session_data['timestamp'])
-            if datetime.datetime.now() - datetime.timedelta(hours=SESSION_DURATION_HOURS) < session_time:
-                st.session_state.authenticated_user = session_data['authenticated_user']
-                st.session_state.ruolo = session_data['ruolo']
-            else:
-                # Sessione scaduta, pulisci
-                delete_session()
-        except (IOError, json.JSONDecodeError, KeyError):
-            # File corrotto, pulisci
-            delete_session()
-
-def delete_session():
-    """Cancella il file di sessione e pulisce lo stato di streamlit."""
-    if os.path.exists(SESSION_FILE):
-        try:
-            os.remove(SESSION_FILE)
-        except OSError:
-            pass  # Ignora errori in cancellazione se il file è bloccato
-
-    # Pulisce completamente lo stato della sessione per un logout sicuro
-    keys_to_clear = [k for k in st.session_state.keys()]
-    for key in keys_to_clear:
-        del st.session_state[key]
+# La gestione della sessione è ora gestita interamente da st.session_state.
+# Le funzioni di salvataggio/caricamento su file sono state rimosse per
+# garantire sessioni utente isolate e prevenire la condivisione dello stato.
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
@@ -1534,7 +1488,10 @@ def main_app(nome_utente_autenticato, ruolo):
             st.write("")
             st.write("")
             if st.button("Logout", type="secondary"):
-                delete_session()
+                # Pulisce completamente lo stato della sessione per un logout sicuro
+                keys_to_clear = [k for k in st.session_state.keys()]
+                for key in keys_to_clear:
+                    del st.session_state[key]
                 st.rerun()
 
         oggi = datetime.date.today()
@@ -1925,10 +1882,9 @@ for key, default_value in keys_to_initialize.items():
         st.session_state[key] = default_value
 
 # Prova a caricare una sessione esistente all'avvio
-if not st.session_state.get('authenticated_user'):
-    load_session()
-    if st.session_state.get('authenticated_user'):
-        st.session_state.login_state = 'logged_in'
+# La chiamata a load_session() è stata rimossa per usare solo st.session_state
+if st.session_state.get('authenticated_user'):
+    st.session_state.login_state = 'logged_in'
 
 
 # --- UI LOGIC ---
@@ -1972,7 +1928,7 @@ else:
                         st.session_state.login_state = 'logged_in'
                         st.session_state.authenticated_user = nome_completo
                         st.session_state.ruolo = ruolo
-                        save_session(nome_completo, ruolo)
+                        # save_session rimossa per usare solo st.session_state
                         st.rerun()
                     else:
                         st.error("Credenziali non valide.")
@@ -2017,7 +1973,7 @@ else:
                         st.session_state.login_state = 'logged_in'
                         st.session_state.authenticated_user = user_to_setup
                         # il ruolo è già in sessione
-                        save_session(user_to_setup, st.session_state.ruolo)
+                        # save_session rimossa per usare solo st.session_state
                         st.rerun()
                     else:
                         st.error("Errore durante il salvataggio della configurazione. Riprova.")
@@ -2041,7 +1997,7 @@ else:
                     st.session_state.login_state = 'logged_in'
                     st.session_state.authenticated_user = user_to_verify
                     st.session_state.ruolo = ruolo
-                    save_session(user_to_verify, ruolo)
+                    # save_session rimossa per usare solo st.session_state
                     st.rerun()
                 else:
                     st.error("Codice non valido. Riprova.")
