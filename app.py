@@ -98,7 +98,7 @@ def calculate_technician_performance(archivio_df, start_date, end_date):
     """Calcola le metriche di performance per i tecnici in un dato intervallo di tempo."""
     
     # Converte le date in formato datetime di pandas, gestendo errori
-    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce')
+    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], errors='coerce', dayfirst=True)
     # Estrae la data dalla colonna timestamp della compilazione
     archivio_df['Data_Compilazione_dt'] = pd.to_datetime(archivio_df['Data_Compilazione'], errors='coerce').dt.date
     archivio_df['Data_Compilazione_dt'] = pd.to_datetime(archivio_df['Data_Compilazione_dt']) # Riconverte a datetime64 per la sottrazione
@@ -147,7 +147,7 @@ def visualizza_storico_organizzato(storico_list, pdl):
     if storico_list:
         with st.expander(f"Mostra cronologia interventi per PdL {pdl}", expanded=True):
             for intervento in storico_list:
-                intervento['data_dt'] = pd.to_datetime(intervento.get('Data_Riferimento'), errors='coerce')
+                intervento['data_dt'] = pd.to_datetime(intervento.get('Data_Riferimento'), errors='coerce', dayfirst=True)
             
             storico_filtrato = [i for i in storico_list if pd.notna(i['data_dt'])]
             if not storico_filtrato:

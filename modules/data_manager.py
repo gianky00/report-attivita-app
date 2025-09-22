@@ -38,7 +38,8 @@ def carica_gestionale():
             # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
             if 'Tipo' not in data['turni'].columns:
                 data['turni']['Tipo'] = 'Assistenza'
-            data['turni']['Tipo'].fillna('Assistenza', inplace=True)
+            # Corretto per rimuovere il FutureWarning di pandas
+            data['turni']['Tipo'] = data['turni']['Tipo'].fillna('Assistenza')
 
             required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
 
@@ -102,7 +103,7 @@ def salva_gestionale_async(data):
 def carica_archivio_completo():
     try:
         df = pd.read_excel(config.PATH_STORICO_DB)
-        df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce')
+        df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce', dayfirst=True)
         df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
         df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
         df.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
@@ -185,7 +186,10 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         pdls_utente = set()
         for _, riga in df_range.iterrows():
             nome_in_giornaliera = str(riga[5]).strip().lower()
-            if utente_completo.lower() in nome_in_giornaliera:
+            # La logica di login usa il cognome, ma qui abbiamo il nome completo.
+            # Un controllo più robusto verifica che il nome nella giornaliera (es. "Allegretti" o "Allegretti G.")
+            # sia contenuto nel nome completo dell'utente loggato (es. "Giancarlo Allegretti").
+            if nome_in_giornaliera and nome_in_giornaliera in utente_completo.lower():
                 pdl_text = str(riga[9])
                 if not pd.isna(pdl_text):
                     pdls_found = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
