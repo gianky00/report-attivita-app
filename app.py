@@ -1452,6 +1452,71 @@ def render_programmazione_tab():
 
     st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
 
+    # --- INIZIO CODICE PER GRAFICO A BARRE ---
+    st.subheader("Carico di Lavoro Settimanale per Area")
+
+    # Definisci i nomi dei giorni completi e abbreviati
+    giorni_settimana_full = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+    giorni_settimana_short = ["LUN", "MAR", "MER", "GIO", "VEN"]
+
+    # Esegui il conteggio usando i nomi completi dei giorni per la corrispondenza con i dati
+    area_counts_per_day = {day: defaultdict(int) for day in giorni_settimana_full}
+    for _, row in scheduled_df.iterrows():
+        area = row['Area']
+        days = [day.strip() for day in row['GiorniProgrammati'].split(',')]
+        for day in days:
+            if day in area_counts_per_day:
+                area_counts_per_day[day][area] += 1
+
+    # Crea il DataFrame, assicurando l'ordine corretto con i nomi completi
+    chart_df_wide = pd.DataFrame(area_counts_per_day).T.reindex(giorni_settimana_full).fillna(0).astype(int)
+
+    # Mappa l'indice ai nomi abbreviati per la visualizzazione
+    chart_df_wide.index = chart_df_wide.index.map(dict(zip(giorni_settimana_full, giorni_settimana_short)))
+
+    if not chart_df_wide.empty:
+        # Trasforma il DataFrame nel formato "lungo" richiesto da Vega-Lite
+        chart_df_long = chart_df_wide.reset_index().rename(columns={'index': 'Giorno'}).melt(
+            id_vars='Giorno',
+            var_name='Area',
+            value_name='Conteggio'
+        )
+
+        # Crea la specifica Vega-Lite
+        spec = {
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "data": {"values": chart_df_long.to_dict('records')},
+            "mark": "bar",
+            "encoding": {
+                "x": {
+                    "field": "Giorno",
+                    "type": "ordinal",
+                    "sort": giorni_settimana_short,  # Usa la lista di nomi abbreviati per l'ordinamento
+                    "axis": {"title": "Giorno della Settimana", "labelAngle": 0}
+                },
+                "y": {
+                    "field": "Conteggio",
+                    "type": "quantitative",
+                    "axis": {"title": "Numero di Attività"}
+                },
+                "color": {
+                    "field": "Area",
+                    "type": "nominal",
+                    "legend": {"title": "Area"}
+                }
+            },
+            "config": {
+                "view": {"stroke": "transparent"}
+            }
+        }
+        st.vega_lite_chart(spec, use_container_width=True)
+    else:
+        st.info("Nessun dato da visualizzare nel grafico.")
+
+    st.divider()
+    # --- FINE CODICE PER GRAFICO A BARRE ---
+
+
     with st.form("programmazione_filters_form"):
         col1, col2, col3, col4 = st.columns(4)
         with col1:
