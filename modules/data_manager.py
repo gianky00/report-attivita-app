@@ -280,10 +280,23 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         st.error(f"Errore lettura giornaliera: {e}")
         return []
 
-@st.cache_data(ttl=600)
+def clean_column_names(df):
+    """Pulisce i nomi delle colonne di un DataFrame."""
+    cols = df.columns
+    new_cols = [col.strip().replace('\n', ' ') for col in cols]
+    df.columns = new_cols
+    return df
+
+@st.cache_data(ttl=300) # Cache per 5 minuti
 def carica_dati_attivita_programmate():
+    """
+    Carica e aggrega i dati delle attività programmate dal file Excel specificato in config.
+    Questa funzione implementa la nuova logica richiesta:
+    - Unica fonte dati: ATTIVITA_PROGRAMMATE.xlsm
+    - Lettura da più fogli con metadati specifici (Area, TCL).
+    - L'intestazione è letta dalla riga 3 del file Excel.
+    """
     excel_path = get_attivita_programmate_path()
-    storico_path = get_storico_db_path()
 
     if not os.path.exists(excel_path):
         st.error(f"File attività programmate non trovato al percorso: {excel_path}")
@@ -297,81 +310,78 @@ def carica_dati_attivita_programmate():
         'BLENDING': {'tcl': 'Ivan Messina', 'area': 'BLENDING'},
     }
     
-    all_data = []
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-    
-    try:
-        df_storico_full = pd.read_excel(storico_path, sheet_name='DB')
-        df_storico_full['PdL'] = df_storico_full['PdL'].astype(str)
-        # Convert Data_Riferimento for sorting
-        df_storico_full['Data_Riferimento_dt'] = pd.to_datetime(df_storico_full['Data_Riferimento'], errors='coerce')
-        latest_status = df_storico_full.sort_values('Data_Compilazione').drop_duplicates('PdL', keep='last')
-        latest_status = latest_status.set_index('PdL')['Stato'].to_dict()
-    except FileNotFoundError:
-        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
-        latest_status = {}
-    except Exception as e:
-        st.warning(f"Errore nel caricamento dello storico: {e}")
-        df_storico_full = pd.DataFrame(columns=['PdL', 'Stato', 'Data_Compilazione', 'Data_Riferimento_dt'])
-        latest_status = {}
-
-    status_map = {
-        'DA EMETTERE': 'Pianificato', 'EMESSO': 'In Corso', 'DA CHIUDERE': 'Terminata',
-        'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato'
-    }
+    all_data_df = []
 
     for sheet_name, metadata in sheets_to_read.items():
         try:
-            wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
-            if sheet_name not in wb.sheetnames:
-                continue
-            ws = wb[sheet_name]
-            data = list(ws.values)
-            if len(data) < 2:
-                continue
+            # Legge il foglio specificato, usando la riga 3 come header (pandas è 0-indexed, quindi header=2)
+            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
             
-            header = [str(h) for h in data[0]]
-            df = pd.DataFrame(data[1:], columns=header)
+            # Pulisce i nomi delle colonne
+            df = clean_column_names(df)
 
-            required_cols = ['PdL', 'Impianto', 'DESCRIZIONE ESTESA', 'Stato OdL', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven']
-            if not all(col in df.columns for col in required_cols):
-                continue
-
-            df = df.dropna(subset=['PdL'])
-            if df.empty:
-                continue
-
-            df_filtered = df[required_cols].copy()
-            df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
+            # Aggiunge i metadati basati sul foglio
+            df['Area'] = metadata['area']
+            df['TCL'] = metadata['tcl']
             
-            df_filtered['PdL'] = df_filtered['PdL'].astype(str)
-            df_filtered['TCL'] = metadata['tcl']
-            df_filtered['Area'] = metadata['area']
+            all_data_df.append(df)
 
-            giorni_programmati = df_filtered[giorni_settimana].apply(
-                lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']),
-                axis=1
-            )
-            df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
-
-            def get_status(row):
-                pdl_str = str(row['PdL']).strip()
-                if pdl_str in latest_status:
-                    return latest_status[pdl_str]
-                if pd.notna(row['Stato_OdL']):
-                    return status_map.get(str(row['Stato_OdL']).strip().upper(), 'Non Definito')
-                return 'Pianificato'
-
-            df_filtered['Stato'] = df_filtered.apply(get_status, axis=1)
-            
-            df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
-
-            all_data.append(df_filtered)
         except Exception as e:
-            pass
+            # Avvisa se un foglio non può essere letto, ma non blocca l'intera funzione
+            st.warning(f"Impossibile leggere il foglio '{sheet_name}' dal file: {e}")
+            continue
 
-    if not all_data:
+    if not all_data_df:
+        st.warning("Nessun dato caricato. Controllare il file Excel e i nomi dei fogli.")
         return pd.DataFrame()
 
-    final_df = pd.concat(all_data, ignore_index=True)
+    # Concatena tutti i DataFrame in uno solo
+    final_df = pd.concat(all_data_df, ignore_index=True)
+
+    # Rimuove righe dove il PdL è vuoto, che sono spesso separatori o righe vuote
+    final_df.dropna(subset=['PdL'], inplace=True)
+
     return final_df
+
+@st.cache_data(ttl=300)
+def get_processed_activities():
+    """
+    Recupera i dati delle attività, li processa e applica la logica di mapping.
+    Questa è la funzione principale che l'UI dovrebbe chiamare per ottenere i dati.
+    """
+    df = carica_dati_attivita_programmate()
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # --- Mappatura dello Stato ---
+    status_map = {
+        'INTERROTTO': 'Sospeso',
+        'RICHIESTO': 'Da processare',
+        'EMESSO': 'Processato',
+        'IN CORSO': 'Aperto',
+        'DA CHIUDERE': 'Terminata'
+    }
+
+    # La colonna di origine è 'STATO PdL' (dopo la pulizia dei nomi)
+    source_status_col = 'STATO PdL'
+    if source_status_col in df.columns:
+        df['Stato'] = df[source_status_col].str.upper().map(status_map).fillna('Non Definito')
+    else:
+        st.error(f"La colonna '{source_status_col}' non è stata trovata nel file Excel. Lo stato non può essere calcolato.")
+        df['Stato'] = 'Errore'
+
+    # --- Mappatura dei Campi Principali ---
+    # Rinomina le colonne per coerenza, gestendo la possibilità che non esistano
+    rename_map = {
+        'DESCRIZIONE ATTIVITA': 'Descrizione',
+        'STATO ATTIVITA': 'Report'
+    }
+    df.rename(columns=rename_map, inplace=True)
+
+    # Assicura che le colonne esistano anche se non mappate, per evitare errori nella UI
+    for col in ['Descrizione', 'Report']:
+        if col not in df.columns:
+            df[col] = ''
+
+    return df

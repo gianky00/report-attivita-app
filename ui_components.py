@@ -44,3 +44,61 @@ def render_status_indicator():
     online_status = components.html(html_code, height=0, width=0)
 
     return online_status or 'online'
+
+def display_activity_card(activity_group, container=st):
+    """
+    Mostra una "card" per un gruppo di attività relative a un singolo PdL.
+
+    Args:
+        activity_group (pd.DataFrame): DataFrame filtrato per un unico PdL.
+        container: Il container Streamlit in cui renderizzare la card (es. st o una colonna).
+    """
+    if activity_group.empty:
+        return
+
+    # Ordina per data per trovare l'intervento più recente
+    # Assumiamo che la colonna 'DATA CONTROLLO' esista e sia in formato datetime
+    if 'DATA CONTROLLO' in activity_group.columns:
+        activity_group['DATA CONTROLLO'] = pd.to_datetime(activity_group['DATA CONTROLLO'], errors='coerce')
+        latest_activity = activity_group.sort_values(by='DATA CONTROLLO', ascending=False).iloc[0]
+    else:
+        # Se manca la data, prendi la prima riga come rappresentativa
+        latest_activity = activity_group.iloc[0]
+
+    pdl = latest_activity.get('PdL', 'N/D')
+    descrizione = latest_activity.get('Descrizione', 'Nessuna descrizione')
+
+    expander_title = f"**{pdl}** - {descrizione}"
+
+    with container.expander(expander_title):
+        # --- Dettagli Principali (dall'attività più recente) ---
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Stato", latest_activity.get('Stato', 'N/D'))
+        col2.metric("Area", latest_activity.get('Area', 'N/D'))
+        col3.metric("TCL", latest_activity.get('TCL', 'N/D'))
+
+        st.markdown("---")
+
+        # --- Report e Dettagli Tecnici ---
+        st.subheader("Dettagli Ultimo Intervento")
+
+        data_controllo_str = latest_activity['DATA CONTROLLO'].strftime('%d/%m/%Y') if pd.notna(latest_activity['DATA CONTROLLO']) else 'Non specificata'
+        st.info(f"**Data Controllo:** {data_controllo_str}")
+
+        personale = latest_activity.get('PERSONALE IMPEGATO', 'Non specificato')
+        st.info(f"**Personale Impiegato:** {personale}")
+
+        report = latest_activity.get('Report', 'Nessun report compilato.')
+        st.text_area("Report Attività", value=report, height=150, disabled=True)
+
+        # --- Storico Interventi ---
+        if len(activity_group) > 1:
+            st.markdown("---")
+            st.subheader("Storico Interventi")
+
+            # Mostra gli interventi più vecchi
+            storico_df = activity_group.iloc[1:]
+
+            for _, row in storico_df.iterrows():
+                data_storico_str = row['DATA CONTROLLO'].strftime('%d/%m/%Y') if pd.notna(row['DATA CONTROLLO']) else 'N/D'
+                st.markdown(f"- **{data_storico_str}**: {row.get('Report', 'Nessun report.')[:80]}...")

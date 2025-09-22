@@ -30,8 +30,9 @@ from modules.data_manager import (
     carica_archivio_completo,
     trova_attivita,
     scrivi_o_aggiorna_risposta,
-    carica_dati_attivita_programmate
+    get_processed_activities
 )
+from ui_components import display_activity_card
 from modules.shift_management import (
     sync_oncall_shifts,
     log_shift_change,
@@ -1262,168 +1263,68 @@ def delete_session():
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
 def render_situazione_impianti_tab():
     st.header("📊 Situazione Generale Impianti")
+    st.info("Questa sezione mostra tutte le attività che non sono ancora terminate o sospese.")
 
-    # Carica i dati aggiornati
-    df = carica_dati_attivita_programmate()
+    processed_activities_df = get_processed_activities()
 
-    if df.empty:
-        st.warning("Non sono stati trovati dati sulle attività programmate. Verificare il file Excel.")
-        st.info("Questa sezione mostra lo stato di avanzamento delle attività (es. SOSPESO, COMPLETATO) raggruppate per Area e TCL.")
+    if processed_activities_df.empty:
+        st.warning("Non sono stati trovati dati sulle attività. Verificare il file Excel di origine.")
         return
 
-    with st.form("situazione_filters_form"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            selected_tcl = st.multiselect(
-                "Filtra per TCL",
-                options=sorted(df['TCL'].unique()),
-                default=sorted(df['TCL'].unique())
-            )
-        with col2:
-            selected_area = st.multiselect(
-                "Filtra per Area",
-                options=sorted(df['Area'].unique()),
-                default=sorted(df['Area'].unique())
-            )
-        with col3:
-            selected_stato = st.multiselect(
-                "Filtra per Stato",
-                options=sorted(df['Stato'].unique()),
-                default=sorted(df['Stato'].unique())
-            )
-
-        submitted = st.form_submit_button("Applica Filtri")
-
-    if not submitted:
-        st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
-        return
-
-    if not selected_tcl or not selected_area or not selected_stato:
-        st.warning("Seleziona almeno un valore per ogni filtro.")
-        return
-
-    # Applica i filtri
-    filtered_df = df[
-        df['TCL'].isin(selected_tcl) &
-        df['Area'].isin(selected_area) &
-        df['Stato'].isin(selected_stato)
-    ].copy()
+    # Filtra per mostrare solo le attività "attive"
+    stati_da_escludere = ['Terminata', 'Sospeso']
+    filtered_df = processed_activities_df[~processed_activities_df['Stato'].isin(stati_da_escludere)]
 
     if filtered_df.empty:
-        st.info("Nessuna attività corrisponde ai filtri selezionati.")
+        st.success("Nessuna attività attiva o in sospeso trovata. Ottimo lavoro!")
         return
 
-    # --- Visualizzazione Dati ---
-    st.subheader("Riepilogo Attività per Stato")
+    grouped_by_pdl = filtered_df.groupby('PdL')
+    st.info(f"Trovate {len(grouped_by_pdl)} PdL con attività in corso o da processare.")
 
-    # Calcola le metriche
-    total_activities = len(filtered_df)
-    status_counts = filtered_df['Stato'].value_counts()
-
-    # Se la colonna STATO non è ancora stata definita, mostra un avviso
-    if "Non Definito" in status_counts.index:
-        st.info("NOTA: La colonna 'Stato' non è stata ancora configurata. I dati seguenti sono aggregati su un valore di default.")
-
-    st.metric("Totale Attività Filtrate", total_activities)
-
-    st.markdown("##### Conteggio per Stato")
-    st.dataframe(status_counts)
-
-    # Grafico a barre
-    if not (status_counts.index == "Non Definito").all():
-        st.bar_chart(status_counts)
-
-    st.subheader("Dettaglio Attività Filtrate")
-    for index, row in filtered_df.iterrows():
-        with st.container(border=True):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown(f"#### PdL `{row['PdL']}`")
-                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
-            with col2:
-                st.markdown(f"**Stato Attuale**")
-                st.info(f"_{row['Stato']}_")
-
-            if pd.notna(row['Descrizione']):
-                st.caption(f"Descrizione: {row['Descrizione']}")
-
-            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
-
-            if row['Storico']:
-                visualizza_storico_organizzato(row['Storico'], row['PdL'])
+    for pdl, group in grouped_by_pdl:
+        display_activity_card(group, container=st)
 
 
 def render_programmazione_tab():
-    st.header("🗓️ Programmazione Attività Settimanale")
+    st.header("🗓️ Programmazione Attività di Oggi")
+    st.info("Questa sezione mostra le attività che hanno una 'X' nella colonna corrispondente al giorno odierno nel file Excel.")
 
-    df = carica_dati_attivita_programmate()
+    # Mappa dal weekday di Python (Lun=0) al nome della colonna
+    day_map = {0: 'LUN', 1: 'MAR', 2: 'MER', 3: 'GIO', 4: 'VEN'}
+    today_weekday = datetime.date.today().weekday()
 
-    if df.empty:
+    # Se è weekend, non mostra nulla
+    if today_weekday not in day_map:
+        st.info("Oggi è Sabato o Domenica. Nessuna attività programmata.")
+        return
+
+    today_col = day_map[today_weekday]
+
+    processed_activities_df = get_processed_activities()
+
+    if processed_activities_df.empty:
         st.warning("Non sono stati trovati dati sulle attività programmate.")
         return
 
-    # Filtra per mostrare solo le attività effettivamente programmate
-    scheduled_df = df[df['GiorniProgrammati'] != 'Non Programmato'].copy()
-
-    if scheduled_df.empty:
-        st.info("Nessuna attività risulta programmata per la settimana corrente nel file Excel.")
+    # Assicura che la colonna del giorno esista
+    if today_col not in processed_activities_df.columns:
+        st.error(f"La colonna '{today_col}' per il giorno corrente non è stata trovata nel file Excel.")
         return
 
-    st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
+    # Filtra il DataFrame
+    # Converte la colonna in stringa per sicurezza e confronta con 'X'
+    filtered_df = processed_activities_df[processed_activities_df[today_col].astype(str).str.strip().str.upper() == 'X']
 
-    with st.form("programmazione_filters_form"):
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            pdl_filter = st.text_input("Filtra per PdL...")
-        with col2:
-            area_filter = st.multiselect("Filtra per Area", options=sorted(scheduled_df['Area'].unique()))
-        with col3:
-            tcl_filter = st.multiselect("Filtra per TCL", options=sorted(scheduled_df['TCL'].unique()))
-        with col4:
-            day_filter = st.multiselect("Filtra per Giorno", options=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"])
-
-        submitted = st.form_submit_button("Applica Filtri")
-
-    if not submitted:
-        st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
+    if filtered_df.empty:
+        st.success("Nessuna attività specificamente programmata per oggi.")
         return
 
-    # Applica filtri
-    if pdl_filter:
-        scheduled_df = scheduled_df[scheduled_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
-    if area_filter:
-        scheduled_df = scheduled_df[scheduled_df['Area'].isin(area_filter)]
-    if tcl_filter:
-        scheduled_df = scheduled_df[scheduled_df['TCL'].isin(tcl_filter)]
-    if day_filter:
-        day_regex = '|'.join(day_filter)
-        scheduled_df = scheduled_df[scheduled_df['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
+    grouped_by_pdl = filtered_df.groupby('PdL')
+    st.info(f"Trovate {len(grouped_by_pdl)} PdL con attività programmate per oggi.")
 
-    st.divider()
-
-    if scheduled_df.empty:
-        st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
-        return
-
-    # Layout a card, mobile-friendly (reso coerente con la tab Situazione Impianti)
-    for index, row in scheduled_df.iterrows():
-        with st.container(border=True):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown(f"#### PdL `{row['PdL']}`")
-                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
-            with col2:
-                st.markdown(f"**Stato Attuale**")
-                st.info(f"_{row['Stato']}_")
-
-            if pd.notna(row['Descrizione']):
-                st.caption(f"Descrizione: {row['Descrizione']}")
-
-            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
-
-            # Mostra storico interventi
-            if row['Storico']:
-                visualizza_storico_organizzato(row['Storico'], row['PdL'])
+    for pdl, group in grouped_by_pdl:
+        display_activity_card(group, container=st)
 
 
 def main_app(nome_utente_autenticato, ruolo):
@@ -1513,59 +1414,25 @@ def main_app(nome_utente_autenticato, ruolo):
 
         with tabs[4]:
             st.subheader("Ricerca nell'Archivio")
-            archivio_df = carica_archivio_completo()
-            if archivio_df.empty:
-                st.warning("L'archivio è vuoto o non caricabile.")
+            st.info("Questa sezione mostra solo le attività terminate o sospese.")
+
+            processed_activities_df = get_processed_activities()
+
+            if processed_activities_df.empty:
+                st.warning("L'archivio è vuoto o non è stato possibile caricarlo.")
             else:
-                # --- PAGINATION LOGIC ---
-                ITEMS_PER_PAGE = 20
-                if 'num_items_to_show' not in st.session_state:
-                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
-                if 'last_search_filters' not in st.session_state:
-                    st.session_state.last_search_filters = (None, None, None)
+                # Filtra per mostrare solo le attività "inattive"
+                stati_da_includere = ['Terminata', 'Sospeso']
+                filtered_df = processed_activities_df[processed_activities_df['Stato'].isin(stati_da_includere)]
 
-                col1, col2, col3 = st.columns(3)
-                with col1: pdl_search = st.text_input("Filtra per PdL", key="pdl_search")
-                with col2: desc_search = st.text_input("Filtra per Descrizione", key="desc_search")
-                with col3:
-                    lista_tecnici = sorted(list(archivio_df['Tecnico'].dropna().unique()))
-                    tec_search = st.multiselect("Filtra per Tecnico/i", options=lista_tecnici, key="tec_search")
-
-                current_filters = (pdl_search, desc_search, tuple(sorted(tec_search)))
-                if current_filters != st.session_state.last_search_filters:
-                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
-                st.session_state.last_search_filters = current_filters
-                # --- END PAGINATION LOGIC ---
-                
-                risultati_df = archivio_df.copy()
-                if pdl_search: risultati_df = risultati_df[risultati_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
-                if desc_search: risultati_df = risultati_df[risultati_df['Descrizione'].astype(str).str.contains(desc_search, case=False, na=False)]
-                if tec_search: risultati_df = risultati_df[risultati_df['Tecnico'].isin(tec_search)]
-                
-                if not risultati_df.empty:
-                    pdl_unici_df = risultati_df.sort_values(by='Data_Riferimento_dt', ascending=False).drop_duplicates(subset=['PdL'], keep='first')
-                    st.info(f"Trovati {len(risultati_df)} interventi, raggruppati in {len(pdl_unici_df)} PdL unici.")
-
-                    # Applica la paginazione
-                    items_to_display_df = pdl_unici_df.head(st.session_state.num_items_to_show)
-
-                    for _, riga_pdl in items_to_display_df.iterrows():
-                        pdl_corrente = riga_pdl['PdL']
-                        descrizione_recente = riga_pdl.get('Descrizione', '')
-                        with st.expander(f"**PdL {pdl_corrente}** | *{str(descrizione_recente)[:60]}...*"):
-                            interventi_per_pdl_df = risultati_df[risultati_df['PdL'] == pdl_corrente].sort_values(by='Data_Riferimento_dt', ascending=False)
-                            visualizza_storico_organizzato(interventi_per_pdl_df.to_dict('records'), pdl_corrente)
-
-                    # --- PAGINATION BUTTON ---
-                    total_results = len(pdl_unici_df)
-                    if st.session_state.num_items_to_show < total_results:
-                        st.divider()
-                        if st.button("Carica Altri Risultati..."):
-                            st.session_state.num_items_to_show += ITEMS_PER_PAGE
-                            st.rerun()
-                    # --- END PAGINATION BUTTON ---
+                if filtered_df.empty:
+                    st.info("Nessuna attività terminata o sospesa trovata nell'archivio.")
                 else:
-                    st.info("Nessun record trovato.")
+                    grouped_by_pdl = filtered_df.groupby('PdL')
+                    st.info(f"Trovate {len(grouped_by_pdl)} PdL con attività terminate o sospese.")
+
+                    for pdl, group in grouped_by_pdl:
+                        display_activity_card(group, container=st)
 
         with tabs[5]:
             st.subheader("Gestione Turni")
