@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import streamlit.components.v1 as components
 
 def render_status_indicator():
@@ -44,3 +45,74 @@ def render_status_indicator():
     online_status = components.html(html_code, height=0, width=0)
 
     return online_status or 'online'
+
+def _find_column(df, keywords):
+    """Helper function to find a column in a dataframe that contains all keywords."""
+    for col in df.columns:
+        if all(keyword.lower() in col.lower() for keyword in keywords):
+            return col
+    return None
+
+def display_expandable_activity_card(activity_group, key_prefix, container=st):
+    """
+    Mostra una "card" per un gruppo di attività con un design a espansione nidificata.
+    Questa versione è robusta, auto-contenuta e trova i nomi delle colonne dinamicamente.
+    """
+    if activity_group.empty:
+        return
+
+    # Estrai il PdL dal gruppo di attività
+    pdl = activity_group['PdL'].iloc[0]
+
+    # Trova dinamicamente i nomi delle colonne
+    col_desc = _find_column(activity_group, ['descrizione', 'attivita'])
+    col_stato_pdl = _find_column(activity_group, ['stato', 'pdl'])
+    col_data = _find_column(activity_group, ['data', 'controllo'])
+    col_personale = _find_column(activity_group, ['personale', 'impiegato'])
+    col_report = _find_column(activity_group, ['stato', 'attivita'])
+
+    # Pulisce il PdL per usarlo in una chiave
+    safe_pdl_key = "".join(c if c.isalnum() else "_" for c in str(pdl))
+
+    # Trova l'intervento più recente per il titolo principale
+    latest_activity = activity_group.sort_values(by=col_data, ascending=False).iloc[0] if col_data and not activity_group[col_data].isnull().all() else activity_group.iloc[0]
+
+    descrizione = latest_activity.get(col_desc, 'N/D') if col_desc else 'Descrizione non trovata'
+    stato_pdl = latest_activity.get(col_stato_pdl, 'N/D') if col_stato_pdl else 'Stato non trovato'
+
+    # Livello 1: Expander principale
+    expander_title_l1 = f"{pdl} - {descrizione} - [Stato: {stato_pdl}]"
+    with container.expander(expander_title_l1):
+
+        # Aggiungi la visualizzazione dei giorni programmati
+        col_giorni = _find_column(activity_group, ['giorni', 'programmati'])
+        if col_giorni:
+            giorni_programmati = latest_activity.get(col_giorni, 'N/D')
+            if giorni_programmati not in ['N/D', 'Non Programmato']:
+                 st.markdown(f"**Programmato per:** 🗓️ `{giorni_programmati}`")
+                 st.divider()
+
+        # Ordina gli interventi per data, dal più recente al più vecchio
+        sorted_interventions = activity_group.sort_values(by=col_data, ascending=False) if col_data else activity_group
+
+        for index, intervento in sorted_interventions.iterrows():
+            # Livello 2: Expander per ogni intervento
+            data_controllo = intervento.get(col_data) if col_data else None
+            data_str = data_controllo.strftime('%d/%m/%Y') if pd.notna(data_controllo) else "Data non disponibile"
+
+            personale = intervento.get(col_personale, 'N/D') if col_personale else "Personale non trovato"
+
+            expander_title_l2 = f"Dettaglio intervento del {data_str} - TECNICO: {personale}"
+
+            l2_key = f"{key_prefix}_{safe_pdl_key}_intervento_{index}"
+
+            with st.expander(expander_title_l2, expanded=False):
+                # Livello 3: Contenuto dell'intervento (il report)
+                report = intervento.get(col_report, 'Nessun report per questo intervento.') if col_report else "Colonna report non trovata"
+                st.text_area(
+                    "Report:",
+                    value=str(report),
+                    disabled=True,
+                    height=150,
+                    key=f"{key_prefix}_{safe_pdl_key}_report_{index}"
+                )

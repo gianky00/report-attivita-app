@@ -38,7 +38,8 @@ def carica_gestionale():
             # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
             if 'Tipo' not in data['turni'].columns:
                 data['turni']['Tipo'] = 'Assistenza'
-            data['turni']['Tipo'].fillna('Assistenza', inplace=True)
+            # Corretto per rimuovere il FutureWarning di pandas
+            data['turni']['Tipo'] = data['turni']['Tipo'].fillna('Assistenza')
 
             required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
 
@@ -99,109 +100,16 @@ def salva_gestionale_async(data):
     thread.start()
     return True # Ritorna immediatamente
 
-def crea_storico_da_programmazione():
-    """
-    Crea uno storico "fittizio" basato sui dati del file delle attività programmate.
-    Questo serve per popolare l'archivio con interventi passati non registrati tramite l'app.
-    """
-    excel_path = get_attivita_programmate_path()
-    all_backfill_data = []
-
-    sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-    backfill_cols = ['PdL', 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', "DESCRIZIONE\nATTIVITA'"]
-
-    for sheet_name in sheets_to_read:
-        try:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            df.columns = [str(col).strip() for col in df.columns]
-
-            if not all(col in df.columns for col in backfill_cols):
-                continue
-
-            df_filtered = df[backfill_cols].copy()
-            df_filtered.dropna(subset=['PdL', 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO'], inplace=True)
-            if df_filtered.empty:
-                continue
-
-            all_backfill_data.append(df_filtered)
-        except Exception:
-            continue # Ignora fogli mancanti o con errori di formato
-
-    if not all_backfill_data:
-        return pd.DataFrame()
-
-    df_backfill = pd.concat(all_backfill_data, ignore_index=True)
-
-    # Rinomina le colonne per corrispondere allo schema dell'archivio
-    df_backfill.rename(columns={
-        "DATA\nCONTROLLO": "Data_Riferimento",
-        "PERSONALE\nIMPIEGATO": "Tecnico",
-        "DESCRIZIONE\nATTIVITA'": "Report"
-    }, inplace=True)
-
-    # Aggiungi colonne mancanti con valori di default
-    df_backfill['Data_Compilazione'] = pd.to_datetime(df_backfill['Data_Riferimento'], errors='coerce')
-    df_backfill['Stato'] = 'Storico Importato'
-    df_backfill['Descrizione'] = "Intervento importato da storico programmazione"
-
-    return df_backfill
-
-
 def carica_archivio_completo():
-    """
-    Carica l'archivio storico completo, unendo i report reali con lo storico
-    importato dal file di programmazione per completezza.
-    """
-    storico_path = config.PATH_STORICO_DB
-    df_reale = pd.DataFrame()
-    df_backfill = pd.DataFrame()
-
-    # 1. Carica l'archivio reale dei report compilati
     try:
-        sheet_name = 'Database_Attivita'
-        df_reale = pd.read_excel(storico_path, sheet_name=sheet_name)
-        df_reale['Data_Riferimento_dt'] = pd.to_datetime(df_reale['Data_Riferimento'], errors='coerce')
-    except FileNotFoundError:
-        st.warning(f"File archivio '{os.path.basename(storico_path)}' non trovato. Verrà usato solo lo storico da programmazione.")
-    except Exception as e:
-        st.error(f"Errore imprevisto durante il caricamento del file di archivio: {e}")
-        return pd.DataFrame() # Errore bloccante
-
-    # 2. Crea lo storico dal file di programmazione
-    df_backfill = crea_storico_da_programmazione()
-    if not df_backfill.empty:
-        df_backfill['Data_Riferimento_dt'] = pd.to_datetime(df_backfill['Data_Riferimento'], errors='coerce')
-
-    # 3. Unisci i due DataFrame, dando priorità ai dati reali
-    if not df_reale.empty and not df_backfill.empty:
-        # Crea una chiave univoca (PdL + Data) per la de-duplicazione
-        df_reale['join_key'] = df_reale['PdL'].astype(str) + '_' + df_reale['Data_Riferimento_dt'].dt.strftime('%Y-%m-%d')
-        df_backfill['join_key'] = df_backfill['PdL'].astype(str) + '_' + df_backfill['Data_Riferimento_dt'].dt.strftime('%Y-%m-%d')
-
-        # Filtra i dati di backfill per mantenere solo quelli non presenti nei dati reali
-        df_backfill_filtered = df_backfill[~df_backfill['join_key'].isin(df_reale['join_key'])]
-
-        # Concatena e rimuovi la colonna chiave
-        df_finale = pd.concat([df_reale, df_backfill_filtered], ignore_index=True)
-        df_finale.drop(columns=['join_key'], inplace=True, errors='ignore')
-
-    elif not df_reale.empty:
-        df_finale = df_reale
-    elif not df_backfill.empty:
-        df_finale = df_backfill
-    else:
+        df = pd.read_excel(config.PATH_STORICO_DB)
+        df['Data_Riferimento_dt'] = pd.to_datetime(df['Data_Riferimento'], errors='coerce', dayfirst=True)
+        df.dropna(subset=['Data_Riferimento_dt'], inplace=True)
+        df.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
+        df.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
+        return df
+    except Exception:
         return pd.DataFrame()
-
-    # 4. Pulisci e ordina il DataFrame finale
-    df_finale['Data_Riferimento_dt'] = pd.to_datetime(df_finale['Data_Riferimento'], errors='coerce')
-    # Assicura che la colonna di compilazione sia di tipo datetime per un ordinamento corretto
-    df_finale['Data_Compilazione'] = pd.to_datetime(df_finale['Data_Compilazione'], errors='coerce')
-    df_finale.dropna(subset=['Data_Riferimento_dt'], inplace=True)
-    df_finale.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
-    # Rimuovi eventuali duplicati residui (anche se la logica di join dovrebbe averli già gestiti)
-    df_finale.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
-
-    return df_finale
 
 def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
     try:
@@ -278,7 +186,10 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         pdls_utente = set()
         for _, riga in df_range.iterrows():
             nome_in_giornaliera = str(riga[5]).strip().lower()
-            if utente_completo.lower() in nome_in_giornaliera:
+            # La logica di login usa il cognome, ma qui abbiamo il nome completo.
+            # Un controllo più robusto verifica che il nome nella giornaliera (es. "Allegretti" o "Allegretti G.")
+            # sia contenuto nel nome completo dell'utente loggato (es. "Giancarlo Allegretti").
+            if nome_in_giornaliera and nome_in_giornaliera in utente_completo.lower():
                 pdl_text = str(riga[9])
                 if not pd.isna(pdl_text):
                     pdls_found = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
@@ -336,9 +247,13 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
                 if nome_membro not in attivita_collezionate[activity_key]['team_members']:
                     ruolo_membro = "Sconosciuto"
                     if df_contatti is not None and not df_contatti.empty:
-                        matching_user = df_contatti[df_contatti['Nome Cognome'].str.strip().str.lower() == nome_membro.lower()]
-                        if not matching_user.empty:
-                            ruolo_membro = matching_user.iloc[0].get('Ruolo', 'Tecnico')
+                        # Logica di matching flessibile
+                        nome_membro_clean = nome_membro.lower().strip()
+                        for _, contact_row in df_contatti.iterrows():
+                            contact_name_clean = str(contact_row['Nome Cognome']).lower().strip()
+                            if nome_membro_clean in contact_name_clean:
+                                ruolo_membro = contact_row.get('Ruolo', 'Tecnico')
+                                break # Trovato, esci dal loop
 
                     attivita_collezionate[activity_key]['team_members'][nome_membro] = {
                         'ruolo': ruolo_membro,
@@ -369,13 +284,23 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         st.error(f"Errore lettura giornaliera: {e}")
         return []
 
-@st.cache_data(ttl=600)
-def carica_dati_attivita_programmate():
-    excel_path = get_attivita_programmate_path()
-    storico_path = get_storico_db_path()
+def clean_column_names(df):
+    """Pulisce i nomi delle colonne di un DataFrame, rimuovendo spazi e newline."""
+    cols = df.columns
+    new_cols = [str(col).strip().replace('\n', ' ').replace('\r', '') for col in cols]
+    df.columns = new_cols
+    return df
 
-    if not os.path.exists(excel_path):
-        st.error(f"File attività programmate non trovato al percorso: {excel_path}")
+@st.cache_data(ttl=300)
+def carica_dati_attivita_programmate():
+    """
+    Carica, aggrega e processa i dati delle attività programmate dal file Excel.
+    Questa è la funzione centrale per ottenere i dati delle attività per l'intera app.
+    """
+    excel_path = get_attivita_programmate_path()
+
+    if not excel_path or not os.path.exists(excel_path):
+        st.error(f"File attività programmate non trovato o il percorso non è configurato.")
         return pd.DataFrame()
 
     sheets_to_read = {
@@ -386,96 +311,79 @@ def carica_dati_attivita_programmate():
         'BLENDING': {'tcl': 'Ivan Messina', 'area': 'BLENDING'},
     }
     
-    all_data = []
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-    
-    # Refactoring: Chiama la funzione centralizzata per caricare lo storico, garantendo coerenza.
-    df_storico_full = carica_archivio_completo()
-    if not df_storico_full.empty:
-        latest_status = df_storico_full.sort_values('Data_Compilazione').drop_duplicates('PdL', keep='last')
-        latest_status = latest_status.set_index('PdL')['Stato'].to_dict()
-    else:
-        latest_status = {}
+    all_data_df = []
 
-    status_map = {
-        # Mappatura esistente
-        'DA EMETTERE': 'Pianificato',
-        'CHIUSO': 'Completato',
-        'ANNULLATO': 'Annullato',
-        # Nuova mappatura richiesta dall'utente
-        'INTERROTTO': 'Sospeso',
-        'RICHIESTO': 'Da processare',
-        'EMESSO': 'Processato',      # Sostituisce 'In Corso'
-        'IN CORSO': 'Aperto',
-        'DA CHIUDERE': 'Terminata'   # Già presente, ma confermato
-    }
-
-    for sheet_name, metadata in sheets_to_read.items():
-        try:
-            # Correzione Definitiva: L'header è alla 3ª riga (indice 2), non alla 4ª.
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            
-            # Pulisce i nomi delle colonne letti da Pandas per rimuovere spazi e gestire i newline.
-            df.columns = [str(col).strip() for col in df.columns]
-
-            # Le colonne richieste ora dovrebbero corrispondere a quelle lette da Pandas.
-            # Manteniamo la logica di validazione per sicurezza.
-            # Correzione finale: I giorni della settimana sono in MAIUSCOLO.
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
-            if not all(col in df.columns for col in required_cols):
-                # Aggiungiamo un log per il debug se le colonne non corrispondono (ora commentato).
-                # st.warning(f"Foglio '{sheet_name}' saltato: colonne mancanti. Trovate: {list(df.columns)}. Richieste: {required_cols}")
-                continue
-
-            df = df.dropna(subset=['PdL'])
-            if df.empty:
-                continue
-
-            df_filtered = df[required_cols].copy()
-            # Rinomina le colonne per coerenza interna con il resto dell'applicazione.
-            df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
-            
-            df_filtered['PdL'] = df_filtered['PdL'].astype(str)
-            df_filtered['TCL'] = metadata['tcl']
-            df_filtered['Area'] = metadata['area']
-
-            giorni_programmati = df_filtered[giorni_settimana].apply(
-                lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']),
-                axis=1
-            )
-            df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
-
-            def get_status(row):
-                pdl_str = str(row['PdL']).strip()
-                if pdl_str in latest_status:
-                    return latest_status[pdl_str]
-                if pd.notna(row['Stato_OdL']):
-                    return status_map.get(str(row['Stato_OdL']).strip().upper(), 'Non Definito')
-                return 'Pianificato'
-
-            df_filtered['Stato'] = df_filtered.apply(get_status, axis=1)
-            
-            df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
-
-            all_data.append(df_filtered)
-        except FileNotFoundError:
-            st.error(f"Impossibile trovare il file delle attività programmate nel percorso specificato: {excel_path}")
-            # Se il file non viene trovato, è inutile continuare a ciclare.
-            break
-        except PermissionError:
-            st.error(f"Errore di permessi. Impossibile accedere al file: {excel_path}. Verificare i permessi di lettura.")
-            # Se c'è un errore di permessi, è inutile continuare.
-            break
-        except Exception as e:
-            # Stampa un avviso per fogli specifici che potrebbero avere problemi, ma continua il ciclo.
-            st.warning(f"Si è verificato un errore durante l'elaborazione del foglio '{sheet_name}' dal file {os.path.basename(excel_path)}: {e}")
-            continue
-
-    if not all_data:
-        # Se dopo tutti i tentativi non ci sono dati, informa l'utente.
-        # Questo messaggio apparirà solo se il file esiste ma è vuoto o non contiene fogli validi.
-        st.warning("Non sono stati trovati dati validi sulle attività programmate. Verificare che il file Excel non sia vuoto e che i fogli ('A1', 'A2', ecc.) siano formattati correttamente.")
+    try:
+        with open(excel_path, 'rb') as f:
+            xls = pd.ExcelFile(f)
+            for sheet_name, metadata in sheets_to_read.items():
+                if sheet_name in xls.sheet_names:
+                    try:
+                        df = pd.read_excel(xls, sheet_name=sheet_name, header=2)
+                        df = clean_column_names(df)
+                        df['Area'] = metadata['area']
+                        df['TCL'] = metadata['tcl']
+                        all_data_df.append(df)
+                    except Exception as e:
+                        st.warning(f"Impossibile leggere il foglio '{sheet_name}': {e}")
+                else:
+                    st.warning(f"Il foglio '{sheet_name}' non è stato trovato nel file Excel.")
+    except FileNotFoundError:
+        st.error(f"File non trovato al percorso: {excel_path}")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Errore durante l'apertura o la lettura del file Excel: {e}")
         return pd.DataFrame()
 
-    final_df = pd.concat(all_data, ignore_index=True)
+
+    if not all_data_df:
+        st.warning("Nessun dato caricato. Controllare il file Excel e i nomi dei fogli.")
+        return pd.DataFrame()
+
+    final_df = pd.concat(all_data_df, ignore_index=True)
+
+    # Rimuovi le righe dove 'PdL' è NaN o vuoto prima di procedere
+    final_df.dropna(subset=['PdL'], inplace=True)
+    # Rimuovi righe completamente vuote
+    final_df.dropna(how='all', inplace=True)
+
+
+    # --- Mappatura dello Stato ---
+    status_map = {
+        'INTERROTTO': 'Sospeso',
+        'RICHIESTO': 'Da processare',
+        'EMESSO': 'Processato',
+        'IN CORSO': 'Aperto',
+        'DA CHIUDERE': 'Terminata'
+    }
+
+    # Trova dinamicamente la colonna di stato
+    source_status_col = next((col for col in final_df.columns if 'stato' in col.lower() and 'pdl' in col.lower()), None)
+
+    if source_status_col:
+        # Assicura che la colonna sia di tipo stringa prima di usare .str
+        final_df['Stato'] = final_df[source_status_col].astype(str).str.upper().map(status_map).fillna('Non Definito')
+    else:
+        st.warning("La colonna 'STATO PdL' non è stata trovata. Lo stato non può essere calcolato.")
+        final_df['Stato'] = 'Non Definito'
+
+    # Converte la colonna data per poterla ordinare
+    date_col = next((col for col in final_df.columns if 'data' in col.lower() and 'controllo' in col.lower()), None)
+    if date_col:
+        final_df[date_col] = pd.to_datetime(final_df[date_col], errors='coerce')
+
+    # --- Creazione colonna Giorni Programmati ---
+    day_columns = [col for col in final_df.columns if col.strip().lower() in ['lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì']]
+
+    def get_scheduled_days(row):
+        days = [day.strip().capitalize() for day in day_columns if pd.notna(row[day]) and str(row[day]).strip().lower() == 'x']
+        return ', '.join(days) if days else 'Non Programmato'
+
+    if day_columns:
+        final_df['Giorni Programmati'] = final_df.apply(get_scheduled_days, axis=1)
+    else:
+        st.warning("Nessuna colonna per i giorni della settimana trovata. La programmazione non può essere visualizzata.")
+        final_df['Giorni Programmati'] = 'N/D'
+
+
     return final_df
