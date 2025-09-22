@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 import streamlit.components.v1 as components
 
 def render_status_indicator():
@@ -46,55 +45,65 @@ def render_status_indicator():
 
     return online_status or 'online'
 
+def _find_column(df, keywords):
+    """Helper function to find a column in a dataframe that contains all keywords."""
+    for col in df.columns:
+        if all(keyword.lower() in col.lower() for keyword in keywords):
+            return col
+    return None
+
 def display_expandable_activity_card(pdl, activity_group, key_prefix, container=st):
     """
     Mostra una "card" per un gruppo di attività con un design a espansione nidificata.
-
-    Args:
-        pdl (str): L'identificativo del PdL.
-        activity_group (pd.DataFrame): DataFrame filtrato per un unico PdL.
-        key_prefix (str): Un prefisso unico per questa sezione per evitare key duplicati.
-        container: Il container Streamlit in cui renderizzare la card.
+    Questa versione è robusta e trova i nomi delle colonne dinamicamente.
     """
     if activity_group.empty:
         return
+
+    # Importa pandas qui dentro per rendere il componente autocontenuto
+    import pandas as pd
+
+    # Trova dinamicamente i nomi delle colonne
+    col_desc = _find_column(activity_group, ['descrizione', 'attivita'])
+    col_stato_pdl = _find_column(activity_group, ['stato', 'pdl'])
+    col_data = _find_column(activity_group, ['data', 'controllo'])
+    col_personale = _find_column(activity_group, ['personale', 'impiegato'])
+    col_report = _find_column(activity_group, ['stato', 'attivita'])
 
     # Pulisce il PdL per usarlo in una chiave
     safe_pdl_key = "".join(c if c.isalnum() else "_" for c in str(pdl))
 
     # Trova l'intervento più recente per il titolo principale
-    latest_activity = activity_group.sort_values(by='DATA CONTROLLO', ascending=False).iloc[0]
+    latest_activity = activity_group.sort_values(by=col_data, ascending=False).iloc[0] if col_data else activity_group.iloc[0]
 
-    # Prepara i campi per il titolo, gestendo valori mancanti
-    descrizione = latest_activity.get('DESCRIZIONE ATTIVITA', 'N/D')
-    stato_pdl = latest_activity.get('STATO PdL', 'N/D')
+    descrizione = latest_activity.get(col_desc, 'N/D') if col_desc else 'Descrizione non trovata'
+    stato_pdl = latest_activity.get(col_stato_pdl, 'N/D') if col_stato_pdl else 'Stato non trovato'
 
     # Livello 1: Expander principale
     expander_title_l1 = f"{pdl} - {descrizione} - [Stato: {stato_pdl}]"
     with container.expander(expander_title_l1):
 
         # Ordina gli interventi per data, dal più recente al più vecchio
-        sorted_interventions = activity_group.sort_values(by='DATA CONTROLLO', ascending=False)
+        sorted_interventions = activity_group.sort_values(by=col_data, ascending=False) if col_data else activity_group
 
         for index, intervento in sorted_interventions.iterrows():
             # Livello 2: Expander per ogni intervento
-            data_controllo = intervento.get('DATA CONTROLLO')
+            data_controllo = intervento.get(col_data) if col_data else None
             data_str = data_controllo.strftime('%d/%m/%Y') if pd.notna(data_controllo) else "Data non disponibile"
 
-            personale = intervento.get('PERSONALE IMPEGATO', 'N/D')
+            personale = intervento.get(col_personale, 'N/D') if col_personale else "Personale non trovato"
 
             expander_title_l2 = f"Dettaglio intervento del {data_str} - TECNICO: {personale}"
 
-            # Crea una chiave unica per il secondo livello di expander
             l2_key = f"{key_prefix}_{safe_pdl_key}_intervento_{index}"
 
             with st.expander(expander_title_l2, expanded=False):
                 # Livello 3: Contenuto dell'intervento (il report)
-                report = intervento.get('STATO ATTIVITA', 'Nessun report per questo intervento.')
+                report = intervento.get(col_report, 'Nessun report per questo intervento.') if col_report else "Colonna report non trovata"
                 st.text_area(
                     "Report:",
                     value=report,
                     disabled=True,
                     height=150,
-                    key=f"{key_prefix}_{safe_pdl_key}_report_{index}" # Chiave unica per il text_area
+                    key=f"{key_prefix}_{safe_pdl_key}_report_{index}"
                 )

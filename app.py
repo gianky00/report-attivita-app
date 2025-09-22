@@ -30,9 +30,8 @@ from modules.data_manager import (
     carica_archivio_completo,
     trova_attivita,
     scrivi_o_aggiorna_risposta,
-    get_processed_activities
+    carica_dati_attivita_programmate
 )
-from ui_components import display_expandable_activity_card
 from modules.shift_management import (
     sync_oncall_shifts,
     log_shift_change,
@@ -269,13 +268,6 @@ def render_notification_center(notifications_df, gestionale_data):
                             salva_gestionale_async(gestionale_data)
                             st.rerun()
                 st.divider()
-
-def find_column_by_keywords(df, keywords):
-    """Trova il nome di una colonna che contiene tutte le keyword specificate."""
-    for col in df.columns:
-        if all(keyword.lower() in col.lower() for keyword in keywords):
-            return col
-    return None
 
 def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google):
     task = st.session_state.debriefing_task
@@ -1270,122 +1262,168 @@ def delete_session():
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
 def render_situazione_impianti_tab():
     st.header("📊 Situazione Generale Impianti")
-    st.info("Cerca e filtra tutte le attività registrate nel sistema.")
 
-    df = get_processed_activities()
+    # Carica i dati aggiornati
+    df = carica_dati_attivita_programmate()
+
     if df.empty:
-        st.warning("Dati attività non disponibili.")
+        st.warning("Non sono stati trovati dati sulle attività programmate. Verificare il file Excel.")
+        st.info("Questa sezione mostra lo stato di avanzamento delle attività (es. SOSPESO, COMPLETATO) raggruppate per Area e TCL.")
         return
 
-    # --- Filtri ---
-    with st.expander("Applica Filtri", expanded=True):
-        with st.form("situazione_filters"):
-            col1, col2 = st.columns(2)
-            with col1:
-                aree_disponibili = sorted(df['Area'].unique())
-                area_filter = st.multiselect("Filtra per Area", options=aree_disponibili)
+    with st.form("situazione_filters_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            selected_tcl = st.multiselect(
+                "Filtra per TCL",
+                options=sorted(df['TCL'].unique()),
+                default=sorted(df['TCL'].unique())
+            )
+        with col2:
+            selected_area = st.multiselect(
+                "Filtra per Area",
+                options=sorted(df['Area'].unique()),
+                default=sorted(df['Area'].unique())
+            )
+        with col3:
+            selected_stato = st.multiselect(
+                "Filtra per Stato",
+                options=sorted(df['Stato'].unique()),
+                default=sorted(df['Stato'].unique())
+            )
 
-                # Assicura che la colonna Impianto esista prima di creare il filtro
-                impianto_filter = ""
-                if 'IMP.' in df.columns:
-                    impianto_filter = st.text_input("Filtra per Impianto (anche parziale)...")
-                else:
-                    st.caption("Colonna 'IMP.' non trovata.")
+        submitted = st.form_submit_button("Applica Filtri")
 
-            with col2:
-                tcl_disponibili = sorted(df['TCL'].unique())
-                tcl_filter = st.multiselect("Filtra per TCL", options=tcl_disponibili)
-                pdl_filter = st.text_input("Filtra per PdL (anche parziale)...")
-
-            submitted = st.form_submit_button("Applica Filtri")
-
-    # Applica filtri solo se il form è stato inviato
-    if submitted:
-        filtered_df = df.copy()
-        if area_filter:
-            filtered_df = filtered_df[filtered_df['Area'].isin(area_filter)]
-        if tcl_filter:
-            filtered_df = filtered_df[filtered_df['TCL'].isin(tcl_filter)]
-        if impianto_filter and 'IMP.' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['IMP.'].astype(str).str.contains(impianto_filter, case=False, na=False)]
-        if pdl_filter:
-            filtered_df = filtered_df[filtered_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
-    else:
-        # Se il form non è stato inviato, non mostrare risultati
+    if not submitted:
         st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
         return
 
-    st.divider()
-
-    if filtered_df.empty:
-        st.warning("Nessuna attività corrisponde ai filtri selezionati.")
+    if not selected_tcl or not selected_area or not selected_stato:
+        st.warning("Seleziona almeno un valore per ogni filtro.")
         return
 
-    st.info(f"Trovate {len(filtered_df)} voci di attività corrispondenti ai filtri.")
-
-    # Raggruppa per PdL e mostra le card
-    grouped_by_pdl = filtered_df.groupby('PdL')
-    for pdl, group in grouped_by_pdl:
-        display_expandable_activity_card(pdl, group, "sit", container=st)
-
-
-def render_programmazione_tab():
-    st.header("🗓️ Programmazione Attività Settimanale")
-    st.info("Mostra le attività programmate per la settimana corrente, con opzioni di filtro.")
-
-    df = get_processed_activities()
-    if df.empty:
-        st.warning("Dati attività non disponibili.")
-        return
-
-    day_cols = ['LUN', 'MAR', 'MER', 'GIO', 'VEN']
-    # Filtra per attività che hanno almeno una 'X' in un giorno della settimana
-    df_settimana = df[df[day_cols].apply(lambda r: r.str.strip().str.upper().eq('X').any(), axis=1)].copy()
-
-    if df_settimana.empty:
-        st.info("Nessuna attività risulta programmata per questa settimana.")
-        return
-
-    # --- Filtri ---
-    with st.expander("Applica Filtri", expanded=True):
-        with st.form("programmazione_filters"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                aree_disponibili = sorted(df_settimana['Area'].unique())
-                area_filter = st.multiselect("Filtra per Area", options=aree_disponibili)
-            with col2:
-                tcl_disponibili = sorted(df_settimana['TCL'].unique())
-                tcl_filter = st.multiselect("Filtra per TCL", options=tcl_disponibili)
-            with col3:
-                day_map_inv = { 'Lunedì': 'LUN', 'Martedì': 'MAR', 'Mercoledì': 'MER', 'Giovedì': 'GIO', 'Venerdì': 'VEN'}
-                day_filter = st.multiselect("Filtra per Giorno", options=list(day_map_inv.keys()))
-
-            submitted = st.form_submit_button("Applica Filtri")
-
-    # Applica filtri se sono stati selezionati
-    filtered_df = df_settimana
-    if submitted:
-        if area_filter:
-            filtered_df = filtered_df[filtered_df['Area'].isin(area_filter)]
-        if tcl_filter:
-            filtered_df = filtered_df[filtered_df['TCL'].isin(tcl_filter)]
-        if day_filter:
-            selected_day_cols = [day_map_inv[d] for d in day_filter]
-            # Mostra le righe dove almeno una delle colonne dei giorni selezionati ha una 'X'
-            filtered_df = filtered_df[filtered_df[selected_day_cols].apply(lambda r: r.str.strip().str.upper().eq('X').any(), axis=1)]
-
-    st.divider()
+    # Applica i filtri
+    filtered_df = df[
+        df['TCL'].isin(selected_tcl) &
+        df['Area'].isin(selected_area) &
+        df['Stato'].isin(selected_stato)
+    ].copy()
 
     if filtered_df.empty:
         st.info("Nessuna attività corrisponde ai filtri selezionati.")
         return
 
-    st.info(f"Visualizzazione di {len(filtered_df)} attività.")
+    # --- Visualizzazione Dati ---
+    st.subheader("Riepilogo Attività per Stato")
 
-    # Raggruppa per PdL e mostra le card
-    grouped_by_pdl = filtered_df.groupby('PdL')
-    for pdl, group in grouped_by_pdl:
-        display_expandable_activity_card(pdl, group, "prog", container=st)
+    # Calcola le metriche
+    total_activities = len(filtered_df)
+    status_counts = filtered_df['Stato'].value_counts()
+
+    # Se la colonna STATO non è ancora stata definita, mostra un avviso
+    if "Non Definito" in status_counts.index:
+        st.info("NOTA: La colonna 'Stato' non è stata ancora configurata. I dati seguenti sono aggregati su un valore di default.")
+
+    st.metric("Totale Attività Filtrate", total_activities)
+
+    st.markdown("##### Conteggio per Stato")
+    st.dataframe(status_counts)
+
+    # Grafico a barre
+    if not (status_counts.index == "Non Definito").all():
+        st.bar_chart(status_counts)
+
+    st.subheader("Dettaglio Attività Filtrate")
+    for index, row in filtered_df.iterrows():
+        with st.container(border=True):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"#### PdL `{row['PdL']}`")
+                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
+            with col2:
+                st.markdown(f"**Stato Attuale**")
+                st.info(f"_{row['Stato']}_")
+
+            if pd.notna(row['Descrizione']):
+                st.caption(f"Descrizione: {row['Descrizione']}")
+
+            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
+
+            if row['Storico']:
+                visualizza_storico_organizzato(row['Storico'], row['PdL'])
+
+
+def render_programmazione_tab():
+    st.header("🗓️ Programmazione Attività Settimanale")
+
+    df = carica_dati_attivita_programmate()
+
+    if df.empty:
+        st.warning("Non sono stati trovati dati sulle attività programmate.")
+        return
+
+    # Filtra per mostrare solo le attività effettivamente programmate
+    scheduled_df = df[df['GiorniProgrammati'] != 'Non Programmato'].copy()
+
+    if scheduled_df.empty:
+        st.info("Nessuna attività risulta programmata per la settimana corrente nel file Excel.")
+        return
+
+    st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
+
+    with st.form("programmazione_filters_form"):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            pdl_filter = st.text_input("Filtra per PdL...")
+        with col2:
+            area_filter = st.multiselect("Filtra per Area", options=sorted(scheduled_df['Area'].unique()))
+        with col3:
+            tcl_filter = st.multiselect("Filtra per TCL", options=sorted(scheduled_df['TCL'].unique()))
+        with col4:
+            day_filter = st.multiselect("Filtra per Giorno", options=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"])
+
+        submitted = st.form_submit_button("Applica Filtri")
+
+    if not submitted:
+        st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
+        return
+
+    # Applica filtri
+    if pdl_filter:
+        scheduled_df = scheduled_df[scheduled_df['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
+    if area_filter:
+        scheduled_df = scheduled_df[scheduled_df['Area'].isin(area_filter)]
+    if tcl_filter:
+        scheduled_df = scheduled_df[scheduled_df['TCL'].isin(tcl_filter)]
+    if day_filter:
+        day_regex = '|'.join(day_filter)
+        scheduled_df = scheduled_df[scheduled_df['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
+
+    st.divider()
+
+    if scheduled_df.empty:
+        st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
+        return
+
+    # Layout a card, mobile-friendly (reso coerente con la tab Situazione Impianti)
+    for index, row in scheduled_df.iterrows():
+        with st.container(border=True):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"#### PdL `{row['PdL']}`")
+                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
+            with col2:
+                st.markdown(f"**Stato Attuale**")
+                st.info(f"_{row['Stato']}_")
+
+            if pd.notna(row['Descrizione']):
+                st.caption(f"Descrizione: {row['Descrizione']}")
+
+            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
+
+            # Mostra storico interventi
+            if row['Storico']:
+                visualizza_storico_organizzato(row['Storico'], row['PdL'])
 
 
 def main_app(nome_utente_autenticato, ruolo):
@@ -1451,74 +1489,21 @@ def main_app(nome_utente_autenticato, ruolo):
         tabs = st.tabs(lista_tab)
         
         with tabs[0]:
-            st.header(f"Attività di Oggi ({oggi.strftime('%d/%m/%Y')})")
-            st.info("Le tue attività programmate per oggi. La vecchia logica di compilazione report è stata disattivata in questa versione.")
-
-            full_df = get_processed_activities()
-            if not full_df.empty:
-                # Filtra per giorno corrente
-                day_map = {0: 'LUN', 1: 'MAR', 2: 'MER', 3: 'GIO', 4: 'VEN'}
-                today_col = day_map.get(oggi.weekday())
-
-                if today_col and today_col in full_df.columns:
-                    today_df = full_df[full_df[today_col].astype(str).str.strip().str.upper() == 'X'].copy()
-
-                    # Trova dinamicamente la colonna del personale
-                    personale_col = find_column_by_keywords(today_df, ['personale', 'impiegato'])
-
-                    if personale_col:
-                        # Filtra per utente
-                        today_df = today_df[today_df[personale_col].astype(str).str.contains(nome_utente_autenticato.split()[0], case=False, na=False)]
-                    else:
-                        st.warning("Attenzione: Impossibile trovare la colonna del personale per filtrare le tue attività.")
-
-                    if not today_df.empty:
-                        st.success(f"Trovate {len(today_df)} attività per te oggi.")
-                        grouped_by_pdl = today_df.groupby('PdL')
-                        for pdl, group in grouped_by_pdl:
-                            display_expandable_activity_card(pdl, group, "today", container=st)
-                    else:
-                        st.info("Nessuna attività specifica trovata per te per oggi.")
-                else:
-                    st.info("Oggi è un giorno non lavorativo o la colonna del giorno non è presente.")
-            else:
-                st.warning("Impossibile caricare i dati delle attività.")
+            st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
+            lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+            disegna_sezione_attivita(lista_attivita, "today", ruolo)
 
         with tabs[1]:
-            st.header(f"Recupero Attività del Giorno Precedente ({giorno_precedente.strftime('%d/%m/%Y')})")
-            st.info("Le tue attività non completate del giorno lavorativo precedente.")
+            st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
+            lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
+            archivio_df = carica_archivio_completo()
+            pdl_compilati_ieri = set()
+            if not archivio_df.empty:
+                report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
+                pdl_compilati_ieri = set(report_compilati['PdL'])
 
-            full_df = get_processed_activities()
-            if not full_df.empty:
-                day_map = {0: 'LUN', 1: 'MAR', 2: 'MER', 3: 'GIO', 4: 'VEN'}
-                prev_day_col = day_map.get(giorno_precedente.weekday())
-
-                if prev_day_col and prev_day_col in full_df.columns:
-                    prev_day_df = full_df[full_df[prev_day_col].astype(str).str.strip().str.upper() == 'X'].copy()
-
-                    # Trova dinamicamente la colonna del personale
-                    personale_col = find_column_by_keywords(prev_day_df, ['personale', 'impiegato'])
-
-                    if personale_col:
-                        # Filtra per utente
-                        prev_day_df = prev_day_df[prev_day_df[personale_col].astype(str).str.contains(nome_utente_autenticato.split()[0], case=False, na=False)]
-                    else:
-                        st.warning("Attenzione: Impossibile trovare la colonna del personale per filtrare le tue attività.")
-
-                    # Filtra per stato non completato
-                    prev_day_df = prev_day_df[~prev_day_df['Stato'].isin(['Terminata'])]
-
-                    if not prev_day_df.empty:
-                        st.warning(f"Trovate {len(prev_day_df)} attività non completate dal giorno precedente.")
-                        grouped_by_pdl = prev_day_df.groupby('PdL')
-                        for pdl, group in grouped_by_pdl:
-                            display_expandable_activity_card(pdl, group, "yesterday", container=st)
-                    else:
-                        st.success("Tutte le attività del giorno precedente risultano completate. Ottimo lavoro!")
-                else:
-                    st.info("Il giorno precedente non era un giorno lavorativo o la colonna del giorno non è presente.")
-            else:
-                st.warning("Impossibile caricare i dati delle attività.")
+            attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
+            disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
         with tabs[2]:
             render_situazione_impianti_tab()
@@ -1542,8 +1527,10 @@ def main_app(nome_utente_autenticato, ruolo):
                         keyword_filter = st.text_input("Parola chiave in Descrizione o Report...")
                         personale_filter = st.text_input("Filtra per Personale...")
                     with c2:
-                        min_date = df['DATA CONTROLLO'].min().date() if not df['DATA CONTROLLO'].dropna().empty else datetime.date.today()
-                        max_date = df['DATA CONTROLLO'].max().date() if not df['DATA CONTROLLO'].dropna().empty else datetime.date.today()
+                        # Trova dinamicamente la colonna data
+                        col_data = find_column_by_keywords(df, ['data', 'controllo'])
+                        min_date = df[col_data].min().date() if col_data and not df[col_data].dropna().empty else datetime.date.today()
+                        max_date = df[col_data].max().date() if col_data and not df[col_data].dropna().empty else datetime.date.today()
 
                         date_range = st.date_input(
                             "Filtra per Intervallo Date",
@@ -1557,18 +1544,33 @@ def main_app(nome_utente_autenticato, ruolo):
 
             if submitted:
                 filtered_df = df.copy()
+
+                # Applica filtro keyword
                 if keyword_filter:
-                    desc_match = filtered_df['DESCRIZIONE ATTIVITA'].astype(str).str.contains(keyword_filter, case=False, na=False)
-                    report_match = filtered_df['STATO ATTIVITA'].astype(str).str.contains(keyword_filter, case=False, na=False)
+                    col_desc = find_column_by_keywords(filtered_df, ['descrizione', 'attivita'])
+                    col_report = find_column_by_keywords(filtered_df, ['stato', 'attivita'])
+
+                    desc_match = pd.Series([False] * len(filtered_df))
+                    report_match = pd.Series([False] * len(filtered_df))
+
+                    if col_desc:
+                        desc_match = filtered_df[col_desc].astype(str).str.contains(keyword_filter, case=False, na=False)
+                    if col_report:
+                        report_match = filtered_df[col_report].astype(str).str.contains(keyword_filter, case=False, na=False)
+
                     filtered_df = filtered_df[desc_match | report_match]
 
+                # Applica filtro personale
                 if personale_filter:
-                    filtered_df = filtered_df[filtered_df['PERSONALE IMPEGATO'].astype(str).str.contains(personale_filter, case=False, na=False)]
+                    col_personale = find_column_by_keywords(filtered_df, ['personale', 'impiegato'])
+                    if col_personale:
+                        filtered_df = filtered_df[filtered_df[col_personale].astype(str).str.contains(personale_filter, case=False, na=False)]
 
-                if len(date_range) == 2:
+                # Applica filtro data
+                if len(date_range) == 2 and col_data:
                     start_date = pd.to_datetime(date_range[0])
                     end_date = pd.to_datetime(date_range[1])
-                    filtered_df = filtered_df[(filtered_df['DATA CONTROLLO'] >= start_date) & (filtered_df['DATA CONTROLLO'] <= end_date)]
+                    filtered_df = filtered_df[(filtered_df[col_data] >= start_date) & (filtered_df[col_data] <= end_date)]
 
                 st.divider()
 

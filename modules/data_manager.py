@@ -283,7 +283,7 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
 def clean_column_names(df):
     """Pulisce i nomi delle colonne di un DataFrame, rimuovendo spazi e newline."""
     cols = df.columns
-    new_cols = [col.strip().replace('\n', ' ') for col in cols]
+    new_cols = [col.strip().replace('\n', ' ').replace('\r', '') for col in cols]
     df.columns = new_cols
     return df
 
@@ -336,16 +336,18 @@ def get_processed_activities():
         'DA CHIUDERE': 'Terminata'
     }
 
-    source_status_col = 'STATO PdL'
-    if source_status_col in final_df.columns:
+    # Trova dinamicamente la colonna di stato
+    source_status_col = next((col for col in final_df.columns if 'STATO' in col and 'PdL' in col), None)
+
+    if source_status_col:
         final_df['Stato'] = final_df[source_status_col].str.upper().map(status_map).fillna('Non Definito')
     else:
-        st.error(f"La colonna '{source_status_col}' non è stata trovata. Lo stato non può essere calcolato.")
+        st.error("La colonna 'STATO PdL' non è stata trovata. Lo stato non può essere calcolato.")
         final_df['Stato'] = 'Errore'
 
     # Converte la colonna data per poterla ordinare
-    date_col = 'DATA CONTROLLO'
-    if date_col in final_df.columns:
+    date_col = next((col for col in final_df.columns if 'DATA' in col and 'CONTROLLO' in col), None)
+    if date_col:
         final_df[date_col] = pd.to_datetime(final_df[date_col], errors='coerce')
 
     return final_df
