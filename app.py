@@ -1661,45 +1661,52 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     with st.form("form_relazione"):
                         st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
+
+                        # Nuovi campi data e ora
+                        c1, c2, c3 = st.columns(3)
+                        data_intervento = c1.date_input("Data Intervento*", help="Questo campo è obbligatorio.")
+                        ora_inizio = c2.text_input("Ora Inizio", placeholder="HH:MM o 'non ricordo'")
+                        ora_fine = c3.text_input("Ora Fine", placeholder="HH:MM o 'non ricordo'")
+
                         st.session_state.relazione_partner = st.selectbox(
                             "Seleziona Partner (opzionale)",
                             options=["Nessuno"] + sorted(lista_partner),
-                            index=0 # Default a "Nessuno"
+                            index=0
                         )
-                        st.session_state.relazione_testo = st.text_area("Corpo della Relazione", height=300, value=st.session_state.relazione_testo)
+                        st.session_state.relazione_testo = st.text_area("Corpo della Relazione", height=250, value=st.session_state.get('relazione_testo', ''))
 
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            submit_button = st.form_submit_button("🤖 Verifica con IA")
-                        with col2:
-                            # Pulsante per inviare/salvare la relazione (logica da implementare)
-                            # st.form_submit_button("Invia Relazione")
-                            pass
+                        # Pulsanti del form
+                        submit_ai_button = st.form_submit_button("🤖 Correggi con IA")
+                        # submit_save_button = st.form_submit_button("Salva Relazione Finale") # Logica futura
 
-                    if submit_button:
+                    if submit_ai_button:
                         if not st.session_state.relazione_testo.strip():
-                            st.warning("Per favore, scrivi il corpo della relazione prima di chiedere la verifica.")
+                            st.warning("Per favore, scrivi il corpo della relazione prima di chiedere la correzione.")
+                        elif not data_intervento:
+                            st.error("Il campo 'Data Intervento' è obbligatorio.")
                         else:
                             with st.spinner("L'IA sta revisionando la tua relazione..."):
-                                # Carica la base di conoscenza dai file Word
                                 knowledge_base = load_report_knowledge_base()
                                 if not knowledge_base:
                                     st.warning("La base di conoscenza delle relazioni non è stata trovata. La revisione IA potrebbe essere meno accurata.")
 
-                                # Chiama la funzione di revisione IA
                                 result = revisiona_relazione_con_ia(st.session_state.relazione_testo, knowledge_base)
 
                                 if result.get("success"):
                                     st.session_state.relazione_revisionata = result["text"]
-                                    st.success("Relazione revisionata con successo!")
+                                    st.success("Relazione corretta con successo!")
                                 elif "error" in result:
                                     st.error(f"**Errore IA:** {result['error']}")
                                 else:
                                     st.info(result.get("info", "Nessun suggerimento dall'IA."))
 
-                    if st.session_state.relazione_revisionata:
-                        st.subheader("Relazione Revisionata dall'IA")
-                        st.markdown(st.session_state.relazione_revisionata)
+                    if st.session_state.get('relazione_revisionata'):
+                        st.subheader("Testo corretto dall'IA")
+                        st.info(st.session_state.relazione_revisionata)
+                        if st.button("📝 Usa Testo Corretto"):
+                            st.session_state.relazione_testo = st.session_state.relazione_revisionata
+                            st.session_state.relazione_revisionata = "" # Pulisci dopo aver copiato
+                            st.rerun()
 
 
         # Scheda 1: Nuova sezione "Pianificazione e Controllo" con sotto-schede
