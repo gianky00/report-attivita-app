@@ -1620,8 +1620,8 @@ def main_app(nome_utente_autenticato, ruolo):
         # Scheda 0: Attività Assegnate (modificata per aggiungere "Compila Relazione")
         with tabs[0]:
             sub_tab_list = ["Attività di Oggi", "Attività Giorno Precedente"]
-            # Aggiungi la scheda solo se l'utente è un Tecnico
-            if ruolo == "Tecnico":
+            # Aggiungi la scheda solo se l'utente è un Tecnico o Amministratore
+            if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
 
             sub_tabs = st.tabs(sub_tab_list)
@@ -1642,7 +1642,7 @@ def main_app(nome_utente_autenticato, ruolo):
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             # Contenuto per la nuova scheda "Compila Relazione"
-            if ruolo == "Tecnico" and len(sub_tabs) > 2:
+            if ruolo in ["Tecnico", "Amministratore"] and len(sub_tabs) > 2:
                 with sub_tabs[2]:
                     st.header("Compila Relazione di Reperibilità")
 
