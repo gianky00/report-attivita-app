@@ -270,6 +270,13 @@ def render_notification_center(notifications_df, gestionale_data):
                             st.rerun()
                 st.divider()
 
+def find_column_by_keywords(df, keywords):
+    """Trova il nome di una colonna che contiene tutte le keyword specificate."""
+    for col in df.columns:
+        if all(keyword.lower() in col.lower() for keyword in keywords):
+            return col
+    return None
+
 def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google):
     task = st.session_state.debriefing_task
     section_key = task['section_key']
@@ -1443,13 +1450,6 @@ def main_app(nome_utente_autenticato, ruolo):
         
         tabs = st.tabs(lista_tab)
         
-def find_column_by_keywords(df, keywords):
-    """Trova il nome di una colonna che contiene tutte le keyword specificate."""
-    for col in df.columns:
-        if all(keyword.lower() in col.lower() for keyword in keywords):
-            return col
-    return None
-
         with tabs[0]:
             st.header(f"Attività di Oggi ({oggi.strftime('%d/%m/%Y')})")
             st.info("Le tue attività programmate per oggi. La vecchia logica di compilazione report è stata disattivata in questa versione.")
