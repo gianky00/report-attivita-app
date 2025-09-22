@@ -46,64 +46,55 @@ def render_status_indicator():
 
     return online_status or 'online'
 
-def display_activity_card(activity_group, key_prefix, container=st):
+def display_expandable_activity_card(pdl, activity_group, key_prefix, container=st):
     """
-    Mostra una "card" per un gruppo di attività relative a un singolo PdL.
+    Mostra una "card" per un gruppo di attività con un design a espansione nidificata.
 
     Args:
+        pdl (str): L'identificativo del PdL.
         activity_group (pd.DataFrame): DataFrame filtrato per un unico PdL.
         key_prefix (str): Un prefisso unico per questa sezione per evitare key duplicati.
-        container: Il container Streamlit in cui renderizzare la card (es. st o una colonna).
+        container: Il container Streamlit in cui renderizzare la card.
     """
     if activity_group.empty:
         return
 
-    # Ordina per data per trovare l'intervento più recente
-    # Assumiamo che la colonna 'DATA CONTROLLO' esista e sia in formato datetime
-    if 'DATA CONTROLLO' in activity_group.columns:
-        activity_group['DATA CONTROLLO'] = pd.to_datetime(activity_group['DATA CONTROLLO'], errors='coerce')
-        latest_activity = activity_group.sort_values(by='DATA CONTROLLO', ascending=False).iloc[0]
-    else:
-        # Se manca la data, prendi la prima riga come rappresentativa
-        latest_activity = activity_group.iloc[0]
-
-    pdl = latest_activity.get('PdL', 'N/D')
-    descrizione = latest_activity.get('Descrizione', 'Nessuna descrizione')
-
-    # Pulisce il PdL per usarlo in una chiave, rimuovendo caratteri non sicuri
+    # Pulisce il PdL per usarlo in una chiave
     safe_pdl_key = "".join(c if c.isalnum() else "_" for c in str(pdl))
 
-    expander_title = f"**{pdl}** - {descrizione}"
+    # Trova l'intervento più recente per il titolo principale
+    latest_activity = activity_group.sort_values(by='DATA CONTROLLO', ascending=False).iloc[0]
 
-    with container.expander(expander_title):
-        # --- Dettagli Principali (dall'attività più recente) ---
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Stato", latest_activity.get('Stato', 'N/D'))
-        col2.metric("Area", latest_activity.get('Area', 'N/D'))
-        col3.metric("TCL", latest_activity.get('TCL', 'N/D'))
+    # Prepara i campi per il titolo, gestendo valori mancanti
+    descrizione = latest_activity.get('DESCRIZIONE ATTIVITA', 'N/D')
+    stato_pdl = latest_activity.get('STATO PdL', 'N/D')
 
-        st.markdown("---")
+    # Livello 1: Expander principale
+    expander_title_l1 = f"{pdl} - {descrizione} - [Stato: {stato_pdl}]"
+    with container.expander(expander_title_l1):
 
-        # --- Report e Dettagli Tecnici ---
-        st.subheader("Dettagli Ultimo Intervento")
+        # Ordina gli interventi per data, dal più recente al più vecchio
+        sorted_interventions = activity_group.sort_values(by='DATA CONTROLLO', ascending=False)
 
-        data_controllo_str = latest_activity['DATA CONTROLLO'].strftime('%d/%m/%Y') if pd.notna(latest_activity['DATA CONTROLLO']) else 'Non specificata'
-        st.info(f"**Data Controllo:** {data_controllo_str}")
+        for index, intervento in sorted_interventions.iterrows():
+            # Livello 2: Expander per ogni intervento
+            data_controllo = intervento.get('DATA CONTROLLO')
+            data_str = data_controllo.strftime('%d/%m/%Y') if pd.notna(data_controllo) else "Data non disponibile"
 
-        personale = latest_activity.get('PERSONALE IMPEGATO', 'Non specificato')
-        st.info(f"**Personale Impiegato:** {personale}")
+            personale = intervento.get('PERSONALE IMPEGATO', 'N/D')
 
-        report = latest_activity.get('Report', 'Nessun report compilato.')
-        st.text_area("Report Attività", value=report, height=150, disabled=True, key=f"{key_prefix}_report_text_{safe_pdl_key}")
+            expander_title_l2 = f"Dettaglio intervento del {data_str} - TECNICO: {personale}"
 
-        # --- Storico Interventi ---
-        if len(activity_group) > 1:
-            st.markdown("---")
-            st.subheader("Storico Interventi")
+            # Crea una chiave unica per il secondo livello di expander
+            l2_key = f"{key_prefix}_{safe_pdl_key}_intervento_{index}"
 
-            # Mostra gli interventi più vecchi
-            storico_df = activity_group.iloc[1:]
-
-            for _, row in storico_df.iterrows():
-                data_storico_str = row['DATA CONTROLLO'].strftime('%d/%m/%Y') if pd.notna(row['DATA CONTROLLO']) else 'N/D'
-                st.markdown(f"- **{data_storico_str}**: {row.get('Report', 'Nessun report.')[:80]}...")
+            with st.expander(expander_title_l2, expanded=False):
+                # Livello 3: Contenuto dell'intervento (il report)
+                report = intervento.get('STATO ATTIVITA', 'Nessun report per questo intervento.')
+                st.text_area(
+                    "Report:",
+                    value=report,
+                    disabled=True,
+                    height=150,
+                    key=f"{key_prefix}_{safe_pdl_key}_report_{index}" # Chiave unica per il text_area
+                )

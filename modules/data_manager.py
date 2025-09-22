@@ -281,20 +281,17 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         return []
 
 def clean_column_names(df):
-    """Pulisce i nomi delle colonne di un DataFrame."""
+    """Pulisce i nomi delle colonne di un DataFrame, rimuovendo spazi e newline."""
     cols = df.columns
     new_cols = [col.strip().replace('\n', ' ') for col in cols]
     df.columns = new_cols
     return df
 
-@st.cache_data(ttl=300) # Cache per 5 minuti
-def carica_dati_attivita_programmate():
+@st.cache_data(ttl=300)
+def get_processed_activities():
     """
-    Carica e aggrega i dati delle attività programmate dal file Excel specificato in config.
-    Questa funzione implementa la nuova logica richiesta:
-    - Unica fonte dati: ATTIVITA_PROGRAMMATE.xlsm
-    - Lettura da più fogli con metadati specifici (Area, TCL).
-    - L'intestazione è letta dalla riga 3 del file Excel.
+    Carica, aggrega e processa i dati delle attività programmate dal file Excel.
+    Questa è la funzione centrale per ottenere i dati delle attività per l'intera app.
     """
     excel_path = get_attivita_programmate_path()
 
@@ -314,20 +311,12 @@ def carica_dati_attivita_programmate():
 
     for sheet_name, metadata in sheets_to_read.items():
         try:
-            # Legge il foglio specificato, usando la riga 3 come header (pandas è 0-indexed, quindi header=2)
             df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            
-            # Pulisce i nomi delle colonne
             df = clean_column_names(df)
-
-            # Aggiunge i metadati basati sul foglio
             df['Area'] = metadata['area']
             df['TCL'] = metadata['tcl']
-            
             all_data_df.append(df)
-
         except Exception as e:
-            # Avvisa se un foglio non può essere letto, ma non blocca l'intera funzione
             st.warning(f"Impossibile leggere il foglio '{sheet_name}' dal file: {e}")
             continue
 
@@ -335,24 +324,8 @@ def carica_dati_attivita_programmate():
         st.warning("Nessun dato caricato. Controllare il file Excel e i nomi dei fogli.")
         return pd.DataFrame()
 
-    # Concatena tutti i DataFrame in uno solo
     final_df = pd.concat(all_data_df, ignore_index=True)
-
-    # Rimuove righe dove il PdL è vuoto, che sono spesso separatori o righe vuote
     final_df.dropna(subset=['PdL'], inplace=True)
-
-    return final_df
-
-@st.cache_data(ttl=300)
-def get_processed_activities():
-    """
-    Recupera i dati delle attività, li processa e applica la logica di mapping.
-    Questa è la funzione principale che l'UI dovrebbe chiamare per ottenere i dati.
-    """
-    df = carica_dati_attivita_programmate()
-
-    if df.empty:
-        return pd.DataFrame()
 
     # --- Mappatura dello Stato ---
     status_map = {
@@ -363,25 +336,16 @@ def get_processed_activities():
         'DA CHIUDERE': 'Terminata'
     }
 
-    # La colonna di origine è 'STATO PdL' (dopo la pulizia dei nomi)
     source_status_col = 'STATO PdL'
-    if source_status_col in df.columns:
-        df['Stato'] = df[source_status_col].str.upper().map(status_map).fillna('Non Definito')
+    if source_status_col in final_df.columns:
+        final_df['Stato'] = final_df[source_status_col].str.upper().map(status_map).fillna('Non Definito')
     else:
-        st.error(f"La colonna '{source_status_col}' non è stata trovata nel file Excel. Lo stato non può essere calcolato.")
-        df['Stato'] = 'Errore'
+        st.error(f"La colonna '{source_status_col}' non è stata trovata. Lo stato non può essere calcolato.")
+        final_df['Stato'] = 'Errore'
 
-    # --- Mappatura dei Campi Principali ---
-    # Rinomina le colonne per coerenza, gestendo la possibilità che non esistano
-    rename_map = {
-        'DESCRIZIONE ATTIVITA': 'Descrizione',
-        'STATO ATTIVITA': 'Report'
-    }
-    df.rename(columns=rename_map, inplace=True)
+    # Converte la colonna data per poterla ordinare
+    date_col = 'DATA CONTROLLO'
+    if date_col in final_df.columns:
+        final_df[date_col] = pd.to_datetime(final_df[date_col], errors='coerce')
 
-    # Assicura che le colonne esistano anche se non mappate, per evitare errori nella UI
-    for col in ['Descrizione', 'Report']:
-        if col not in df.columns:
-            df[col] = ''
-
-    return df
+    return final_df
