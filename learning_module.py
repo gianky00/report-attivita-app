@@ -86,118 +86,109 @@ def integrate_knowledge(entry_id, integration_details):
 
 def load_report_knowledge_base():
     """
-    Carica la base di conoscenza leggendo i file .docx da tutte le sottocartelle
-    annuali presenti in 'relazioni_word'.
+    Carica la base di conoscenza leggendo i file .docx e .txt da tutte le sottocartelle
+    in 'relazioni_word' e 'relazioni_inviate'.
     """
     import docx
 
-    base_path = "relazioni_word"
     knowledge_base_text = ""
+    base_paths = ["relazioni_word", "relazioni_inviate"]
 
-    if not os.path.exists(base_path) or not os.path.isdir(base_path):
-        return ""
+    for base_path in base_paths:
+        if not os.path.exists(base_path) or not os.path.isdir(base_path):
+            continue
 
-    # Scansiona tutte le sottocartelle nella cartella di base
-    for year_folder in os.listdir(base_path):
-        reports_path = os.path.join(base_path, year_folder)
-        if os.path.isdir(reports_path):
-            for filename in os.listdir(reports_path):
-                if filename.endswith(".docx"):
-                    try:
-                        filepath = os.path.join(reports_path, filename)
+        for dirpath, _, filenames in os.walk(base_path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                try:
+                    if filename.endswith(".docx"):
                         doc = docx.Document(filepath)
                         for para in doc.paragraphs:
                             knowledge_base_text += para.text + "\n"
-                    except Exception:
-                        # Ignora file corrotti o illeggibili
-                        continue
+                    elif filename.endswith(".txt"):
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            knowledge_base_text += f.read() + "\n"
+                except Exception:
+                    # Ignora file corrotti o illeggibili
+                    continue
 
     return knowledge_base_text
 
 def get_report_knowledge_base_count():
     """
-    Conta in modo efficiente il numero di file .docx nella base di conoscenza
+    Conta in modo efficiente il numero di file .docx e .txt nella base di conoscenza
     senza caricarli.
     """
-    base_path = "relazioni_word"
     file_count = 0
+    base_paths = ["relazioni_word", "relazioni_inviate"]
 
-    if not os.path.exists(base_path) or not os.path.isdir(base_path):
-        return 0
+    for base_path in base_paths:
+        if not os.path.exists(base_path) or not os.path.isdir(base_path):
+            continue
 
-    for year_folder in os.listdir(base_path):
-        reports_path = os.path.join(base_path, year_folder)
-        if os.path.isdir(reports_path):
-            for filename in os.listdir(reports_path):
-                if filename.endswith(".docx"):
+        for dirpath, _, filenames in os.walk(base_path):
+            for filename in filenames:
+                if filename.endswith(".docx") or filename.endswith(".txt"):
                     file_count += 1
 
     return file_count
 
-def create_knowledge_base_index():
+def build_knowledge_base():
     """
     Crea e salva un indice vettoriale dalla base di conoscenza dei report.
-    Questa funzione è pensata per essere eseguita una tantum o periodicamente.
+    Questa funzione è pensata per essere eseguita dall'app.
+    Restituisce un dizionario con lo stato dell'operazione.
     """
     import pickle
     import nltk
     from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.metrics.pairwise import cosine_similarity
 
-    print("Avvio della creazione dell'indice della base di conoscenza...")
-
-    # 1. Scarica le risorse NLTK necessarie
     try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        print("Download del tokenizer 'punkt' di NLTK...")
-        nltk.download('punkt', quiet=True)
-    try:
-        nltk.data.find('corpora/stopwords')
-    except LookupError:
-        print("Download delle 'stopwords' di NLTK...")
-        nltk.download('stopwords', quiet=True)
+        # 1. Scarica le risorse NLTK necessarie in modo silenzioso
+        try:
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            nltk.download('punkt', quiet=True)
+        try:
+            nltk.data.find('corpora/stopwords')
+        except LookupError:
+            nltk.download('stopwords', quiet=True)
 
-    # 2. Carica e processa il testo
-    print("Caricamento dei documenti...")
-    full_text = load_report_knowledge_base()
-    if not full_text:
-        print("Nessun documento trovato. Indice non creato.")
-        return
+        # 2. Carica e processa il testo
+        full_text = load_report_knowledge_base()
+        if not full_text:
+            return {"success": False, "message": "Nessun documento trovato. L'indice non è stato creato."}
 
-    print("Segmentazione del testo...")
-    # Suddivide il testo in frasi (o piccoli paragrafi)
-    sentences = nltk.sent_tokenize(full_text, language='italian')
+        # 3. Segmentazione
+        sentences = nltk.sent_tokenize(full_text, language='italian')
+        sentences = [s for s in sentences if len(s.split()) > 5]
+        if not sentences:
+            return {"success": False, "message": "Nessun contenuto testuale valido trovato dopo la segmentazione."}
 
-    # Rimuovi frasi troppo corte
-    sentences = [s for s in sentences if len(s.split()) > 5]
+        # 4. Vettorizzazione
+        stopwords_italiano = nltk.corpus.stopwords.words('italian')
+        vectorizer = TfidfVectorizer(stop_words=stopwords_italiano, ngram_range=(1, 2))
+        tfidf_matrix = vectorizer.fit_transform(sentences)
 
-    if not sentences:
-        print("Nessun contenuto testuale valido trovato dopo la segmentazione. Indice non creato.")
-        return
+        # 5. Salvataggio dell'indice
+        index_data = {
+            'vectorizer': vectorizer,
+            'matrix': tfidf_matrix,
+            'sentences': sentences
+        }
 
-    # 3. Vettorizzazione
-    print("Vettorizzazione del testo con TF-IDF...")
-    # Usa le stopwords italiane
-    stopwords_italiano = nltk.corpus.stopwords.words('italian')
-    vectorizer = TfidfVectorizer(stop_words=stopwords_italiano, ngram_range=(1, 2))
-    tfidf_matrix = vectorizer.fit_transform(sentences)
+        index_filename = "knowledge_base_index.pkl"
+        with open(index_filename, 'wb') as f:
+            pickle.dump(index_data, f)
 
-    # 4. Salvataggio dell'indice
-    index_data = {
-        'vectorizer': vectorizer,
-        'matrix': tfidf_matrix,
-        'sentences': sentences
-    }
+        return {"success": True, "message": f"Indice creato con successo con {len(sentences)} voci."}
 
-    index_filename = "knowledge_base_index.pkl"
-    print(f"Salvataggio dell'indice in '{index_filename}'...")
-    with open(index_filename, 'wb') as f:
-        pickle.dump(index_data, f)
-
-    print("Creazione dell'indice completata con successo!")
+    except Exception as e:
+        return {"success": False, "message": f"Errore durante la creazione dell'indice: {str(e)}"}
 
 if __name__ == '__main__':
     # Questo blocco consente di eseguire lo script dalla riga di comando
     # per generare l'indice.
-    create_knowledge_base_index()
+    result = build_knowledge_base()
+    print(result)

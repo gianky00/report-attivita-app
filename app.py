@@ -1830,6 +1830,27 @@ def main_app(nome_utente_autenticato, ruolo):
                             """
                             invia_email_con_outlook_async(titolo_email, html_body)
                             st.success("Relazione inviata con successo!")
+
+                            # --- Logica di salvataggio per apprendimento continuo ---
+                            try:
+                                # Crea la cartella se non esiste
+                                reports_dir = "relazioni_inviate"
+                                os.makedirs(reports_dir, exist_ok=True)
+
+                                # Crea un nome file univoco
+                                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                                filename = os.path.join(reports_dir, f"relazione_{timestamp}.txt")
+
+                                # Salva il contenuto della relazione
+                                with open(filename, "w", encoding="utf-8") as f:
+                                    f.write(testo_relazione)
+
+                                st.toast("Relazione salvata per l'apprendimento futuro dell'IA.")
+
+                            except Exception as e:
+                                st.warning(f"Non è stato possibile salvare la relazione per l'IA: {e}")
+                            # --- Fine logica di salvataggio ---
+
                             st.balloons()
                             # Svuota i campi dopo l'invio
                             st.session_state.relazione_testo = ""
@@ -1989,7 +2010,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     render_technician_detail_view()
                 else:
                     # Altrimenti, mostra le tab principali della dashboard
-                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze", "Crea Nuovo Turno", "Gestione Account"])
+                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze", "Gestione IA", "Crea Nuovo Turno", "Gestione Account"])
 
                     with admin_tabs[0]: # Performance Team
                         archivio_df_perf = carica_archivio_completo()
@@ -2123,7 +2144,22 @@ def main_app(nome_utente_autenticato, ruolo):
                                         else:
                                             st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
 
-                    with admin_tabs[2]: # Crea Nuovo Turno
+                    with admin_tabs[2]: # Gestione IA
+                        st.subheader("Gestione Modello IA")
+                        st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
+
+                        if st.button("🧠 Aggiorna Memoria IA", type="primary"):
+                            with st.spinner("Ricostruzione dell'indice in corso..."):
+                                result = learning_module.build_knowledge_base()
+
+                            if result.get("success"):
+                                st.success(result.get("message"))
+                                # Pulisce la cache per forzare il ricaricamento dei dati IA
+                                st.cache_data.clear()
+                            else:
+                                st.error(result.get("message"))
+
+                    with admin_tabs[3]: # Crea Nuovo Turno
                         with st.form("new_shift_form", clear_on_submit=True):
                             st.subheader("Dettagli Nuovo Turno")
                             tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
@@ -2161,7 +2197,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                     else:
                                         st.error("Errore nel salvataggio del nuovo turno.")
 
-                    with admin_tabs[3]: # Gestione Account
+                    with admin_tabs[4]: # Gestione Account
                         render_gestione_account(gestionale_data)
 
 
