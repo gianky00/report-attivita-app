@@ -86,50 +86,130 @@ def integrate_knowledge(entry_id, integration_details):
 
 def load_report_knowledge_base():
     """
-    Carica la base di conoscenza leggendo i file .docx da tutte le sottocartelle
-    annuali presenti in 'relazioni_word'.
+    Carica la base di conoscenza leggendo i file .docx da un percorso di rete strutturato per anno.
+    Legge anche i file .txt dalla cartella locale 'relazioni_inviate'.
     """
     import docx
 
-    base_path = "relazioni_word"
     knowledge_base_text = ""
 
-    if not os.path.exists(base_path) or not os.path.isdir(base_path):
-        return ""
+    # Percorso 1: Rete
+    network_base_path = r"\\192.168.11.251\Database_Tecnico_SMI\Contabilita' strumentale\Relazioni di reperibilita'"
 
-    # Scansiona tutte le sottocartelle nella cartella di base
-    for year_folder in os.listdir(base_path):
-        reports_path = os.path.join(base_path, year_folder)
-        if os.path.isdir(reports_path):
-            for filename in os.listdir(reports_path):
-                if filename.endswith(".docx"):
-                    try:
-                        filepath = os.path.join(reports_path, filename)
-                        doc = docx.Document(filepath)
-                        for para in doc.paragraphs:
-                            knowledge_base_text += para.text + "\n"
-                    except Exception:
-                        # Ignora file corrotti o illeggibili
-                        continue
+    if os.path.exists(network_base_path) and os.path.isdir(network_base_path):
+        # Itera attraverso le cartelle degli anni (es. '2024', '2025')
+        for year_folder in os.listdir(network_base_path):
+            year_path = os.path.join(network_base_path, year_folder)
+            if os.path.isdir(year_path):
+                # Cerca la sottocartella 'WORD'
+                word_path = os.path.join(year_path, "WORD")
+                if os.path.exists(word_path) and os.path.isdir(word_path):
+                    for filename in os.listdir(word_path):
+                        if filename.endswith(".docx"):
+                            filepath = os.path.join(word_path, filename)
+                            try:
+                                doc = docx.Document(filepath)
+                                for para in doc.paragraphs:
+                                    knowledge_base_text += para.text + "\n"
+                            except Exception:
+                                continue # Ignora file corrotti
+
+    # Percorso 2: Locale per i nuovi report
+    local_path = "relazioni_inviate"
+    if os.path.exists(local_path) and os.path.isdir(local_path):
+        for filename in os.listdir(local_path):
+            if filename.endswith(".txt"):
+                filepath = os.path.join(local_path, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        knowledge_base_text += f.read() + "\n"
+                except Exception:
+                    continue
 
     return knowledge_base_text
 
 def get_report_knowledge_base_count():
     """
-    Conta in modo efficiente il numero di file .docx nella base di conoscenza
-    senza caricarli.
+    Conta in modo efficiente il numero di file .docx e .txt nelle basi di conoscenza.
     """
-    base_path = "relazioni_word"
     file_count = 0
 
-    if not os.path.exists(base_path) or not os.path.isdir(base_path):
-        return 0
+    # Conteggio 1: Rete
+    network_base_path = r"\\192.168.11.251\Database_Tecnico_SMI\Contabilita' strumentale\Relazioni di reperibilita'"
+    if os.path.exists(network_base_path) and os.path.isdir(network_base_path):
+        for year_folder in os.listdir(network_base_path):
+            year_path = os.path.join(network_base_path, year_folder)
+            if os.path.isdir(year_path):
+                word_path = os.path.join(year_path, "WORD")
+                if os.path.exists(word_path) and os.path.isdir(word_path):
+                    for filename in os.listdir(word_path):
+                        if filename.endswith(".docx"):
+                            file_count += 1
 
-    for year_folder in os.listdir(base_path):
-        reports_path = os.path.join(base_path, year_folder)
-        if os.path.isdir(reports_path):
-            for filename in os.listdir(reports_path):
-                if filename.endswith(".docx"):
-                    file_count += 1
+    # Conteggio 2: Locale
+    local_path = "relazioni_inviate"
+    if os.path.exists(local_path) and os.path.isdir(local_path):
+        for filename in os.listdir(local_path):
+            if filename.endswith(".txt"):
+                file_count += 1
 
     return file_count
+
+def build_knowledge_base():
+    """
+    Crea e salva un indice vettoriale dalla base di conoscenza dei report.
+    Questa funzione è pensata per essere eseguita dall'app.
+    Restituisce un dizionario con lo stato dell'operazione.
+    """
+    import pickle
+    import nltk
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    try:
+        # 1. Scarica le risorse NLTK necessarie in modo silenzioso
+        try:
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            nltk.download('punkt', quiet=True)
+        try:
+            nltk.data.find('corpora/stopwords')
+        except LookupError:
+            nltk.download('stopwords', quiet=True)
+
+        # 2. Carica e processa il testo
+        full_text = load_report_knowledge_base()
+        if not full_text:
+            return {"success": False, "message": "Nessun documento trovato. L'indice non è stato creato."}
+
+        # 3. Segmentazione
+        sentences = nltk.sent_tokenize(full_text, language='italian')
+        sentences = [s for s in sentences if len(s.split()) > 5]
+        if not sentences:
+            return {"success": False, "message": "Nessun contenuto testuale valido trovato dopo la segmentazione."}
+
+        # 4. Vettorizzazione
+        stopwords_italiano = nltk.corpus.stopwords.words('italian')
+        vectorizer = TfidfVectorizer(stop_words=stopwords_italiano, ngram_range=(1, 2))
+        tfidf_matrix = vectorizer.fit_transform(sentences)
+
+        # 5. Salvataggio dell'indice
+        index_data = {
+            'vectorizer': vectorizer,
+            'matrix': tfidf_matrix,
+            'sentences': sentences
+        }
+
+        index_filename = "knowledge_base_index.pkl"
+        with open(index_filename, 'wb') as f:
+            pickle.dump(index_data, f)
+
+        return {"success": True, "message": f"Indice creato con successo con {len(sentences)} voci."}
+
+    except Exception as e:
+        return {"success": False, "message": f"Errore durante la creazione dell'indice: {str(e)}"}
+
+if __name__ == '__main__':
+    # Questo blocco consente di eseguire lo script dalla riga di comando
+    # per generare l'indice.
+    result = build_knowledge_base()
+    print(result)

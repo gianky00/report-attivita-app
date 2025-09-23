@@ -98,6 +98,36 @@ CRONOLOGIA:
         return {"error": f"Errore durante l'analisi IA: {str(e)}"}
 
 @st.cache_data(show_spinner=False)
+def get_relevant_examples(user_text):
+    """
+    Carica l'indice della base di conoscenza e restituisce i 3 esempi più pertinenti.
+    """
+    import pickle
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    index_filename = "knowledge_base_index.pkl"
+    if not os.path.exists(index_filename):
+        return None # L'indice non esiste
+
+    with open(index_filename, 'rb') as f:
+        data = pickle.load(f)
+
+    vectorizer = data['vectorizer']
+    matrix = data['matrix']
+    sentences = data['sentences']
+
+    # Vettorizza il testo dell'utente e trova i più simili
+    user_vector = vectorizer.transform([user_text])
+    similarities = cosine_similarity(user_vector, matrix).flatten()
+
+    # Prendi i 3 indici più alti (escludendo somiglianze a zero)
+    top_indices = similarities.argsort()[-3:][::-1]
+
+    relevant_examples = [sentences[i] for i in top_indices if similarities[i] > 0]
+
+    return "\n".join(relevant_examples)
+
+@st.cache_data(show_spinner=False)
 def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
     """
     Usa l'IA per revisionare una relazione tecnica basandosi su una base di conoscenza.
@@ -107,9 +137,11 @@ def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
     if not _testo_originale.strip():
         return {"info": "Il testo della relazione è vuoto."}
 
-    # Per evitare un prompt troppo lungo, usiamo un campione della base di conoscenza
-    # (es. 5000 caratteri)
-    knowledge_sample = _knowledge_base[:5000] if _knowledge_base else "Nessun esempio fornito."
+    # Usa la ricerca intelligente per ottenere esempi pertinenti
+    knowledge_sample = get_relevant_examples(_testo_originale)
+    if not knowledge_sample:
+        # Fallback nel caso l'indice non esista o non ci siano esempi pertinenti
+        knowledge_sample = "Nessun esempio specifico trovato."
 
     try:
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
@@ -1527,6 +1559,66 @@ def render_programmazione_tab():
             day_regex = '|'.join(day_filter)
             df_to_show = df_to_show[df_to_show['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
 
+    # --- Grafico a barre raggruppato ---
+    if not df_to_show.empty:
+        st.subheader("Carico di Lavoro Settimanale per Area")
+
+        days_of_week = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+
+        # Creiamo una lista di dizionari per il DataFrame
+        chart_data = []
+        for _, row in df_to_show.iterrows():
+            # Assicuriamoci che GiorniProgrammati sia una stringa prima di splittare
+            if isinstance(row['GiorniProgrammati'], str):
+                giorni = [g.strip() for g in row['GiorniProgrammati'].split(',')]
+                area = row['Area']
+                for giorno in giorni:
+                    if giorno in days_of_week:
+                        chart_data.append({'Giorno': giorno, 'Area': area})
+
+        if chart_data:
+            chart_df = pd.DataFrame(chart_data)
+
+            # Specifica Vega-Lite per il grafico a barre verticali raggruppate (stacked)
+            # Non è necessario pre-aggregare i dati, Vega-Lite può farlo
+            vega_spec = {
+                "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                "description": "Grafico a barre verticale delle attività per giorno e area.",
+                "width": "container",
+                "mark": "bar",
+                "encoding": {
+                    "x": {
+                        "field": "Giorno",
+                        "type": "ordinal",
+                        "sort": days_of_week,
+                        "title": "Giorno della Settimana"
+                    },
+                    "y": {
+                        "aggregate": "count",
+                        "type": "quantitative",
+                        "title": "Numero di Attività Programmate"
+                    },
+                    "color": {
+                        "field": "Area",
+                        "type": "nominal",
+                        "title": "Area"
+                    },
+                    "tooltip": [
+                        {"field": "Giorno", "type": "nominal"},
+                        {"field": "Area", "type": "nominal"},
+                        {"aggregate": "count", "type": "quantitative", "title": "Numero Attività"}
+                    ]
+                },
+                "config": {
+                    "view": {"stroke": "transparent"} # Rimuove il bordo attorno al grafico
+                }
+            }
+
+            st.vega_lite_chart(chart_df, vega_spec, use_container_width=True)
+        else:
+            st.info("Nessuna attività programmata nei giorni feriali per i filtri selezionati.")
+
+
     st.divider()
 
     if df_to_show.empty:
@@ -1677,18 +1769,20 @@ def main_app(nome_utente_autenticato, ruolo):
                     lista_partner = contatti_df[contatti_df['Nome Cognome'] != nome_utente_autenticato]['Nome Cognome'].tolist()
 
                     with st.form("form_relazione"):
-                        st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
+                        col_tech, col_partner = st.columns(2)
+                        with col_tech:
+                            st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
+                        with col_partner:
+                             partner_selezionato = st.selectbox(
+                                "Seleziona Partner (opzionale)",
+                                options=["Nessuno"] + sorted(lista_partner),
+                                index=0
+                            )
 
                         c1, c2, c3 = st.columns(3)
                         data_intervento = c1.date_input("Data Intervento*", help="Questo campo è obbligatorio.")
                         ora_inizio = c2.text_input("Ora Inizio")
                         ora_fine = c3.text_input("Ora Fine")
-
-                        partner_selezionato = st.selectbox(
-                            "Seleziona Partner (opzionale)",
-                            options=["Nessuno"] + sorted(lista_partner),
-                            index=0
-                        )
                         testo_relazione = st.text_area("Corpo della Relazione", height=250, value=st.session_state.get('relazione_testo', ''))
 
                         # Pulsanti del form
@@ -1704,12 +1798,9 @@ def main_app(nome_utente_autenticato, ruolo):
                         elif not data_intervento:
                             st.error("Il campo 'Data Intervento' è obbligatorio.")
                         else:
-                            with st.spinner("L'IA sta revisionando la tua relazione..."):
-                                knowledge_base = load_report_knowledge_base()
-                                if not knowledge_base:
-                                    st.warning("La base di conoscenza non è stata trovata. La revisione IA potrebbe essere meno accurata.")
-
-                                result = revisiona_relazione_con_ia(testo_relazione, knowledge_base)
+                            with st.spinner("L'IA sta analizzando la relazione..."):
+                                # La funzione di revisione ora gestisce autonomamente il recupero degli esempi
+                                result = revisiona_relazione_con_ia(testo_relazione, None) # Non serve più passare la knowledge base
 
                                 if result.get("success"):
                                     st.session_state.relazione_revisionata = result["text"]
@@ -1739,6 +1830,27 @@ def main_app(nome_utente_autenticato, ruolo):
                             """
                             invia_email_con_outlook_async(titolo_email, html_body)
                             st.success("Relazione inviata con successo!")
+
+                            # --- Logica di salvataggio per apprendimento continuo ---
+                            try:
+                                # Crea la cartella se non esiste
+                                reports_dir = "relazioni_inviate"
+                                os.makedirs(reports_dir, exist_ok=True)
+
+                                # Crea un nome file univoco
+                                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                                filename = os.path.join(reports_dir, f"relazione_{timestamp}.txt")
+
+                                # Salva il contenuto della relazione
+                                with open(filename, "w", encoding="utf-8") as f:
+                                    f.write(testo_relazione)
+
+                                st.toast("Relazione salvata per l'apprendimento futuro dell'IA.")
+
+                            except Exception as e:
+                                st.warning(f"Non è stato possibile salvare la relazione per l'IA: {e}")
+                            # --- Fine logica di salvataggio ---
+
                             st.balloons()
                             # Svuota i campi dopo l'invio
                             st.session_state.relazione_testo = ""
@@ -1898,7 +2010,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     render_technician_detail_view()
                 else:
                     # Altrimenti, mostra le tab principali della dashboard
-                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze", "Crea Nuovo Turno", "Gestione Account"])
+                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze", "Gestione IA", "Crea Nuovo Turno", "Gestione Account"])
 
                     with admin_tabs[0]: # Performance Team
                         archivio_df_perf = carica_archivio_completo()
@@ -2032,7 +2144,22 @@ def main_app(nome_utente_autenticato, ruolo):
                                         else:
                                             st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
 
-                    with admin_tabs[2]: # Crea Nuovo Turno
+                    with admin_tabs[2]: # Gestione IA
+                        st.subheader("Gestione Modello IA")
+                        st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
+
+                        if st.button("🧠 Aggiorna Memoria IA", type="primary"):
+                            with st.spinner("Ricostruzione dell'indice in corso..."):
+                                result = learning_module.build_knowledge_base()
+
+                            if result.get("success"):
+                                st.success(result.get("message"))
+                                # Pulisce la cache per forzare il ricaricamento dei dati IA
+                                st.cache_data.clear()
+                            else:
+                                st.error(result.get("message"))
+
+                    with admin_tabs[3]: # Crea Nuovo Turno
                         with st.form("new_shift_form", clear_on_submit=True):
                             st.subheader("Dettagli Nuovo Turno")
                             tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
@@ -2070,7 +2197,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                     else:
                                         st.error("Errore nel salvataggio del nuovo turno.")
 
-                    with admin_tabs[3]: # Gestione Account
+                    with admin_tabs[4]: # Gestione Account
                         render_gestione_account(gestionale_data)
 
 
