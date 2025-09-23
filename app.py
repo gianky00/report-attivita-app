@@ -1769,18 +1769,20 @@ def main_app(nome_utente_autenticato, ruolo):
                     lista_partner = contatti_df[contatti_df['Nome Cognome'] != nome_utente_autenticato]['Nome Cognome'].tolist()
 
                     with st.form("form_relazione"):
-                        st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
+                        col_tech, col_partner = st.columns(2)
+                        with col_tech:
+                            st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
+                        with col_partner:
+                             partner_selezionato = st.selectbox(
+                                "Seleziona Partner (opzionale)",
+                                options=["Nessuno"] + sorted(lista_partner),
+                                index=0
+                            )
 
                         c1, c2, c3 = st.columns(3)
                         data_intervento = c1.date_input("Data Intervento*", help="Questo campo è obbligatorio.")
                         ora_inizio = c2.text_input("Ora Inizio")
                         ora_fine = c3.text_input("Ora Fine")
-
-                        partner_selezionato = st.selectbox(
-                            "Seleziona Partner (opzionale)",
-                            options=["Nessuno"] + sorted(lista_partner),
-                            index=0
-                        )
                         testo_relazione = st.text_area("Corpo della Relazione", height=250, value=st.session_state.get('relazione_testo', ''))
 
                         # Pulsanti del form
