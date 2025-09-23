@@ -86,51 +86,72 @@ def integrate_knowledge(entry_id, integration_details):
 
 def load_report_knowledge_base():
     """
-    Carica la base di conoscenza leggendo i file .docx e .txt da tutte le sottocartelle
-    in 'relazioni_word' e 'relazioni_inviate'.
+    Carica la base di conoscenza leggendo i file .docx da un percorso di rete strutturato per anno.
+    Legge anche i file .txt dalla cartella locale 'relazioni_inviate'.
     """
     import docx
 
     knowledge_base_text = ""
-    base_paths = ["relazioni_word", "relazioni_inviate"]
 
-    for base_path in base_paths:
-        if not os.path.exists(base_path) or not os.path.isdir(base_path):
-            continue
+    # Percorso 1: Rete
+    network_base_path = r"\\192.168.11.251\Database_Tecnico_SMI\Contabilita' strumentale\Relazioni di reperibilita'"
 
-        for dirpath, _, filenames in os.walk(base_path):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
+    if os.path.exists(network_base_path) and os.path.isdir(network_base_path):
+        # Itera attraverso le cartelle degli anni (es. '2024', '2025')
+        for year_folder in os.listdir(network_base_path):
+            year_path = os.path.join(network_base_path, year_folder)
+            if os.path.isdir(year_path):
+                # Cerca la sottocartella 'WORD'
+                word_path = os.path.join(year_path, "WORD")
+                if os.path.exists(word_path) and os.path.isdir(word_path):
+                    for filename in os.listdir(word_path):
+                        if filename.endswith(".docx"):
+                            filepath = os.path.join(word_path, filename)
+                            try:
+                                doc = docx.Document(filepath)
+                                for para in doc.paragraphs:
+                                    knowledge_base_text += para.text + "\n"
+                            except Exception:
+                                continue # Ignora file corrotti
+
+    # Percorso 2: Locale per i nuovi report
+    local_path = "relazioni_inviate"
+    if os.path.exists(local_path) and os.path.isdir(local_path):
+        for filename in os.listdir(local_path):
+            if filename.endswith(".txt"):
+                filepath = os.path.join(local_path, filename)
                 try:
-                    if filename.endswith(".docx"):
-                        doc = docx.Document(filepath)
-                        for para in doc.paragraphs:
-                            knowledge_base_text += para.text + "\n"
-                    elif filename.endswith(".txt"):
-                        with open(filepath, 'r', encoding='utf-8') as f:
-                            knowledge_base_text += f.read() + "\n"
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        knowledge_base_text += f.read() + "\n"
                 except Exception:
-                    # Ignora file corrotti o illeggibili
                     continue
 
     return knowledge_base_text
 
 def get_report_knowledge_base_count():
     """
-    Conta in modo efficiente il numero di file .docx e .txt nella base di conoscenza
-    senza caricarli.
+    Conta in modo efficiente il numero di file .docx e .txt nelle basi di conoscenza.
     """
     file_count = 0
-    base_paths = ["relazioni_word", "relazioni_inviate"]
 
-    for base_path in base_paths:
-        if not os.path.exists(base_path) or not os.path.isdir(base_path):
-            continue
+    # Conteggio 1: Rete
+    network_base_path = r"\\192.168.11.251\Database_Tecnico_SMI\Contabilita' strumentale\Relazioni di reperibilita'"
+    if os.path.exists(network_base_path) and os.path.isdir(network_base_path):
+        for year_folder in os.listdir(network_base_path):
+            year_path = os.path.join(network_base_path, year_folder)
+            if os.path.isdir(year_path):
+                word_path = os.path.join(year_path, "WORD")
+                if os.path.exists(word_path) and os.path.isdir(word_path):
+                    for filename in os.listdir(word_path):
+                        if filename.endswith(".docx"):
+                            file_count += 1
 
-        for dirpath, _, filenames in os.walk(base_path):
-            for filename in filenames:
-                if filename.endswith(".docx") or filename.endswith(".txt"):
-                    file_count += 1
+    # Conteggio 2: Locale
+    local_path = "relazioni_inviate"
+    if os.path.exists(local_path) and os.path.isdir(local_path):
+        for filename in os.listdir(local_path):
+            if filename.endswith(".txt"):
+                file_count += 1
 
     return file_count
 
