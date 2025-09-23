@@ -133,3 +133,71 @@ def get_report_knowledge_base_count():
                     file_count += 1
 
     return file_count
+
+def create_knowledge_base_index():
+    """
+    Crea e salva un indice vettoriale dalla base di conoscenza dei report.
+    Questa funzione è pensata per essere eseguita una tantum o periodicamente.
+    """
+    import pickle
+    import nltk
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    print("Avvio della creazione dell'indice della base di conoscenza...")
+
+    # 1. Scarica le risorse NLTK necessarie
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        print("Download del tokenizer 'punkt' di NLTK...")
+        nltk.download('punkt', quiet=True)
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        print("Download delle 'stopwords' di NLTK...")
+        nltk.download('stopwords', quiet=True)
+
+    # 2. Carica e processa il testo
+    print("Caricamento dei documenti...")
+    full_text = load_report_knowledge_base()
+    if not full_text:
+        print("Nessun documento trovato. Indice non creato.")
+        return
+
+    print("Segmentazione del testo...")
+    # Suddivide il testo in frasi (o piccoli paragrafi)
+    sentences = nltk.sent_tokenize(full_text, language='italian')
+
+    # Rimuovi frasi troppo corte
+    sentences = [s for s in sentences if len(s.split()) > 5]
+
+    if not sentences:
+        print("Nessun contenuto testuale valido trovato dopo la segmentazione. Indice non creato.")
+        return
+
+    # 3. Vettorizzazione
+    print("Vettorizzazione del testo con TF-IDF...")
+    # Usa le stopwords italiane
+    stopwords_italiano = nltk.corpus.stopwords.words('italian')
+    vectorizer = TfidfVectorizer(stop_words=stopwords_italiano, ngram_range=(1, 2))
+    tfidf_matrix = vectorizer.fit_transform(sentences)
+
+    # 4. Salvataggio dell'indice
+    index_data = {
+        'vectorizer': vectorizer,
+        'matrix': tfidf_matrix,
+        'sentences': sentences
+    }
+
+    index_filename = "knowledge_base_index.pkl"
+    print(f"Salvataggio dell'indice in '{index_filename}'...")
+    with open(index_filename, 'wb') as f:
+        pickle.dump(index_data, f)
+
+    print("Creazione dell'indice completata con successo!")
+
+if __name__ == '__main__':
+    # Questo blocco consente di eseguire lo script dalla riga di comando
+    # per generare l'indice.
+    create_knowledge_base_index()
