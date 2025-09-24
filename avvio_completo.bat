@@ -8,6 +8,9 @@ echo.
 
 REM --- 1. Installazione delle dipendenze Python ---
 echo [1/5] Installazione/aggiornamento delle dipendenze da requirements.txt...
+REM Questo comando installa solo le librerie mancanti o aggiorna quelle la cui versione
+REM e' cambiata in requirements.txt. E' sicuro da eseguire ad ogni avvio.
+REM Per aggiornare una libreria, modificare la sua versione nel file requirements.txt.
 pip install -r requirements.txt
 echo.
 
