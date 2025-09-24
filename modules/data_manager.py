@@ -67,6 +67,30 @@ def carica_gestionale():
             else:
                 data['bacheca'] = pd.DataFrame(columns=required_bacheca_cols)
 
+            # Aggiunto per le richieste di materiali
+            required_materiali_cols = ['ID_Richiesta', 'Richiedente', 'Timestamp', 'Stato', 'Dettagli']
+            if 'RichiesteMateriali' in xls.sheet_names:
+                df_materiali = pd.read_excel(xls, sheet_name='RichiesteMateriali')
+                df_materiali.columns = df_materiali.columns.str.strip()
+                for col in required_materiali_cols:
+                    if col not in df_materiali.columns:
+                        df_materiali[col] = pd.NA
+                data['richieste_materiali'] = df_materiali
+            else:
+                data['richieste_materiali'] = pd.DataFrame(columns=required_materiali_cols)
+
+            # Aggiunto per le richieste di assenze
+            required_assenze_cols = ['ID_Richiesta', 'Richiedente', 'Timestamp', 'Tipo_Assenza', 'Data_Inizio', 'Data_Fine', 'Note', 'Stato']
+            if 'RichiesteAssenze' in xls.sheet_names:
+                df_assenze = pd.read_excel(xls, sheet_name='RichiesteAssenze')
+                df_assenze.columns = df_assenze.columns.str.strip()
+                for col in required_assenze_cols:
+                    if col not in df_assenze.columns:
+                        df_assenze[col] = pd.NA
+                data['richieste_assenze'] = df_assenze
+            else:
+                data['richieste_assenze'] = pd.DataFrame(columns=required_assenze_cols)
+
 
             return data
         except Exception as e:
@@ -86,6 +110,10 @@ def _save_to_excel_backend(data):
                     data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
                 if 'bacheca' in data:
                     data['bacheca'].to_excel(writer, sheet_name='TurniInBacheca', index=False)
+            if 'richieste_materiali' in data:
+                data['richieste_materiali'].to_excel(writer, sheet_name='RichiesteMateriali', index=False)
+            if 'richieste_assenze' in data:
+                data['richieste_assenze'].to_excel(writer, sheet_name='RichiesteAssenze', index=False)
             return True
         except Exception as e:
             print(f"ERRORE CRITICO NEL THREAD DI SALVATAGGIO: {e}")
