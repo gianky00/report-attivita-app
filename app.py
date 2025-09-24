@@ -1245,23 +1245,24 @@ def render_guida_tab(ruolo):
         - **Invia Relazione**: Quando sei soddisfatto, clicca su **"Invia Relazione"** per mandare il report finale via email.
         """)
 
-    with st.expander("📊 Situazione Impianti"):
-        st.subheader("Avere una Visione d'Insieme")
+    with st.expander("📊 Pianificazione e Controllo"):
+        st.subheader("Monitorare e Pianificare le Attività")
         st.markdown("""
-        Questa sezione ti offre una panoramica dello stato di tutte le attività pianificate, arricchite con lo stato di avanzamento reale preso dall'applicazione.
-        - **Come funziona?** Il sistema unisce i dati, dando sempre la priorità allo stato più aggiornato (quello dei report compilati).
-        - **Filtri**: Puoi filtrare la vista per **TCL**, **Area** e **Stato**.
-        - **Importante**: Dopo aver selezionato i filtri, clicca sul pulsante **"Applica Filtri"** per aggiornare i grafici e la tabella con i risultati.
-        """)
+        Questa sezione è il tuo centro di comando per la visione d'insieme delle attività. È divisa in due sottomenù:
 
-    with st.expander("🗓️ Programmazione Attività"):
-        st.subheader("Consultare le Attività Programmate")
-        st.markdown("""
-        Questa sezione mostra di default l'**elenco completo di tutte le attività programmate** per la settimana, senza bisogno di azioni preliminari.
+        #### 1. Controllo
+        - **Obiettivo**: Fornire una **visione aggregata** dello stato di avanzamento di tutte le attività.
+        - **Come funziona**: Unisce i dati della pianificazione con i report compilati, dando sempre la priorità allo stato più aggiornato. Puoi vedere grafici e metriche generali.
+        - **Uso**: Ideale per capire rapidamente quali aree o TCL hanno più attività in sospeso, completate o in corso.
+        - **Filtri**: Puoi filtrare i dati per **TCL**, **Area** e **Stato** per analisi più mirate. Clicca su **"Applica Filtri"** per aggiornare la vista.
 
-        - **Dettagli nella Card**: Ogni attività è presentata in una "card" separata per una facile consultazione, con tutti i dati principali (PdL, Impianto, TCL, Area), lo stato attuale e la descrizione completa.
-        - **Storico Interventi**: Se per un PdL sono già stati eseguiti interventi, puoi cliccare su `"Mostra cronologia interventi"` direttamente dentro la card per vedere lo storico.
-        - **Filtri**: Se desideri cercare attività specifiche, puoi usare i filtri in cima alla pagina per **PdL**, **Area**, **TCL** o **Giorno** della settimana. Dopo aver impostato i filtri, clicca su **"Applica Filtri"** per aggiornare la visualizzazione.
+        #### 2. Pianificazione
+        - **Obiettivo**: Consultare il **dettaglio delle singole attività** programmate per la settimana.
+        - **Come funziona**: Mostra una lista di "card", una per ogni attività, con tutti i dettagli operativi (PdL, impianto, descrizione).
+        - **Caratteristiche**:
+            - **Storico Integrato**: Puoi espandere lo storico degli interventi direttamente dalla card dell'attività.
+            - **Grafico Carico di Lavoro**: Un grafico a barre ti mostra il carico di lavoro giornaliero suddiviso per area.
+            - **Filtri Dettagliati**: Puoi cercare attività specifiche per **PdL**, **Area**, **TCL** o **Giorno** della settimana.
         """)
 
     # Sezione Turni (unificata)
@@ -1342,6 +1343,33 @@ def render_guida_tab(ruolo):
             st.markdown("Usa il modulo in fondo alla pagina per creare rapidamente un nuovo utente esterno che non necessita di accesso, ma che deve comparire nel sistema.")
 
     # Sezione Archivio
+    # Sezione Richieste (Nuova)
+    with st.expander("📋 Richieste"):
+        st.subheader("Come Inviare Richieste")
+        st.markdown("""
+        Questa nuova sezione è dedicata all'invio di richieste di vario tipo. È divisa in due sottomenù:
+
+        #### 1. Richiesta Materiali
+        - Usa questa sezione per richiedere materiali di consumo o attrezzature necessarie per il tuo lavoro.
+        - **Come funziona**:
+            - Vai al sottomenù **Materiali**.
+            - Scrivi un elenco dettagliato di ciò che ti serve nel campo di testo.
+            - Clicca su **"Invia Richiesta Materiali"**.
+        - **Storico**: Tutte le richieste inviate sono visibili a tutti nello storico in fondo alla pagina, per trasparenza e per evitare richieste duplicate.
+
+        #### 2. Richiesta Assenze (Ferie/Permessi)
+        - Usa questa sezione per inviare richieste di ferie o permessi (es. Legge 104).
+        - **Come funziona**:
+            - Vai al sottomenù **Assenze**.
+            - Seleziona il **tipo di assenza**.
+            - Imposta le **date di inizio e fine** del periodo di assenza.
+            - Aggiungi eventuali **note** (opzionale).
+            - Clicca su **"Invia Richiesta Assenza"**.
+        - **Privacy e Visibilità**:
+            - Tutti gli utenti possono inviare richieste.
+            - **Solo gli Amministratori** possono vedere lo storico completo di tutte le richieste di assenza inviate. Per gli altri utenti, questa sezione rimane privata.
+        """)
+
     with st.expander("🗂️ Ricerca nell'Archivio"):
         st.subheader("Trovare Vecchi Report")
         st.markdown("Usa questa sezione per cercare tra tutti i report compilati in passato. Puoi filtrare per:")
@@ -1712,7 +1740,7 @@ def main_app(nome_utente_autenticato, ruolo):
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
         # Lista delle schede principali con i nuovi nomi e la nuova struttura
-        main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "❓ Guida"]
+        main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
 
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
@@ -1997,12 +2025,133 @@ def main_app(nome_utente_autenticato, ruolo):
                 for _, richiesta in richieste_inviate.iterrows():
                     st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
 
-        # Scheda 4: Guida (precedentemente indice 5)
+        # Scheda 4: Richieste
         with tabs[4]:
+            st.header("Richieste")
+            richieste_tabs = st.tabs(["Materiali", "Assenze"])
+
+            # Sottomenù Materiali
+            with richieste_tabs[0]:
+                st.subheader("Richiesta Materiali")
+                with st.form("form_richiesta_materiali", clear_on_submit=True):
+                    dettagli_richiesta = st.text_area("Elenca qui i materiali necessari:", height=150)
+                    submitted = st.form_submit_button("Invia Richiesta Materiali", type="primary")
+
+                    if submitted:
+                        if dettagli_richiesta.strip():
+                            new_id = f"MAT_{int(datetime.datetime.now().timestamp())}"
+                            nuova_richiesta = pd.DataFrame([{
+                                'ID_Richiesta': new_id,
+                                'Richiedente': nome_utente_autenticato,
+                                'Timestamp': datetime.datetime.now(),
+                                'Stato': 'Inviata',
+                                'Dettagli': dettagli_richiesta
+                            }])
+
+                            # Aggiungi la nuova riga al dataframe
+                            df_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame(columns=['ID_Richiesta', 'Richiedente', 'Timestamp', 'Stato', 'Dettagli']))
+                            gestionale_data['richieste_materiali'] = pd.concat([df_materiali, nuova_richiesta], ignore_index=True)
+
+                            if salva_gestionale_async(gestionale_data):
+                                st.success("Richiesta materiali inviata con successo!")
+                                # Invia email
+                                titolo_email = f"Nuova Richiesta Materiali da {nome_utente_autenticato}"
+                                html_body = f"""
+                                <h3>Nuova Richiesta Materiali</h3>
+                                <p><strong>Richiedente:</strong> {nome_utente_autenticato}</p>
+                                <p><strong>Data e Ora:</strong> {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+                                <hr>
+                                <h4>Materiali Richiesti:</h4>
+                                <p>{dettagli_richiesta.replace('\n', '<br>')}</p>
+                                """
+                                invia_email_con_outlook_async(titolo_email, html_body)
+                                st.rerun()
+                            else:
+                                st.error("Errore durante il salvataggio della richiesta.")
+                        else:
+                            st.warning("Il campo dei materiali non può essere vuoto.")
+
+                st.divider()
+                st.subheader("Storico Richieste Materiali")
+                df_richieste_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame())
+                if df_richieste_materiali.empty:
+                    st.info("Nessuna richiesta di materiali inviata.")
+                else:
+                    df_richieste_materiali['Timestamp'] = pd.to_datetime(df_richieste_materiali['Timestamp'])
+                    st.dataframe(df_richieste_materiali.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+
+
+            # Sottomenù Assenze
+            with richieste_tabs[1]:
+                st.subheader("Richiesta Assenze (Ferie/Permessi)")
+                with st.form("form_richiesta_assenze", clear_on_submit=True):
+                    tipo_assenza = st.selectbox("Tipo di Assenza", ["Ferie", "Permesso (L. 104)"])
+                    col1, col2 = st.columns(2)
+                    data_inizio = col1.date_input("Data Inizio")
+                    data_fine = col2.date_input("Data Fine")
+                    note_assenza = st.text_area("Note (opzionale):", height=100)
+                    submitted_assenza = st.form_submit_button("Invia Richiesta Assenza", type="primary")
+
+                    if submitted_assenza:
+                        if data_inizio and data_fine:
+                            if data_inizio > data_fine:
+                                st.error("La data di inizio non può essere successiva alla data di fine.")
+                            else:
+                                new_id = f"ASS_{int(datetime.datetime.now().timestamp())}"
+                                nuova_richiesta_assenza = pd.DataFrame([{
+                                    'ID_Richiesta': new_id,
+                                    'Richiedente': nome_utente_autenticato,
+                                    'Timestamp': datetime.datetime.now(),
+                                    'Tipo_Assenza': tipo_assenza,
+                                    'Data_Inizio': pd.to_datetime(data_inizio),
+                                    'Data_Fine': pd.to_datetime(data_fine),
+                                    'Note': note_assenza,
+                                    'Stato': 'Inviata'
+                                }])
+
+                                df_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame(columns=['ID_Richiesta', 'Richiedente', 'Timestamp', 'Tipo_Assenza', 'Data_Inizio', 'Data_Fine', 'Note', 'Stato']))
+                                gestionale_data['richieste_assenze'] = pd.concat([df_assenze, nuova_richiesta_assenza], ignore_index=True)
+
+                                if salva_gestionale_async(gestionale_data):
+                                    st.success("Richiesta di assenza inviata con successo!")
+                                    # Invia email
+                                    titolo_email = f"Nuova Richiesta di Assenza da {nome_utente_autenticato}"
+                                    html_body = f"""
+                                    <h3>Nuova Richiesta di Assenza</h3>
+                                    <p><strong>Richiedente:</strong> {nome_utente_autenticato}</p>
+                                    <p><strong>Tipo:</strong> {tipo_assenza}</p>
+                                    <p><strong>Periodo:</strong> dal {data_inizio.strftime('%d/%m/%Y')} al {data_fine.strftime('%d/%m/%Y')}</p>
+                                    <hr>
+                                    <h4>Note:</h4>
+                                    <p>{note_assenza.replace('\n', '<br>') if note_assenza else 'Nessuna nota.'}</p>
+                                    """
+                                    invia_email_con_outlook_async(titolo_email, html_body)
+                                    st.rerun()
+                                else:
+                                    st.error("Errore durante il salvataggio della richiesta.")
+                        else:
+                            st.warning("Le date di inizio e fine sono obbligatorie.")
+
+                # Visualizzazione storico solo per admin
+                if ruolo == "Amministratore":
+                    st.divider()
+                    st.subheader("Storico Richieste Assenze (Visibile solo agli Admin)")
+                    df_richieste_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame())
+                    if df_richieste_assenze.empty:
+                        st.info("Nessuna richiesta di assenza inviata.")
+                    else:
+                        df_richieste_assenze['Timestamp'] = pd.to_datetime(df_richieste_assenze['Timestamp'])
+                        df_richieste_assenze['Data_Inizio'] = pd.to_datetime(df_richieste_assenze['Data_Inizio']).dt.strftime('%d/%m/%Y')
+                        df_richieste_assenze['Data_Fine'] = pd.to_datetime(df_richieste_assenze['Data_Fine']).dt.strftime('%d/%m/%Y')
+                        st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+
+
+        # Scheda 5: Guida
+        with tabs[5]:
             render_guida_tab(ruolo)
 
         if ruolo == "Amministratore":
-            with tabs[-1]: # Always access the last tab for admin
+            with tabs[6]: # Indice aggiornato per la dashboard admin
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
