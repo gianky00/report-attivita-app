@@ -28,8 +28,9 @@ def get_ngrok_url():
 
 # --- CONFIGURAZIONE SCRIPT ---
 path_giornaliera_base = r'\\192.168.11.251\Database_Tecnico_SMI\Giornaliere\Giornaliere 2025'
-# MODIFICA: Ora punta al nuovo file gestionale unico
-PATH_GESTIONALE = r'C:\Users\Coemi\Desktop\SCRIPT\progetto_questionario_attivita\Gestionale_Tecnici.xlsx'
+# MODIFICA: Utilizza un percorso relativo per trovare il file nella stessa cartella dello script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+PATH_GESTIONALE = os.path.join(script_dir, 'Gestionale_Tecnici.xlsx')
 USA_GIORNO_PRECEDENTE = False
 
 # --- FUNZIONE DI RICERCA ATTIVITÀ ---
