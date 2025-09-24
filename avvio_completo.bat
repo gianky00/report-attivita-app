@@ -15,9 +15,10 @@ pip install -r requirements.txt
 echo.
 
 REM --- 2. Download dei pacchetti NLTK necessari ---
-echo [2/5] Download dei pacchetti NLTK (punkt, stopwords)...
+echo [2/5] Download dei pacchetti NLTK (punkt, stopwords, punkt_tab)...
 python -m nltk.downloader punkt
 python -m nltk.downloader stopwords
+python -m nltk.downloader punkt_tab
 echo.
 
 REM --- 3. Avvia ngrok in una nuova finestra ---
