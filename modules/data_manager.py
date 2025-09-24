@@ -188,7 +188,7 @@ def carica_archivio_completo():
     try:
         sheet_name = 'Database_Attivita'
         df_reale = pd.read_excel(storico_path, sheet_name=sheet_name)
-        df_reale['Data_Riferimento_dt'] = pd.to_datetime(df_reale['Data_Riferimento'], errors='coerce')
+        df_reale['Data_Riferimento_dt'] = pd.to_datetime(df_reale['Data_Riferimento'], errors='coerce', dayfirst=True)
     except FileNotFoundError:
         st.warning(f"File archivio '{os.path.basename(storico_path)}' non trovato. Verrà usato solo lo storico da programmazione.")
     except Exception as e:
@@ -221,9 +221,9 @@ def carica_archivio_completo():
         return pd.DataFrame()
 
     # 4. Pulisci e ordina il DataFrame finale
-    df_finale['Data_Riferimento_dt'] = pd.to_datetime(df_finale['Data_Riferimento'], errors='coerce')
+    df_finale['Data_Riferimento_dt'] = pd.to_datetime(df_finale['Data_Riferimento'], errors='coerce', dayfirst=True)
     # Assicura che la colonna di compilazione sia di tipo datetime per un ordinamento corretto
-    df_finale['Data_Compilazione'] = pd.to_datetime(df_finale['Data_Compilazione'], errors='coerce')
+    df_finale['Data_Compilazione'] = pd.to_datetime(df_finale['Data_Compilazione'], errors='coerce', dayfirst=True)
     df_finale.dropna(subset=['Data_Riferimento_dt'], inplace=True)
     df_finale.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
     # Rimuovi eventuali duplicati residui (anche se la logica di join dovrebbe averli già gestiti)
