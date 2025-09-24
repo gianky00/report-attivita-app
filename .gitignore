@@ -1,9 +1,23 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
 # Session files
 /sessions/
 
-# macOS specific files
+# Sensitive credentials
+credentials.json
+.streamlit/secrets.toml
+
+# Distribution / packaging
+*.egg-info/
 .DS_Store
+
+# Excel backup files
+~$*.xlsx
+~$*.xlsm
+
+# Executables
+ngrok.exe

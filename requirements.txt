@@ -15,3 +15,5 @@ pillow
 python-docx==1.1.2
 scikit-learn
 nltk==3.8.1
+geoip2
+maxminddb-geolite2
