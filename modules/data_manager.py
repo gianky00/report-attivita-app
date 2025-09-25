@@ -608,11 +608,11 @@ def _salva_db_excel(df, percorso_salvataggio):
 
 def consolida_report_giornalieri(client_google):
     """
-    Funzione di consolidamento finale.
-    1. Legge i report dal file di transito.
-    2. Aggiorna sia lo STATO che il REPORT nel file principale.
-    3. Svuota il file di transito e il foglio Google.
+    Funzione di consolidamento definitiva che usa l'automazione di Excel per preservare l'integrità del file.
     """
+    import win32com.client as win32
+    import pythoncom
+
     path_transito = get_storico_db_path()
     path_principale = get_attivita_programmate_path()
     colonna_stato_target = "STATO\nPdL"
@@ -630,67 +630,76 @@ def consolida_report_giornalieri(client_google):
     except Exception as e:
         return False, f"Errore durante la lettura del file di transito: {e}"
 
-    # 2. Aggiorna il database principale usando openpyxl
+    # 2. Aggiorna il database principale usando l'automazione di Excel
+    excel = None
     try:
-        with config.EXCEL_LOCK:
-            book = openpyxl.load_workbook(path_principale, keep_vba=True)
-            sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
+        pythoncom.CoInitialize()
+        excel = win32.Dispatch('Excel.Application')
+        excel.Visible = False
 
-            for _, report in df_transito.iterrows():
-                pdl_da_aggiornare = str(report['PdL'])
-                nuovo_stato = report['Stato']
-                nuovo_report = report['Report']
-                pdl_trovato = False
+        abs_path_principale = os.path.abspath(path_principale)
+        if not os.path.exists(abs_path_principale):
+            raise FileNotFoundError(f"File principale non trovato al percorso: {abs_path_principale}")
 
-                for sheet_name in sheets_to_read:
-                    if sheet_name in book.sheetnames:
-                        ws = book[sheet_name]
+        wb = excel.Workbooks.Open(abs_path_principale)
+        sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
 
-                        header_row = 3
-                        pdl_col_idx, stato_col_idx, report_col_idx = None, None, None
-                        for cell in ws[header_row]:
-                            col_val = str(cell.value).strip()
-                            if col_val == 'PdL':
-                                pdl_col_idx = cell.column
-                            elif col_val == colonna_stato_target:
-                                stato_col_idx = cell.column
-                            elif col_val == colonna_report_target:
-                                report_col_idx = cell.column
+        # Pre-processa i report in un dizionario per una ricerca più veloce
+        report_map = {str(row['PdL']): {'stato': row['Stato'], 'report': row['Report']} for _, row in df_transito.iterrows()}
 
-                        if pdl_col_idx is None or stato_col_idx is None or report_col_idx is None:
-                            continue
+        for sheet_name in sheets_to_read:
+            ws = wb.Worksheets(sheet_name)
 
-                        for row_idx in range(header_row + 1, ws.max_row + 1):
-                            cell_pdl = ws.cell(row=row_idx, column=pdl_col_idx)
-                            if str(cell_pdl.value).strip() == pdl_da_aggiornare:
-                                # Aggiorna sia stato che report
-                                ws.cell(row=row_idx, column=stato_col_idx, value=nuovo_stato)
-                                ws.cell(row=row_idx, column=report_col_idx, value=nuovo_report)
-                                aggiornamenti_effettuati += 1
-                                pdl_trovato = True
-                                break
-                    if pdl_trovato:
-                        break
+            header_row = 3
+            pdl_col_idx, stato_col_idx, report_col_idx = None, None, None
+            for i in range(1, ws.UsedRange.Columns.Count + 1):
+                header_val = ws.Cells(header_row, i).Value
+                if header_val is None: continue
+                header_val = str(header_val).strip()
+                if header_val == 'PdL':
+                    pdl_col_idx = i
+                elif header_val == colonna_stato_target:
+                    stato_col_idx = i
+                elif header_val == colonna_report_target:
+                    report_col_idx = i
 
-            book.save(path_principale)
+            if not all([pdl_col_idx, stato_col_idx, report_col_idx]):
+                continue
 
-    except FileNotFoundError:
-        return False, f"File principale '{os.path.basename(path_principale)}' non trovato."
+            # Itera sulle righe dei dati
+            for row_idx in range(header_row + 1, ws.UsedRange.Rows.Count + header_row):
+                pdl_value = str(ws.Cells(row_idx, pdl_col_idx).Value).strip()
+                if pdl_value in report_map:
+                    report_data = report_map[pdl_value]
+                    ws.Cells(row_idx, stato_col_idx).Value = report_data['stato']
+                    ws.Cells(row_idx, report_col_idx).Value = report_data['report']
+                    aggiornamenti_effettuati += 1
+                    # Rimuovi il PdL dalla mappa per non cercarlo più
+                    del report_map[pdl_value]
+
+            if not report_map: # Se tutti i report sono stati trovati, esci
+                break
+
+        wb.Save()
+        wb.Close(SaveChanges=False)
+
     except Exception as e:
-        return False, f"Errore durante l'aggiornamento del database principale: {e}"
+        return False, f"Errore durante l'automazione di Excel: {e}"
+    finally:
+        if excel:
+            excel.Quit()
+        pythoncom.CoUninitialize()
 
     # 3. Svuota il file di transito e Google Sheets
     try:
-        # Svuota il file di transito salvando un DataFrame vuoto
         success_clear_excel, msg_excel = _salva_db_excel(pd.DataFrame(columns=df_transito.columns), path_transito)
         if not success_clear_excel:
             raise IOError(f"Fallimento nello svuotare il file di transito: {msg_excel}")
 
-        # Svuota Google Sheets
         sheet = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1
         header = sheet.row_values(1)
         sheet.clear()
-        if header: # Assicurati che l'header esista prima di riscriverlo
+        if header:
             sheet.append_row(header)
 
         st.cache_data.clear()
