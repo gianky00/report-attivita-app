@@ -34,7 +34,8 @@ from modules.data_manager import (
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate,
     sync_reports_from_google,
-    update_reports_in_excel_and_google
+    update_reports_in_excel_and_google,
+    consolida_report
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -2391,9 +2392,20 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     # --- Dashboard Caposquadra ---
                     with main_admin_tabs[0]:
-                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Aggiorna Report"])
+                        caposquadra_tabs = st.tabs(["Consolida Report", "Performance Team", "Crea Nuovo Turno", "Aggiorna Report"])
 
-                        with caposquadra_tabs[0]: # Performance Team
+                        with caposquadra_tabs[0]: # Consolida Report
+                            st.subheader("Consolidamento Report")
+                            st.info("Usa questo strumento per consolidare i report inviati dai tecnici nel database principale.")
+                            if st.button("Avvia Consolidamento", type="primary"):
+                                with st.spinner("Consolidamento in corso..."):
+                                    status, message = consolida_report(autorizza_google())
+                                    if status == "success":
+                                        st.success(message)
+                                    else:
+                                        st.error(message)
+
+                        with caposquadra_tabs[1]: # Performance Team
                             archivio_df_perf = carica_archivio_completo()
                             if archivio_df_perf.empty:
                                 st.warning("Archivio storico non disponibile o vuoto. Impossibile calcolare le performance.")

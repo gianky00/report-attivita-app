@@ -25,6 +25,8 @@ try:
     PATH_GESTIONALE = secrets["path_gestionale"]
     PATH_GIORNALIERA_BASE = secrets["path_giornaliera_base"]
     PATH_ATTIVITA_PROGRAMMATE = secrets["path_attivita_programmate"]
+    # Aggiunto per il nuovo flusso di dati: il database di transito per i report in entrata.
+    PATH_TRANSITO_DB = secrets["path_transito_db"]
 except KeyError as e:
     print(f"ERRORE CRITICO: Chiave di configurazione mancante in 'secrets.toml': {e}")
     sys.exit(1)
@@ -56,3 +58,7 @@ def get_storico_db_path():
 def get_gestionale_path():
     """Restituisce il percorso al file gestionale."""
     return PATH_GESTIONALE
+
+def get_transito_db_path():
+    """Restituisce il percorso al database di transito."""
+    return PATH_TRANSITO_DB
