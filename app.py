@@ -431,7 +431,7 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
 
                 # Se l'attività completata è del giorno precedente, aggiungila alla lista di sessione
                 if section_key == 'yesterday':
-                    pass # Non è più necessario, la logica è centralizzata
+                    st.session_state.completed_tasks_yesterday.append(completed_task_data)
 
                 st.success("Report inviato con successo!")
                 del st.session_state.debriefing_task
@@ -2542,7 +2542,7 @@ keys_to_initialize = {
     'debriefing_task': None,
     'temp_user_for_2fa': None,
     '2fa_secret': None,
-    'completed_yesterday_pdl': []
+    'completed_tasks_yesterday': []
 }
 for key, default_value in keys_to_initialize.items():
     if key not in st.session_state:
