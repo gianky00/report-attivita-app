@@ -139,17 +139,17 @@ def carica_archivio_completo():
     all_data = []
 
     sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-    # Aggiungo 'RELAZIONE' (colonna Q) alla lista
-    cols_to_extract = ['PdL', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', 'RELAZIONE']
+    # Correggo la colonna del report con quella giusta: 'STATO\nATTIVITA''
+    cols_to_extract = ['PdL', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', "STATO\nATTIVITA'"]
 
     for sheet_name in sheets_to_read:
         try:
             df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
             df.columns = [str(col).strip() for col in df.columns]
 
-            # Assicurati che 'RELAZIONE' esista, altrimenti creala vuota per evitare errori
-            if 'RELAZIONE' not in df.columns:
-                df['RELAZIONE'] = ""
+            # Assicurati che la colonna del report esista, altrimenti creala vuota
+            if "STATO\nATTIVITA'" not in df.columns:
+                df["STATO\nATTIVITA'"] = ""
 
             if all(col in df.columns for col in cols_to_extract):
                 df_sheet = df[cols_to_extract].copy()
@@ -169,7 +169,7 @@ def carica_archivio_completo():
         "STATO\nPdL": "Stato",
         "DATA\nCONTROLLO": "Data_Riferimento",
         "PERSONALE\nIMPIEGATO": "Tecnico",
-        "RELAZIONE": "Report" # Mappa RELAZIONE a Report
+        "STATO\nATTIVITA'": "Report" # Mappa la colonna corretta a Report
     }, inplace=True)
 
     # Riempi i report vuoti con un testo standard
@@ -608,14 +608,15 @@ def _salva_db_excel(df, percorso_salvataggio):
 
 def consolida_report_giornalieri(client_google):
     """
-    Funzione di consolidamento corretta.
+    Funzione di consolidamento finale.
     1. Legge i report dal file di transito.
-    2. Usa openpyxl per aggiornare in modo sicuro il file principale.
+    2. Aggiorna sia lo STATO che il REPORT nel file principale.
     3. Svuota il file di transito e il foglio Google.
     """
     path_transito = get_storico_db_path()
     path_principale = get_attivita_programmate_path()
     colonna_stato_target = "STATO\nPdL"
+    colonna_report_target = "STATO\nATTIVITA'"
     aggiornamenti_effettuati = 0
 
     # 1. Legge i report dal file di transito
@@ -635,38 +636,41 @@ def consolida_report_giornalieri(client_google):
             book = openpyxl.load_workbook(path_principale, keep_vba=True)
             sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
 
-            for report_index, report in df_transito.iterrows():
+            for _, report in df_transito.iterrows():
                 pdl_da_aggiornare = str(report['PdL'])
                 nuovo_stato = report['Stato']
+                nuovo_report = report['Report']
                 pdl_trovato = False
 
                 for sheet_name in sheets_to_read:
                     if sheet_name in book.sheetnames:
                         ws = book[sheet_name]
 
-                        # Trova l'indice della colonna PdL e della colonna Stato
                         header_row = 3
-                        pdl_col_idx, stato_col_idx = None, None
+                        pdl_col_idx, stato_col_idx, report_col_idx = None, None, None
                         for cell in ws[header_row]:
-                            if str(cell.value).strip() == 'PdL':
+                            col_val = str(cell.value).strip()
+                            if col_val == 'PdL':
                                 pdl_col_idx = cell.column
-                            if str(cell.value).strip() == colonna_stato_target:
+                            elif col_val == colonna_stato_target:
                                 stato_col_idx = cell.column
+                            elif col_val == colonna_report_target:
+                                report_col_idx = cell.column
 
-                        if pdl_col_idx is None or stato_col_idx is None:
-                            continue # Colonne non trovate in questo foglio
+                        if pdl_col_idx is None or stato_col_idx is None or report_col_idx is None:
+                            continue
 
-                        # Itera sulle righe per trovare il PdL
                         for row_idx in range(header_row + 1, ws.max_row + 1):
                             cell_pdl = ws.cell(row=row_idx, column=pdl_col_idx)
                             if str(cell_pdl.value).strip() == pdl_da_aggiornare:
-                                # PdL trovato, aggiorna la cella dello stato
+                                # Aggiorna sia stato che report
                                 ws.cell(row=row_idx, column=stato_col_idx, value=nuovo_stato)
+                                ws.cell(row=row_idx, column=report_col_idx, value=nuovo_report)
                                 aggiornamenti_effettuati += 1
                                 pdl_trovato = True
-                                break # Passa al prossimo report
+                                break
                     if pdl_trovato:
-                        break # Esci dal ciclo dei fogli
+                        break
 
             book.save(path_principale)
 
