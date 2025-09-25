@@ -1262,69 +1262,64 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
 
 def render_update_reports_tab(client_google):
-    st.header("Aggiornamento e Modifica Report")
-    st.info("Usa questa sezione per forzare l'aggiornamento dei report da Google e per modificare i dati direttamente.")
+    st.header("Modifica Report in Transito")
+    st.info("Usa questa sezione per visualizzare e modificare i report inviati di recente, prima che vengano consolidati nel database principale.")
 
     if 'report_editor_key' not in st.session_state:
         st.session_state.report_editor_key = str(uuid.uuid4())
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        if st.button("⚙️ Consolida Report Giornalieri"):
+        if st.button("⚙️ Consolida Report nel DB Principale"):
             with st.spinner("Consolidamento dei report in corso..."):
                 success, message = consolida_report_giornalieri(client_google)
                 if success:
                     st.success(message)
-                    st.session_state.report_editor_key = str(uuid.uuid4()) # Forza il ri-rendering
+                    st.session_state.report_editor_key = str(uuid.uuid4())
+                    st.rerun()
                 else:
                     st.error(message)
 
     st.divider()
 
-    st.subheader("Visualizza e Modifica Report per Giorno")
-    selected_date = st.date_input("Seleziona una data:", value=datetime.date.today())
+    st.subheader("Visualizza e Modifica Report nel File di Transito")
 
-    archivio_df = carica_archivio_completo()
-    if archivio_df.empty:
-        st.warning("L'archivio dei report è vuoto.")
+    # Carica i dati direttamente dal file di transito
+    report_transito_df = carica_report_transito()
+
+    if report_transito_df.empty:
+        st.info("Nessun report in transito da modificare.")
         return
 
-    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce').dt.date
-    report_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] == selected_date].copy()
+    st.caption("Le modifiche verranno salvate solo nel file temporaneo, pronte per il consolidamento.")
 
-    if report_del_giorno.empty:
-        st.info("Nessun report trovato per la data selezionata.")
-    else:
-        st.caption("Puoi modificare le celle direttamente. Clicca su 'Salva Modifiche' per rendere permanenti i cambiamenti.")
+    # Colonne da mostrare e modificare
+    colonne_da_mostrare = ['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento']
 
-        # Colonne da mostrare e modificare
-        colonne_da_mostrare = ['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento']
+    # Assicurati che tutte le colonne esistano per evitare KeyError
+    for col in colonne_da_mostrare:
+        if col not in report_transito_df.columns:
+            report_transito_df[col] = "" # Aggiungi colonna vuota se mancante
 
-        # Usiamo una chiave di sessione per preservare lo stato dell'editor
-        edited_df = st.data_editor(
-            report_del_giorno[colonne_da_mostrare],
-            key=st.session_state.report_editor_key,
-            num_rows="dynamic",
-            use_container_width=True
-        )
+    edited_df = st.data_editor(
+        report_transito_df[colonne_da_mostrare],
+        key=st.session_state.report_editor_key,
+        num_rows="dynamic",
+        use_container_width=True,
+        # Disabilita l'aggiunta/rimozione di righe per evitare complicazioni
+        disabled=['Data_Compilazione']
+    )
 
-        if st.button("Salva Modifiche", type="primary"):
-            # Unisci le modifiche al DataFrame originale
-            # Preserva le colonne non mostrate nell'editor
-            df_originale_non_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] != selected_date]
-
-            # Ricombina i dati non modificati con quelli potenzialmente modificati
-            df_finale_aggiornato = pd.concat([df_originale_non_del_giorno, edited_df], ignore_index=True)
-
-            with st.spinner("Salvataggio delle modifiche in corso..."):
-                success, message = update_reports_in_excel_and_google(df_finale_aggiornato, client_google)
-                if success:
-                    st.success("Modifiche salvate con successo su Excel e Google Sheets!")
-                    # Aggiorna la chiave per forzare il refresh del data editor con i nuovi dati
-                    st.session_state.report_editor_key = str(uuid.uuid4())
-                    st.rerun()
-                else:
-                    st.error(f"Errore durante il salvataggio: {message}")
+    if st.button("Salva Modifiche nel File di Transito", type="primary"):
+        with st.spinner("Salvataggio delle modifiche in corso..."):
+            # La nuova funzione salva solo sul file di transito
+            success, message = aggiorna_report_transito(edited_df)
+            if success:
+                st.success("Modifiche salvate con successo nel file di transito!")
+                st.session_state.report_editor_key = str(uuid.uuid4())
+                st.rerun()
+            else:
+                st.error(f"Errore durante il salvataggio: {message}")
 
 def render_access_logs_tab(gestionale_data):
     st.header("Cronologia Accessi al Sistema")

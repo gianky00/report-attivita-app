@@ -139,20 +139,23 @@ def carica_archivio_completo():
     all_data = []
 
     sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-    # Colonne necessarie per costruire un archivio "simile" a quello vecchio
-    cols_to_extract = ['PdL', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO']
+    # Aggiungo 'RELAZIONE' (colonna Q) alla lista
+    cols_to_extract = ['PdL', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', 'RELAZIONE']
 
     for sheet_name in sheets_to_read:
         try:
             df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
             df.columns = [str(col).strip() for col in df.columns]
 
-            # Estrai solo le colonne che ci interessano
+            # Assicurati che 'RELAZIONE' esista, altrimenti creala vuota per evitare errori
+            if 'RELAZIONE' not in df.columns:
+                df['RELAZIONE'] = ""
+
             if all(col in df.columns for col in cols_to_extract):
                 df_sheet = df[cols_to_extract].copy()
                 all_data.append(df_sheet)
         except Exception:
-            continue # Ignora fogli mancanti o con errori
+            continue
 
     if not all_data:
         return pd.DataFrame()
@@ -160,16 +163,19 @@ def carica_archivio_completo():
     df_archivio = pd.concat(all_data, ignore_index=True)
     df_archivio.dropna(subset=['PdL', 'DATA\nCONTROLLO'], inplace=True)
 
-    # Rinomina le colonne per corrispondere allo schema atteso dalle funzioni di visualizzazione
+    # Rinomina le colonne per corrispondere allo schema atteso
     df_archivio.rename(columns={
         "DESCRIZIONE\nATTIVITA'": "Descrizione",
         "STATO\nPdL": "Stato",
         "DATA\nCONTROLLO": "Data_Riferimento",
-        "PERSONALE\nIMPIEGATO": "Tecnico"
+        "PERSONALE\nIMPIEGATO": "Tecnico",
+        "RELAZIONE": "Report" # Mappa RELAZIONE a Report
     }, inplace=True)
 
-    # Aggiungi colonne mancanti per mantenere la compatibilità
-    df_archivio['Report'] = "Dato consolidato nel DB principale." # Placeholder
+    # Riempi i report vuoti con un testo standard
+    df_archivio['Report'].fillna("Nessun report disponibile.", inplace=True)
+
+    # Aggiungi colonne mancanti per compatibilità
     df_archivio['Data_Compilazione'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
     df_archivio['Data_Riferimento_dt'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
 
@@ -689,52 +695,30 @@ def consolida_report_giornalieri(client_google):
     except Exception as e:
         return False, f"Errore durante la fase di pulizia: {e}"
 
-def update_reports_in_excel_and_google(df_aggiornato, client_google):
+def carica_report_transito():
     """
-    Aggiorna i report sia nel file Excel locale che nel foglio Google.
+    Carica i report solo dal file di transito (Database_Report_Attivita.xlsm).
     """
-    # 1. Salva nel file Excel
-    percorso_db = get_storico_db_path()
-    success_excel, message_excel = _salva_db_excel(df_aggiornato, percorso_db)
-
-    if not success_excel:
-        return False, f"Errore durante il salvataggio su Excel: {message_excel}"
-
-    # 2. Salva su Google Sheets
+    storico_path = get_storico_db_path()
     try:
-        sheet = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1
-
-        # Prepara il DataFrame per il caricamento
-        # Le colonne devono corrispondere a quelle del foglio Google
-        df_per_google = df_aggiornato.rename(columns={
-            'Data_Compilazione': 'Informazioni cronologiche',
-            'Tecnico': 'Nome e Cognome',
-            'Descrizione': '1. Descrizione PdL', # Questo richiede una ricostruzione
-            'Report': '1. Report Attività',
-            'Stato': '1. Stato attività',
-            'Data_Riferimento': 'Data Riferimento Attività'
-        })
-
-        # Ricostruisci la colonna '1. Descrizione PdL'
-        df_per_google['1. Descrizione PdL'] = 'PdL ' + df_per_google['PdL'].astype(str) + ' - ' + df_per_google['1. Descrizione PdL'].astype(str)
-
-        # Seleziona e ordina le colonne per corrispondere al foglio Google
-        colonne_google = [
-            'Informazioni cronologiche', 'Nome e Cognome', '1. Descrizione PdL',
-            '1. Report Attività', '1. Stato attività', 'Data Riferimento Attività'
-        ]
-        df_per_google = df_per_google[colonne_google]
-
-        # Svuota il foglio e scrivi i nuovi dati
-        sheet.clear()
-        sheet.update([df_per_google.columns.values.tolist()] + df_per_google.values.tolist())
-
-        message_google = "Foglio Google aggiornato con successo."
-
+        with config.EXCEL_LOCK:
+            df_transito = pd.read_excel(storico_path, sheet_name='Database_Attivita')
+        return df_transito
+    except FileNotFoundError:
+        # Se il file non esiste, restituisce un dataframe vuoto con le colonne corrette
+        return pd.DataFrame(columns=['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento'])
     except Exception as e:
-        return False, f"Errore durante l'aggiornamento di Google Sheets: {e}"
+        st.error(f"Errore imprevisto durante il caricamento del file di transito: {e}")
+        return pd.DataFrame()
 
-    # 3. Pulisci la cache
-    st.cache_data.clear()
+def aggiorna_report_transito(df_aggiornato):
+    """
+    Aggiorna e sovrascrive il file di transito con i dati modificati dall'utente.
+    """
+    percorso_db = get_storico_db_path()
+    success, message = _salva_db_excel(df_aggiornato, percorso_db)
 
-    return True, f"{message_excel}\n{message_google}"
+    if success:
+        st.cache_data.clear()
+
+    return success, message
