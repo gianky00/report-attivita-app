@@ -201,3 +201,31 @@ def get_technical_suggestions(text):
                 suggestions.add(hint)
 
     return list(suggestions)
+
+# Knowledge base for domain-specific terminology
+DOMAIN_TERMINOLOGY_KB = {
+    'CTG': 'Capo Turno Generale',
+    'CT': 'Capo Turno',
+    'CR': 'Capo Reparto',
+    'chiamata': 'chiamata di reperibilità',
+    # Aggiungo anche la versione plurale se applicabile
+    'chiamate': 'chiamate di reperibilità',
+}
+
+def analyze_domain_terminology(text):
+    """
+    Analizza il testo per trovare termini specifici del dominio e restituisce le loro definizioni.
+    """
+    found_terms = {}
+    # Usiamo word boundaries (\b) per evitare match parziali (es. 'ACTG' non deve matchare 'CTG')
+    for term, definition in DOMAIN_TERMINOLOGY_KB.items():
+        # Per gli acronimi maiuscoli, cerchiamo solo la forma esatta.
+        if term.isupper():
+            if re.search(r'\b' + re.escape(term) + r'\b', text):
+                found_terms[term] = definition
+        # Per le parole minuscole, cerchiamo senza case-sensitivity.
+        else:
+            if re.search(r'\b' + re.escape(term) + r'\b', text, re.IGNORECASE):
+                found_terms[term] = definition
+
+    return found_terms
