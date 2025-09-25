@@ -127,39 +127,77 @@ def get_relevant_examples(user_text):
 
     return "\n".join(relevant_examples)
 
-@st.cache_data(show_spinner=False)
+from modules.instrumentation_logic import find_and_analyze_tags, get_technical_suggestions
+
 def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
     """
-    Usa l'IA per revisionare una relazione tecnica basandosi su una base di conoscenza.
+    Usa l'IA per revisionare una relazione tecnica, arricchendo la richiesta
+    con analisi semantica della strumentazione basata su standard ISA S5.1.
     """
     if not GEMINI_API_KEY:
         return {"error": "La chiave API di Gemini non è configurata."}
     if not _testo_originale.strip():
         return {"info": "Il testo della relazione è vuoto."}
 
-    # Usa la ricerca intelligente per ottenere esempi pertinenti
-    knowledge_sample = get_relevant_examples(_testo_originale)
-    if not knowledge_sample:
-        # Fallback nel caso l'indice non esista o non ci siano esempi pertinenti
-        knowledge_sample = "Nessun esempio specifico trovato."
+    # 1. Analisi semantica della strumentazione
+    loops, analyzed_tags = find_and_analyze_tags(_testo_originale)
+    technical_summary = ""
+    if loops:
+        technical_summary += "Analisi del Contesto Strumentale:\n"
+        for loop_id, components in loops.items():
+            # Tenta di determinare la variabile principale del loop dal primo componente
+            main_variable = components[0]['variable']
+            technical_summary += f"- Loop di Controllo {loop_id} ({main_variable}):\n"
+            for comp in components:
+                technical_summary += f"  - {comp['tag']}: È un {comp['type']} ({comp['description']}).\n"
 
+            # Inferenza della relazione Controllore -> Attuatore
+            controller = next((c for c in components if c['type'] == '[CONTROLLORE]'), None)
+            actuator = next((c for c in components if c['type'] == '[ATUTTATORE]'), None)
+            if controller and actuator:
+                technical_summary += f"  - Relazione: Il controllore {controller['tag']} comanda l'attuatore {actuator['tag']}.\n"
+        technical_summary += "\n"
+
+    # 2. Costruzione del prompt per l'IA
     try:
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        prompt = f"""
-        Sei un revisore esperto di relazioni tecniche in ambito industriale. Il tuo compito è revisionare e migliorare il seguente testo scritto da un tecnico, mantenendo un tono professionale, chiaro e conciso. Correggi eventuali errori grammaticali o di battitura e assicurati che lo stile sia coerente con gli esempi forniti.
 
-        **STILE E TERMINOLOGIA DA SEGUIRE (ESEMPI):**
-        ---
-        {knowledge_sample}
-        ---
+        if technical_summary:
+            # Prompt avanzato con contesto tecnico
+            prompt = f"""
+            Sei un Direttore Tecnico di Manutenzione con profonda conoscenza della strumentazione (standard ISA S5.1). Il tuo compito è riformulare la seguente relazione scritta da un tecnico, trasformandola in un report professionale, chiaro e tecnicamente consapevole.
 
-        **RELAZIONE DA REVISIONARE:**
-        ---
-        {_testo_originale}
-        ---
+            **INFORMAZIONI TECNICHE DA USARE (Know-How):**
+            ---
+            {technical_summary}
+            ---
+            Usa queste informazioni per interpretare correttamente le sigle e le relazioni tra i componenti. Ad esempio, non descrivere un controllore e una valvola come due elementi uguali, ma spiega la loro relazione causa-effetto. Riformula il testo per riflettere questa comprensione.
 
-        **RELAZIONE REVISIONATA (restituisci solo il testo corretto, senza aggiungere titoli o commenti):**
-        """
+            **RELAZIONE ORIGINALE DA RIFORMULARE:**
+            ---
+            {_testo_originale}
+            ---
+
+            **RELAZIONE RIFORMULATA (restituisci solo il testo corretto, senza aggiungere titoli o commenti):**
+            """
+        else:
+            # Prompt standard se non viene trovato nessun tag strumentale
+            knowledge_sample = get_relevant_examples(_testo_originale) or "Nessun esempio specifico trovato."
+            prompt = f"""
+            Sei un revisore esperto di relazioni tecniche in ambito industriale. Il tuo compito è revisionare e migliorare il seguente testo scritto da un tecnico, mantenendo un tono professionale, chiaro e conciso. Correggi eventuali errori grammaticali o di battitura e assicurati che lo stile sia coerente con gli esempi forniti.
+
+            **STILE E TERMINOLOGIA DA SEGUIRE (ESEMPI):**
+            ---
+            {knowledge_sample}
+            ---
+
+            **RELAZIONE DA REVISIONARE:**
+            ---
+            {_testo_originale}
+            ---
+
+            **RELAZIONE REVISIONATA (restituisci solo il testo corretto, senza aggiungere titoli o commenti):**
+            """
 
         response = model.generate_content(prompt)
         return {"success": True, "text": response.text}
@@ -1790,6 +1828,8 @@ def main_app(nome_utente_autenticato, ruolo):
                         st.session_state.relazione_partner = None
                     if 'relazione_revisionata' not in st.session_state:
                         st.session_state.relazione_revisionata = ""
+                    if 'technical_suggestions' not in st.session_state:
+                        st.session_state.technical_suggestions = []
 
                     # Carica la lista dei contatti per il selettore del partner
                     contatti_df = gestionale_data.get('contatti', pd.DataFrame())
@@ -1811,24 +1851,30 @@ def main_app(nome_utente_autenticato, ruolo):
                         data_intervento = c1.date_input("Data Intervento*", help="Questo campo è obbligatorio.")
                         ora_inizio = c2.text_input("Ora Inizio")
                         ora_fine = c3.text_input("Ora Fine")
-                        testo_relazione = st.text_area("Corpo della Relazione", height=250, value=st.session_state.get('relazione_testo', ''))
+
+                        # Assegnazione della key per risolvere il bug del caching
+                        st.session_state.relazione_testo = st.text_area("Corpo della Relazione", height=250, key="relazione_text_area", value=st.session_state.get('relazione_testo', ''))
 
                         # Pulsanti del form
-                        b1, b2 = st.columns(2)
+                        b1, b2, b3 = st.columns(3)
                         submit_ai_button = b1.form_submit_button("🤖 Correggi con IA")
-                        submit_save_button = b2.form_submit_button("✅ Invia Relazione", type="primary")
+                        submit_suggestion_button = b2.form_submit_button("💡 Suggerimento Tecnico")
+                        submit_save_button = b3.form_submit_button("✅ Invia Relazione", type="primary")
 
                     # Logica dopo la sottomissione del form
                     if submit_ai_button:
-                        st.session_state.relazione_testo = testo_relazione # Salva il testo corrente
-                        if not testo_relazione.strip():
+                        # Legge sempre il valore più aggiornato dallo stato della sessione
+                        testo_da_revisionare = st.session_state.get('relazione_text_area', '')
+                        st.session_state.relazione_testo = testo_da_revisionare # Sincronizza lo stato
+
+                        if not testo_da_revisionare.strip():
                             st.warning("Per favore, scrivi il corpo della relazione prima di chiedere la correzione.")
                         elif not data_intervento:
                             st.error("Il campo 'Data Intervento' è obbligatorio.")
                         else:
                             with st.spinner("L'IA sta analizzando la relazione..."):
                                 # La funzione di revisione ora gestisce autonomamente il recupero degli esempi
-                                result = revisiona_relazione_con_ia(testo_relazione, None) # Non serve più passare la knowledge base
+                                result = revisiona_relazione_con_ia(testo_da_revisionare, None) # Usa il testo più recente
 
                                 if result.get("success"):
                                     st.session_state.relazione_revisionata = result["text"]
@@ -1838,10 +1884,23 @@ def main_app(nome_utente_autenticato, ruolo):
                                 else:
                                     st.info(result.get("info", "Nessun suggerimento dall'IA."))
 
+                    if submit_suggestion_button:
+                        testo_per_suggerimenti = st.session_state.get('relazione_text_area', '')
+                        if testo_per_suggerimenti.strip():
+                            with st.spinner("Cerco suggerimenti tecnici..."):
+                                suggestions = get_technical_suggestions(testo_per_suggerimenti)
+                                st.session_state.technical_suggestions = suggestions
+                                if not suggestions:
+                                    st.toast("Nessun suggerimento specifico trovato per questo testo.")
+                        else:
+                            st.warning("Scrivi qualcosa nella relazione per ricevere suggerimenti.")
+
                     if submit_save_button:
+                        # Legge sempre il valore più aggiornato dallo stato della sessione
+                        testo_da_inviare = st.session_state.get('relazione_text_area', '')
                         if not data_intervento:
                             st.error("Il campo 'Data Intervento' è obbligatorio prima di inviare.")
-                        elif not testo_relazione.strip():
+                        elif not testo_da_inviare.strip():
                             st.error("Il corpo della relazione non può essere vuoto prima di inviare.")
                         else:
                             # Prepara e invia l'email
@@ -1854,7 +1913,7 @@ def main_app(nome_utente_autenticato, ruolo):
                             <p><strong>Orario:</strong> Da {ora_inizio or 'N/D'} a {ora_fine or 'N/D'}</p>
                             <hr>
                             <h4>Testo della Relazione:</h4>
-                            <p>{testo_relazione.replace('\n', '<br>')}</p>
+                            <p>{testo_da_inviare.replace('\n', '<br>')}</p>
                             """
                             invia_email_con_outlook_async(titolo_email, html_body)
                             st.success("Relazione inviata con successo!")
@@ -1871,7 +1930,7 @@ def main_app(nome_utente_autenticato, ruolo):
 
                                 # Salva il contenuto della relazione
                                 with open(filename, "w", encoding="utf-8") as f:
-                                    f.write(testo_relazione)
+                                    f.write(testo_da_inviare)
 
                                 st.toast("Relazione salvata per l'apprendimento futuro dell'IA.")
 
@@ -1883,6 +1942,7 @@ def main_app(nome_utente_autenticato, ruolo):
                             # Svuota i campi dopo l'invio
                             st.session_state.relazione_testo = ""
                             st.session_state.relazione_revisionata = ""
+                            st.session_state.technical_suggestions = []
                             st.rerun()
 
 
@@ -1893,6 +1953,11 @@ def main_app(nome_utente_autenticato, ruolo):
                             st.session_state.relazione_testo = st.session_state.relazione_revisionata
                             st.session_state.relazione_revisionata = "" # Pulisci dopo aver copiato
                             st.rerun()
+
+                    if st.session_state.get('technical_suggestions'):
+                        st.subheader("💡 Suggerimenti Tecnici")
+                        for suggestion in st.session_state.get('technical_suggestions', []):
+                            st.info(suggestion)
 
 
         # Scheda 1: Nuova sezione "Pianificazione e Controllo" con sotto-schede
