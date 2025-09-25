@@ -2518,7 +2518,8 @@ keys_to_initialize = {
     'ruolo': None,
     'debriefing_task': None,
     'temp_user_for_2fa': None,
-    '2fa_secret': None
+    '2fa_secret': None,
+    'completed_yesterday_pdl': []
 }
 for key, default_value in keys_to_initialize.items():
     if key not in st.session_state:
