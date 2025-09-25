@@ -33,8 +33,9 @@ from modules.data_manager import (
     trova_attivita,
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate,
-    sync_reports_from_google,
-    update_reports_in_excel_and_google
+    consolida_report_giornalieri,
+    carica_report_transito,
+    aggiorna_report_transito
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -1262,69 +1263,64 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
 
 def render_update_reports_tab(client_google):
-    st.header("Aggiornamento e Modifica Report")
-    st.info("Usa questa sezione per forzare l'aggiornamento dei report da Google e per modificare i dati direttamente.")
+    st.header("Modifica Report in Transito")
+    st.info("Usa questa sezione per visualizzare e modificare i report inviati di recente, prima che vengano consolidati nel database principale.")
 
     if 'report_editor_key' not in st.session_state:
         st.session_state.report_editor_key = str(uuid.uuid4())
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        if st.button("🔄 Sincronizza Report da Google"):
-            with st.spinner("Sincronizzazione in corso..."):
-                success, message = sync_reports_from_google(client_google)
+        if st.button("⚙️ Consolida Report nel DB Principale"):
+            with st.spinner("Consolidamento dei report in corso..."):
+                success, message = consolida_report_giornalieri(client_google)
                 if success:
                     st.success(message)
-                    st.session_state.report_editor_key = str(uuid.uuid4()) # Forza il ri-rendering del data_editor
+                    st.session_state.report_editor_key = str(uuid.uuid4())
+                    st.rerun()
                 else:
                     st.error(message)
 
     st.divider()
 
-    st.subheader("Visualizza e Modifica Report per Giorno")
-    selected_date = st.date_input("Seleziona una data:", value=datetime.date.today())
+    st.subheader("Visualizza e Modifica Report nel File di Transito")
 
-    archivio_df = carica_archivio_completo()
-    if archivio_df.empty:
-        st.warning("L'archivio dei report è vuoto.")
+    # Carica i dati direttamente dal file di transito
+    report_transito_df = carica_report_transito()
+
+    if report_transito_df.empty:
+        st.info("Nessun report in transito da modificare.")
         return
 
-    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce').dt.date
-    report_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] == selected_date].copy()
+    st.caption("Le modifiche verranno salvate solo nel file temporaneo, pronte per il consolidamento.")
 
-    if report_del_giorno.empty:
-        st.info("Nessun report trovato per la data selezionata.")
-    else:
-        st.caption("Puoi modificare le celle direttamente. Clicca su 'Salva Modifiche' per rendere permanenti i cambiamenti.")
+    # Colonne da mostrare e modificare
+    colonne_da_mostrare = ['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento']
 
-        # Colonne da mostrare e modificare
-        colonne_da_mostrare = ['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento']
+    # Assicurati che tutte le colonne esistano per evitare KeyError
+    for col in colonne_da_mostrare:
+        if col not in report_transito_df.columns:
+            report_transito_df[col] = "" # Aggiungi colonna vuota se mancante
 
-        # Usiamo una chiave di sessione per preservare lo stato dell'editor
-        edited_df = st.data_editor(
-            report_del_giorno[colonne_da_mostrare],
-            key=st.session_state.report_editor_key,
-            num_rows="dynamic",
-            use_container_width=True
-        )
+    edited_df = st.data_editor(
+        report_transito_df[colonne_da_mostrare],
+        key=st.session_state.report_editor_key,
+        num_rows="dynamic",
+        use_container_width=True,
+        # Disabilita l'aggiunta/rimozione di righe per evitare complicazioni
+        disabled=['Data_Compilazione']
+    )
 
-        if st.button("Salva Modifiche", type="primary"):
-            # Unisci le modifiche al DataFrame originale
-            # Preserva le colonne non mostrate nell'editor
-            df_originale_non_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] != selected_date]
-
-            # Ricombina i dati non modificati con quelli potenzialmente modificati
-            df_finale_aggiornato = pd.concat([df_originale_non_del_giorno, edited_df], ignore_index=True)
-
-            with st.spinner("Salvataggio delle modifiche in corso..."):
-                success, message = update_reports_in_excel_and_google(df_finale_aggiornato, client_google)
-                if success:
-                    st.success("Modifiche salvate con successo su Excel e Google Sheets!")
-                    # Aggiorna la chiave per forzare il refresh del data editor con i nuovi dati
-                    st.session_state.report_editor_key = str(uuid.uuid4())
-                    st.rerun()
-                else:
-                    st.error(f"Errore durante il salvataggio: {message}")
+    if st.button("Salva Modifiche nel File di Transito", type="primary"):
+        with st.spinner("Salvataggio delle modifiche in corso..."):
+            # La nuova funzione salva solo sul file di transito
+            success, message = aggiorna_report_transito(edited_df)
+            if success:
+                st.success("Modifiche salvate con successo nel file di transito!")
+                st.session_state.report_editor_key = str(uuid.uuid4())
+                st.rerun()
+            else:
+                st.error(f"Errore durante il salvataggio: {message}")
 
 def render_access_logs_tab(gestionale_data):
     st.header("Cronologia Accessi al Sistema")
@@ -1918,25 +1914,30 @@ def main_app(nome_utente_autenticato, ruolo):
         if oggi.weekday() == 0: giorno_precedente = oggi - datetime.timedelta(days=3)
         elif oggi.weekday() == 6: giorno_precedente = oggi - datetime.timedelta(days=2)
         
+        # Carica i dati delle attività una sola volta
+        dati_programmati_df = carica_dati_attivita_programmate()
+        attivita_da_recuperare = []
+
         if ruolo in ["Amministratore", "Tecnico"]:
-            # Inizializza lo stato di sessione per le attività completate del giorno prima
-            if 'completed_yesterday_pdl' not in st.session_state:
-                st.session_state.completed_yesterday_pdl = []
-
+            # Nuova logica per trovare attività non completate del giorno precedente
             attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
-            num_attivita_mancanti = 0
-            if attivita_pianificate_ieri:
-                archivio_df = carica_archivio_completo()
 
-                # Unisci i PdL dall'archivio con quelli completati nella sessione corrente
-                pdl_da_archivio = set(archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]['PdL']) if not archivio_df.empty else set()
-                pdl_da_sessione = set(st.session_state.completed_yesterday_pdl)
-                pdl_compilati_ieri = pdl_da_archivio.union(pdl_da_sessione)
+            if attivita_pianificate_ieri and not dati_programmati_df.empty:
+                # Definisci gli stati che consideriamo "finali" o "completati"
+                stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
 
-                # Calcola le attività mancanti escludendo quelle già compilate
-                attivita_da_fare_ieri = [task for task in attivita_pianificate_ieri if task['pdl'] not in pdl_compilati_ieri]
-                num_attivita_mancanti = len(attivita_da_fare_ieri)
-            if num_attivita_mancanti > 0:
+                # Crea un dizionario per una ricerca rapida dello stato per PdL
+                status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
+
+                # Filtra le attività pianificate per ieri che non sono in uno stato finale
+                for task in attivita_pianificate_ieri:
+                    pdl = task['pdl']
+                    stato_attuale = status_dict.get(pdl, 'Pianificato') # Default a 'Pianificato' se non trovato
+                    if stato_attuale not in stati_finali:
+                        attivita_da_recuperare.append(task)
+
+            if attivita_da_recuperare:
+                num_attivita_mancanti = len(attivita_da_recuperare)
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
         # Lista delle schede principali con i nuovi nomi e la nuova struttura
@@ -1950,7 +1951,6 @@ def main_app(nome_utente_autenticato, ruolo):
         # Scheda 0: Attività Assegnate (modificata per aggiungere "Compila Relazione")
         with tabs[0]:
             sub_tab_list = ["Attività di Oggi", "Attività Giorno Precedente"]
-            # Aggiungi la scheda solo se l'utente è un Tecnico o Amministratore
             if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
 
@@ -1960,15 +1960,10 @@ def main_app(nome_utente_autenticato, ruolo):
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
                 lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
                 disegna_sezione_attivita(lista_attivita, "today", ruolo)
+
             with sub_tabs[1]:
                 st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-                lista_attivita_ieri_totale = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
-                archivio_df = carica_archivio_completo()
-                pdl_compilati_ieri = set()
-                if not archivio_df.empty:
-                    report_compilati = archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]
-                    pdl_compilati_ieri = set(report_compilati['PdL'])
-                attivita_da_recuperare = [task for task in lista_attivita_ieri_totale if task['pdl'] not in pdl_compilati_ieri]
+                # La lista `attivita_da_recuperare` è già stata calcolata in precedenza
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             # Contenuto per la nuova scheda "Compila Relazione"
