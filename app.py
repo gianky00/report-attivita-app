@@ -1374,17 +1374,28 @@ def render_guida_tab(ruolo):
 
     # Sezione Admin (visibile solo agli admin)
     if ruolo == "Amministratore":
-        with st.expander("🔑 Gestione Account (Solo Admin)"):
-            st.subheader("Modificare un Utente")
+        with st.expander("🔑 Funzionalità Amministratore"):
+            st.subheader("Dashboard Admin")
             st.markdown("""
-            Nella `Dashboard Admin > Gestione Account`, vedrai l'elenco di tutti gli utenti.
-            - Clicca su **"Modifica"** per cambiare i dati di un utente.
-            - **Cambiare Ruolo**: Puoi promuovere un utente a "Amministratore" o cambiarne il ruolo.
-            - **Reset Password**: Inserisci una nuova password nel campo apposito per aggiornarla.
-            - **Utente Placeholder**: Spunta la casella "Imposta come Utente Placeholder" per trasformare un account in un utente "esterno". Questo utente non potrà accedere all'applicazione, ma il suo nome potrà essere ancora assegnato ai turni. Per riattivare l'utente, togli la spunta e assegnagli una nuova password.
+            La `Dashboard Admin` è il tuo centro di controllo. Contiene diverse schede:
+            - **Performance Team**: Analizza le performance dei tecnici in un dato intervallo di tempo.
+            - **Gestione IA**: Contiene strumenti per migliorare e mantenere l'intelligenza artificiale.
+            - **Crea Nuovo Turno**: Permette di creare nuovi turni di assistenza o straordinario.
+            - **Gestione Account**: Per modificare utenti esistenti o creare nuovi utenti placeholder.
             """)
-            st.subheader("Creare un Utente Placeholder")
-            st.markdown("Usa il modulo in fondo alla pagina per creare rapidamente un nuovo utente esterno che non necessita di accesso, ma che deve comparire nel sistema.")
+
+            st.subheader("Gestione IA (Nuova Struttura)")
+            st.markdown("""
+            La scheda **Gestione IA** è stata riorganizzata per maggiore chiarezza e ora contiene due sotto-schede:
+            - **Revisione Conoscenze**: Qui puoi approvare o respingere i suggerimenti di nuove conoscenze inviati dai tecnici quando usano la compilazione guidata. Questo aiuta l'IA ad apprendere nuovi tipi di interventi.
+            - **Memoria IA**: Contiene il pulsante per "Aggiorna Memoria IA". Cliccalo per ricostruire la base di conoscenza dell'IA usando tutte le relazioni inviate di recente. È un'operazione da fare periodicamente per mantenere l'IA aggiornata.
+            """)
+
+            st.subheader("Gestione Account")
+            st.markdown("""
+            - **Modificare un Utente**: Clicca su "Modifica" per cambiare ruolo, resettare la password o impostare un utente come "Placeholder" (senza accesso).
+            - **Creare Utente Placeholder**: Usa il modulo in fondo per creare rapidamente un utente esterno che non necessita di accesso.
+            """)
 
     # Sezione Archivio
     # Sezione Richieste (Nuova)
@@ -1426,7 +1437,7 @@ def render_guida_tab(ruolo):
 
 # --- GESTIONE SESSIONE ---
 SESSION_DIR = "sessions"
-SESSION_DURATION_HOURS = 8
+SESSION_DURATION_HOURS = 8760 # 1 anno (365 * 24)
 if not os.path.exists(SESSION_DIR):
     os.makedirs(SESSION_DIR)
 
@@ -2230,7 +2241,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     render_technician_detail_view()
                 else:
                     # Altrimenti, mostra le tab principali della dashboard
-                    admin_tabs = st.tabs(["Performance Team", "Revisione Conoscenze", "Gestione IA", "Crea Nuovo Turno", "Gestione Account"])
+                    admin_tabs = st.tabs(["Performance Team", "Gestione IA", "Crea Nuovo Turno", "Gestione Account"])
 
                     with admin_tabs[0]: # Performance Team
                         archivio_df_perf = carica_archivio_completo()
@@ -2316,70 +2327,74 @@ def main_app(nome_utente_autenticato, ruolo):
                                         st.session_state['detail_end_date'] = results['end_date']
                                         st.rerun()
 
-                    with admin_tabs[1]: # Revisione Conoscenze
-                        st.markdown("### 🧠 Revisione Voci del Knowledge Core")
-                        unreviewed_entries = learning_module.load_unreviewed_knowledge()
-                        pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
+                    with admin_tabs[1]: # Gestione IA (nuova scheda unificata)
+                        st.header("Gestione Intelligenza Artificiale")
+                        ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
 
-                        if not pending_entries:
-                            st.success("🎉 Nessuna nuova voce da revisionare!")
-                        else:
-                            st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
+                        with ia_sub_tabs[0]: # Revisione Conoscenze
+                            st.markdown("### 🧠 Revisione Voci del Knowledge Core")
+                            unreviewed_entries = learning_module.load_unreviewed_knowledge()
+                            pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
 
-                        for i, entry in enumerate(pending_entries):
-                            with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
-                                st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
-                                st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
-
-                                st.write("**Dettagli del report compilato:**")
-                                st.json(entry['dettagli_report'])
-
-                                st.markdown("---")
-                                st.markdown("**Azione di Integrazione**")
-
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
-                                    new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
-                                with col2:
-                                    if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
-                                        if new_equipment_key and new_display_name:
-                                            first_question = {
-                                                "id": "sintomo_iniziale",
-                                                "text": "Qual era il sintomo principale?",
-                                                "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}
-                                            }
-                                            details = {
-                                                "equipment_key": new_equipment_key,
-                                                "display_name": new_display_name,
-                                                "new_question": first_question
-                                            }
-                                            result = learning_module.integrate_knowledge(entry['id'], details)
-                                            if result.get("success"):
-                                                st.success(f"Voce '{entry['id']}' integrata con successo!")
-                                                st.cache_data.clear()
-                                                st.rerun()
-                                            else:
-                                                st.error(f"Errore integrazione: {result.get('error')}")
-                                        else:
-                                            st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
-
-                    with admin_tabs[2]: # Gestione IA
-                        st.subheader("Gestione Modello IA")
-                        st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
-
-                        if st.button("🧠 Aggiorna Memoria IA", type="primary"):
-                            with st.spinner("Ricostruzione dell'indice in corso..."):
-                                result = learning_module.build_knowledge_base()
-
-                            if result.get("success"):
-                                st.success(result.get("message"))
-                                # Pulisce la cache per forzare il ricaricamento dei dati IA
-                                st.cache_data.clear()
+                            if not pending_entries:
+                                st.success("🎉 Nessuna nuova voce da revisionare!")
                             else:
-                                st.error(result.get("message"))
+                                st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
 
-                    with admin_tabs[3]: # Crea Nuovo Turno
+                            for i, entry in enumerate(pending_entries):
+                                with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
+                                    st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
+                                    st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
+
+                                    st.write("**Dettagli del report compilato:**")
+                                    st.json(entry['dettagli_report'])
+
+                                    st.markdown("---")
+                                    st.markdown("**Azione di Integrazione**")
+
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
+                                        new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
+                                    with col2:
+                                        if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
+                                            if new_equipment_key and new_display_name:
+                                                first_question = {
+                                                    "id": "sintomo_iniziale",
+                                                    "text": "Qual era il sintomo principale?",
+                                                    "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}
+                                                }
+                                                details = {
+                                                    "equipment_key": new_equipment_key,
+                                                    "display_name": new_display_name,
+                                                    "new_question": first_question
+                                                }
+                                                result = learning_module.integrate_knowledge(entry['id'], details)
+                                                if result.get("success"):
+                                                    st.success(f"Voce '{entry['id']}' integrata con successo!")
+                                                    st.cache_data.clear()
+                                                    st.rerun()
+                                                else:
+                                                    st.error(f"Errore integrazione: {result.get('error')}")
+                                            else:
+                                                st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
+
+                        with ia_sub_tabs[1]: # Memoria IA
+                            st.subheader("Gestione Modello IA")
+                            st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
+
+                            if st.button("🧠 Aggiorna Memoria IA", type="primary"):
+                                with st.spinner("Ricostruzione dell'indice in corso..."):
+                                    result = learning_module.build_knowledge_base()
+
+                                if result.get("success"):
+                                    st.success(result.get("message"))
+                                    # Pulisce la cache per forzare il ricaricamento dei dati IA
+                                    st.cache_data.clear()
+                                else:
+                                    st.error(result.get("message"))
+
+                    with admin_tabs[2]: # Crea Nuovo Turno
                         with st.form("new_shift_form", clear_on_submit=True):
                             st.subheader("Dettagli Nuovo Turno")
                             tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
@@ -2417,7 +2432,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                     else:
                                         st.error("Errore nel salvataggio del nuovo turno.")
 
-                    with admin_tabs[4]: # Gestione Account
+                    with admin_tabs[3]: # Gestione Account
                         render_gestione_account(gestionale_data)
 
 
