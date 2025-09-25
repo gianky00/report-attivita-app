@@ -685,3 +685,53 @@ def sync_reports_from_google(client_google):
         st.cache_data.clear()
 
     return success, message
+
+def update_reports_in_excel_and_google(df_aggiornato, client_google):
+    """
+    Aggiorna i report sia nel file Excel locale che nel foglio Google.
+    """
+    # 1. Salva nel file Excel
+    percorso_db = get_storico_db_path()
+    success_excel, message_excel = _salva_db_excel(df_aggiornato, percorso_db)
+
+    if not success_excel:
+        return False, f"Errore durante il salvataggio su Excel: {message_excel}"
+
+    # 2. Salva su Google Sheets
+    try:
+        sheet = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1
+
+        # Prepara il DataFrame per il caricamento
+        # Le colonne devono corrispondere a quelle del foglio Google
+        df_per_google = df_aggiornato.rename(columns={
+            'Data_Compilazione': 'Informazioni cronologiche',
+            'Tecnico': 'Nome e Cognome',
+            'Descrizione': '1. Descrizione PdL', # Questo richiede una ricostruzione
+            'Report': '1. Report Attività',
+            'Stato': '1. Stato attività',
+            'Data_Riferimento': 'Data Riferimento Attività'
+        })
+
+        # Ricostruisci la colonna '1. Descrizione PdL'
+        df_per_google['1. Descrizione PdL'] = 'PdL ' + df_per_google['PdL'].astype(str) + ' - ' + df_per_google['1. Descrizione PdL'].astype(str)
+
+        # Seleziona e ordina le colonne per corrispondere al foglio Google
+        colonne_google = [
+            'Informazioni cronologiche', 'Nome e Cognome', '1. Descrizione PdL',
+            '1. Report Attività', '1. Stato attività', 'Data Riferimento Attività'
+        ]
+        df_per_google = df_per_google[colonne_google]
+
+        # Svuota il foglio e scrivi i nuovi dati
+        sheet.clear()
+        sheet.update([df_per_google.columns.values.tolist()] + df_per_google.values.tolist())
+
+        message_google = "Foglio Google aggiornato con successo."
+
+    except Exception as e:
+        return False, f"Errore durante l'aggiornamento di Google Sheets: {e}"
+
+    # 3. Pulisci la cache
+    st.cache_data.clear()
+
+    return True, f"{message_excel}\n{message_google}"

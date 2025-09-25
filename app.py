@@ -33,7 +33,8 @@ from modules.data_manager import (
     trova_attivita,
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate,
-    sync_reports_from_google
+    sync_reports_from_google,
+    update_reports_in_excel_and_google
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -1261,43 +1262,69 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
 
 def render_sync_tab(client_google):
-    st.header("Sincronizzazione Dati e Visualizzazione Report")
-    st.info("Usa questa sezione per forzare l'aggiornamento dei report da Google Sheets e visualizzare i dati per un giorno specifico.")
+    st.header("Sincronizzazione e Modifica Report")
+    st.info("Usa questa sezione per forzare l'aggiornamento dei report da Google e per modificare i dati direttamente.")
 
-    # Pulsante di sincronizzazione
-    if st.button("🔄 Sincronizza Report da Google"):
-        with st.spinner("Sincronizzazione in corso... Questo potrebbe richiedere un minuto."):
-            success, message = sync_reports_from_google(client_google)
-            if success:
-                st.success(message)
-            else:
-                st.error(message)
+    if 'report_editor_key' not in st.session_state:
+        st.session_state.report_editor_key = str(uuid.uuid4())
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("🔄 Sincronizza Report da Google"):
+            with st.spinner("Sincronizzazione in corso..."):
+                success, message = sync_reports_from_google(client_google)
+                if success:
+                    st.success(message)
+                    st.session_state.report_editor_key = str(uuid.uuid4()) # Forza il ri-rendering del data_editor
+                else:
+                    st.error(message)
 
     st.divider()
 
-    # Filtro per data
-    st.subheader("Visualizza Report per Giorno")
+    st.subheader("Visualizza e Modifica Report per Giorno")
     selected_date = st.date_input("Seleziona una data:", value=datetime.date.today())
 
-    # Carica e visualizza i dati
     archivio_df = carica_archivio_completo()
-
     if archivio_df.empty:
         st.warning("L'archivio dei report è vuoto.")
         return
 
-    # Filtra per la data selezionata
     archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce').dt.date
+    report_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] == selected_date].copy()
 
-    report_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] == selected_date]
-
-    st.subheader(f"Report del {selected_date.strftime('%d/%m/%Y')}")
     if report_del_giorno.empty:
         st.info("Nessun report trovato per la data selezionata.")
     else:
-        # Formattazione per una migliore visualizzazione
-        display_df = report_del_giorno[['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report']].copy()
-        st.dataframe(display_df, use_container_width=True)
+        st.caption("Puoi modificare le celle direttamente. Clicca su 'Salva Modifiche' per rendere permanenti i cambiamenti.")
+
+        # Colonne da mostrare e modificare
+        colonne_da_mostrare = ['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento']
+
+        # Usiamo una chiave di sessione per preservare lo stato dell'editor
+        edited_df = st.data_editor(
+            report_del_giorno[colonne_da_mostrare],
+            key=st.session_state.report_editor_key,
+            num_rows="dynamic",
+            use_container_width=True
+        )
+
+        if st.button("Salva Modifiche", type="primary"):
+            # Unisci le modifiche al DataFrame originale
+            # Preserva le colonne non mostrate nell'editor
+            df_originale_non_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] != selected_date]
+
+            # Ricombina i dati non modificati con quelli potenzialmente modificati
+            df_finale_aggiornato = pd.concat([df_originale_non_del_giorno, edited_df], ignore_index=True)
+
+            with st.spinner("Salvataggio delle modifiche in corso..."):
+                success, message = update_reports_in_excel_and_google(df_finale_aggiornato, client_google)
+                if success:
+                    st.success("Modifiche salvate con successo su Excel e Google Sheets!")
+                    # Aggiorna la chiave per forzare il refresh del data editor con i nuovi dati
+                    st.session_state.report_editor_key = str(uuid.uuid4())
+                    st.rerun()
+                else:
+                    st.error(f"Errore durante il salvataggio: {message}")
 
 def render_access_logs_tab(gestionale_data):
     st.header("Cronologia Accessi al Sistema")
@@ -1514,11 +1541,12 @@ def render_guida_tab(ruolo):
             Puoi usare i filtri in cima alla pagina per cercare accessi specifici per utente o per intervallo di date.
             """)
 
-            st.subheader("Sincronizza Dati")
+            st.subheader("Sincronizza e Modifica Dati")
             st.markdown("""
-            Questa scheda fornisce un controllo manuale sul processo di aggiornamento dei report.
-            - **Pulsante 'Sincronizza Report da Google'**: Cliccando questo pulsante, l'applicazione forzerà una lettura immediata di tutti i nuovi report inviati tramite Google Sheets e li consoliderà nel database principale (`Database_Report_Attivita.xlsm`). Usa questa funzione se hai bisogno di vedere i report più recenti senza attendere lo script di aggiornamento automatico.
-            - **Filtro per Giorno**: Sotto il pulsante, puoi selezionare una data (preimpostata su oggi) per visualizzare tutti i report registrati per quel giorno specifico.
+            Questa scheda fornisce un controllo manuale sul processo di aggiornamento e modifica dei report.
+            - **Pulsante 'Sincronizza Report da Google'**: Cliccando questo pulsante, l'applicazione forzerà una lettura immediata di tutti i nuovi report inviati tramite Google Sheets e li consoliderà nel database principale (`Database_Report_Attivita.xlsm`).
+            - **Visualizzazione e Modifica**: Sotto il pulsante, puoi selezionare una data per visualizzare i report di quel giorno. La tabella che appare è **modificabile**. Puoi cliccare su ogni cella per correggere errori o aggiornare informazioni.
+            - **Pulsante 'Salva Modifiche'**: Dopo aver modificato i dati, clicca questo pulsante per salvare le modifiche. Il sistema aggiornerà contemporaneamente sia il file Excel `Database_Report_Attivita.xlsm` sia il foglio Google corrispondente, garantendo la coerenza dei dati.
             """)
 
     # Sezione Archivio
