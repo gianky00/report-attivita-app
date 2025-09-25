@@ -33,7 +33,7 @@ from modules.data_manager import (
     trova_attivita,
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate,
-    sync_reports_from_google,
+    consolida_report_giornalieri,
     update_reports_in_excel_and_google
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
