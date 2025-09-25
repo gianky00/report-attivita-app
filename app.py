@@ -1916,6 +1916,7 @@ def main_app(nome_utente_autenticato, ruolo):
         
         # Carica i dati delle attività una sola volta
         dati_programmati_df = carica_dati_attivita_programmate()
+        report_transito_df = carica_report_transito()
         attivita_da_recuperare = []
 
         if ruolo in ["Amministratore", "Tecnico"]:
@@ -1929,9 +1930,21 @@ def main_app(nome_utente_autenticato, ruolo):
                 # Crea un dizionario per una ricerca rapida dello stato per PdL
                 status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
 
+                # Ottieni la lista dei PdL già compilati nel file di transito per il giorno precedente
+                pdl_compilati_transito = []
+                if not report_transito_df.empty:
+                    # Assicurati che la colonna Data_Riferimento sia in formato data
+                    report_transito_df['Data_Riferimento_dt'] = pd.to_datetime(report_transito_df['Data_Riferimento'], errors='coerce').dt.date
+                    pdl_compilati_transito = report_transito_df[report_transito_df['Data_Riferimento_dt'] == giorno_precedente]['PdL'].unique().tolist()
+
+
                 # Filtra le attività pianificate per ieri che non sono in uno stato finale
                 for task in attivita_pianificate_ieri:
                     pdl = task['pdl']
+                    # Controlla se il PdL è già stato compilato nel file di transito
+                    if pdl in pdl_compilati_transito:
+                        continue # Salta questo task perché un report è già stato inviato
+
                     stato_attuale = status_dict.get(pdl, 'Pianificato') # Default a 'Pianificato' se non trovato
                     if stato_attuale not in stati_finali:
                         attivita_da_recuperare.append(task)
