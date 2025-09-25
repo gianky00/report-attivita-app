@@ -1298,12 +1298,15 @@ def render_update_reports_tab(client_google):
         st.info("Nessun report in transito da modificare.")
         return
 
+    # Memorizza l'ordine originale delle colonne
+    original_columns = report_transito_df.columns.tolist()
+
     st.caption("Le modifiche verranno salvate solo nel file temporaneo, pronte per il consolidamento.")
 
-    # Colonne da mostrare e modificare
+    # Colonne da mostrare e modificare in un ordine più leggibile
     colonne_da_mostrare = ['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento']
 
-    # Assicurati che tutte le colonne esistano per evitare KeyError
+    # Assicurati che tutte le colonne da mostrare esistano per evitare KeyError
     for col in colonne_da_mostrare:
         if col not in report_transito_df.columns:
             report_transito_df[col] = "" # Aggiungi colonna vuota se mancante
@@ -1319,11 +1322,13 @@ def render_update_reports_tab(client_google):
 
     if st.button("Salva Modifiche nel File di Transito", type="primary"):
         with st.spinner("Salvataggio delle modifiche in corso..."):
-            # La nuova funzione salva solo sul file di transito
-            success, message = aggiorna_report_transito(edited_df)
+            # Ripristina l'ordine originale delle colonne prima di salvare
+            df_to_save = edited_df.reindex(columns=original_columns)
+
+            success, message = aggiorna_report_transito(df_to_save)
             if success:
                 st.success("Modifiche salvate con successo nel file di transito!")
-                st.session_state.report_editor_key = str(uuid.uuid4())
+                st.session_state.report_editor_key = str(uuid.uuid4()) # Invalida la cache dell'editor
                 st.rerun()
             else:
                 st.error(f"Errore durante il salvataggio: {message}")
