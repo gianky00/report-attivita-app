@@ -451,7 +451,13 @@ def carica_dati_attivita_programmate():
             # Lo stato viene ora letto direttamente dalla colonna 'STATO PdL' e mappato
             df_filtered['Stato'] = df_filtered['Stato_OdL'].map(status_map).fillna('Non Definito')
 
-            # La colonna 'Storico' non è più necessaria qui, poiché questo è il DB principale
+            # Aggiunge la colonna Tecnico, leggendola o creandola vuota se non esiste
+            if 'Tecnico Esecutore' in df.columns:
+                df_filtered['Tecnico'] = df['Tecnico Esecutore']
+            else:
+                df_filtered['Tecnico'] = None # o pd.NA
+
+            # La colonna 'Storico' non è più necessaria qui
             df_filtered['Storico'] = [[] for _ in range(len(df_filtered))]
 
             all_data.append(df_filtered)
@@ -737,8 +743,11 @@ def consolida_report(client_google):
                 target_sheet = pdl_to_sheet_map[pdl]
                 if target_sheet not in updates_by_sheet:
                     updates_by_sheet[target_sheet] = {}
-                # Mappa PdL -> nuovo stato
-                updates_by_sheet[target_sheet][pdl] = report['Stato']
+                # Mappa PdL -> {stato, tecnico}
+                updates_by_sheet[target_sheet][pdl] = {
+                    'stato': report['Stato'],
+                    'tecnico': report['Tecnico']
+                }
 
         # 3. Applica gli aggiornamenti foglio per foglio
         report_processati = 0
@@ -748,13 +757,23 @@ def consolida_report(client_google):
             try:
                 pdl_col_idx = header.index('PdL') + 1
                 stato_col_idx = header.index('STATO\nPdL') + 1
+
+                # Aggiunge la colonna 'Tecnico Esecutore' se non esiste
+                if 'Tecnico Esecutore' in header:
+                    tecnico_col_idx = header.index('Tecnico Esecutore') + 1
+                else:
+                    tecnico_col_idx = len(header) + 1
+                    ws.cell(row=1, column=tecnico_col_idx, value='Tecnico Esecutore')
+
             except ValueError:
-                continue
+                continue # Salta i fogli che non hanno le colonne necessarie
 
             for row in range(2, ws.max_row + 1):
                 pdl_val = str(ws.cell(row=row, column=pdl_col_idx).value)
                 if pdl_val in updates:
-                    ws.cell(row=row, column=stato_col_idx).value = updates[pdl_val]
+                    update_data = updates[pdl_val]
+                    ws.cell(row=row, column=stato_col_idx).value = update_data['stato']
+                    ws.cell(row=row, column=tecnico_col_idx).value = update_data['tecnico']
                     report_processati += 1
 
         workbook.save(path_principale)
