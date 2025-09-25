@@ -580,17 +580,20 @@ def _salva_db_excel(df, percorso_salvataggio):
         wb = load_workbook(file_da_usare, keep_vba=True)
         ws = wb['Database_Attivita']
 
-        # Cancella i vecchi dati ma non l'header
-        for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-            for cell in row:
-                cell.value = None
+        # Cancella tutti i dati esistenti sotto l'header per evitare "dati fantasma"
+        # Itera da max_row a 2 in ordine inverso per evitare problemi con l'eliminazione
+        if ws.max_row > 1:
+            for row_idx in range(ws.max_row, 1, -1):
+                # Elimina l'intera riga
+                ws.delete_rows(row_idx)
 
-        # Se il dataframe non è vuoto, aggiungi le nuove righe
+        # Scrivi i nuovi dati direttamente nelle celle, a partire dalla riga 2
         if not df.empty:
-            for r in dataframe_to_rows(df, index=False, header=False):
-                ws.append(r)
+            for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
+                for c_idx, value in enumerate(row, 1):
+                    ws.cell(row=r_idx, column=c_idx, value=value)
 
-        # Rimuovi e ricrea la tabella per aggiornare il range
+        # Rimuovi e ricrea la tabella per aggiornare il range in modo sicuro
         if 'TabellaAttivita' in ws.tables:
             del ws.tables['TabellaAttivita']
 
