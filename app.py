@@ -32,8 +32,7 @@ from modules.data_manager import (
     carica_archivio_completo,
     trova_attivita,
     scrivi_o_aggiorna_risposta,
-    carica_dati_attivita_programmate,
-    sync_reports_from_google,
+    consolidate_reports_into_main_db,
     update_reports_in_excel_and_google
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
@@ -1270,9 +1269,9 @@ def render_update_reports_tab(client_google):
 
     col1, col2 = st.columns([1, 3])
     with col1:
-        if st.button("🔄 Sincronizza Report da Google"):
-            with st.spinner("Sincronizzazione in corso..."):
-                success, message = sync_reports_from_google(client_google)
+        if st.button("🔄 Consolida Report nel Database"):
+            with st.spinner("Consolidamento in corso..."):
+                success, message = consolidate_reports_into_main_db(client_google)
                 if success:
                     st.success(message)
                     st.session_state.report_editor_key = str(uuid.uuid4()) # Forza il ri-rendering del data_editor
@@ -1634,7 +1633,7 @@ def render_situazione_impianti_tab():
     st.header("📊 Situazione Generale Impianti")
 
     # Carica i dati aggiornati
-    df = carica_dati_attivita_programmate()
+    df = carica_archivio_completo()
 
     if df.empty:
         st.warning("Non sono stati trovati dati sulle attività programmate. Verificare il file Excel.")
@@ -1735,7 +1734,7 @@ def render_situazione_impianti_tab():
 def render_programmazione_tab():
     st.header("🗓️ Programmazione Attività Settimanale")
 
-    df = carica_dati_attivita_programmate()
+    df = carica_archivio_completo()
 
     if df.empty:
         st.warning("Non sono stati trovati dati sulle attività programmate.")

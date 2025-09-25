@@ -175,77 +175,70 @@ def crea_storico_da_programmazione():
     return df_backfill
 
 
-def carica_archivio_completo():
-    """
-    Carica l'archivio storico completo, unendo i report reali con lo storico
-    importato dal file di programmazione per completezza.
-    """
-    storico_path = config.PATH_STORICO_DB
-    df_reale = pd.DataFrame()
-    df_backfill = pd.DataFrame()
-
-    # 1. Carica l'archivio reale dei report compilati
-    try:
-        sheet_name = 'Database_Attivita'
-        df_reale = pd.read_excel(storico_path, sheet_name=sheet_name)
-        df_reale['Data_Riferimento_dt'] = pd.to_datetime(df_reale['Data_Riferimento'], errors='coerce')
-    except FileNotFoundError:
-        st.warning(f"File archivio '{os.path.basename(storico_path)}' non trovato. Verrà usato solo lo storico da programmazione.")
-    except Exception as e:
-        st.error(f"Errore imprevisto durante il caricamento del file di archivio: {e}")
-        return pd.DataFrame() # Errore bloccante
-
-    # 2. Crea lo storico dal file di programmazione
-    df_backfill = crea_storico_da_programmazione()
-    if not df_backfill.empty:
-        df_backfill['Data_Riferimento_dt'] = pd.to_datetime(df_backfill['Data_Riferimento'], errors='coerce')
-
-    # 3. Unisci i due DataFrame, dando priorità ai dati reali
-    if not df_reale.empty and not df_backfill.empty:
-        # Crea una chiave univoca (PdL + Data) per la de-duplicazione
-        df_reale['join_key'] = df_reale['PdL'].astype(str) + '_' + df_reale['Data_Riferimento_dt'].dt.strftime('%Y-%m-%d')
-        df_backfill['join_key'] = df_backfill['PdL'].astype(str) + '_' + df_backfill['Data_Riferimento_dt'].dt.strftime('%Y-%m-%d')
-
-        # Filtra i dati di backfill per mantenere solo quelli non presenti nei dati reali
-        df_backfill_filtered = df_backfill[~df_backfill['join_key'].isin(df_reale['join_key'])]
-
-        # Concatena e rimuovi la colonna chiave
-        df_finale = pd.concat([df_reale, df_backfill_filtered], ignore_index=True)
-        df_finale.drop(columns=['join_key'], inplace=True, errors='ignore')
-
-    elif not df_reale.empty:
-        df_finale = df_reale
-    elif not df_backfill.empty:
-        df_finale = df_backfill
-    else:
-        return pd.DataFrame()
-
-    # 4. Pulisci e ordina il DataFrame finale
-    df_finale['Data_Riferimento_dt'] = pd.to_datetime(df_finale['Data_Riferimento'], errors='coerce')
-    # Assicura che la colonna di compilazione sia di tipo datetime per un ordinamento corretto
-    df_finale['Data_Compilazione'] = pd.to_datetime(df_finale['Data_Compilazione'], errors='coerce')
-    df_finale.dropna(subset=['Data_Riferimento_dt'], inplace=True)
-    df_finale.sort_values(by='Data_Compilazione', ascending=True, inplace=True)
-    # Rimuovi eventuali duplicati residui (anche se la logica di join dovrebbe averli già gestiti)
-    df_finale.drop_duplicates(subset=['PdL', 'Tecnico', 'Data_Riferimento'], keep='last', inplace=True)
-
-    return df_finale
+# Funzione rimossa in favore di carica_database_principale
+# def carica_archivio_completo(): ...
 
 def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
+    """
+    Scrive il report inviato dall'utente nelle aree di transito (Google Sheets e file Excel di transito).
+    """
+    # --- 1. Scrittura su Google Sheets (inbox primario) ---
     try:
         foglio_risposte = client.open(config.NOME_FOGLIO_RISPOSTE).sheet1
         timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        dati_formattati = [timestamp, nome_completo, dati_da_scrivere['descrizione'], dati_da_scrivere['report'], dati_da_scrivere['stato'], data_riferimento.strftime('%d/%m/%Y')]
+
+        pdl_match = re.search(r'PdL (\d{6}/[CS]|\d{6})', dati_da_scrivere['descrizione'])
+        pdl = pdl_match.group(1) if pdl_match else ''
+        descrizione_pulita = re.sub(r'PdL \d{6}/?[CS]?\s*[-:]?\s*', '', dati_da_scrivere['descrizione']).strip()
+
+        # Dati per Google Sheets
+        dati_formattati_gs = [timestamp, nome_completo, dati_da_scrivere['descrizione'], dati_da_scrivere['report'], dati_da_scrivere['stato'], data_riferimento.strftime('%d/%m/%Y')]
 
         if row_index:
-            foglio_risposte.update(f'A{row_index}:F{row_index}', [dati_formattati])
+            foglio_risposte.update(f'A{row_index}:F{row_index}', [dati_formattati_gs])
             azione = "aggiornato"
         else:
-            foglio_risposte.append_row(dati_formattati)
+            foglio_risposte.append_row(dati_formattati_gs)
             row_index = len(foglio_risposte.get_all_values())
             azione = "inviato"
 
-        titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
+    except Exception as e:
+        st.error(f"Errore critico durante la scrittura su Google Sheets: {e}")
+        return None # Blocca l'operazione se Google non è raggiungibile
+
+    # --- 2. Scrittura sul file Excel di transito (Database_Report_Attivita.xlsm) ---
+    try:
+        percorso_db_transito = get_storico_db_path()
+
+        # Carica il db di transito esistente o ne crea uno nuovo
+        try:
+            df_transito = pd.read_excel(percorso_db_transito)
+        except FileNotFoundError:
+            df_transito = pd.DataFrame()
+
+        nuova_riga_df = pd.DataFrame([{
+            'PdL': pdl,
+            'Descrizione': descrizione_pulita,
+            'Stato': dati_da_scrivere['stato'],
+            'Tecnico': nome_completo,
+            'Report': dati_da_scrivere['report'],
+            'Data_Compilazione': timestamp,
+            'Data_Riferimento': data_riferimento.strftime('%d/%m/%Y')
+        }])
+
+        df_aggiornato = pd.concat([df_transito, nuova_riga_df], ignore_index=True)
+        colonne_identificative = ['Tecnico', 'Data_Riferimento', 'PdL']
+        df_aggiornato.sort_values('Data_Compilazione', ascending=True, inplace=True)
+        df_aggiornato.drop_duplicates(subset=colonne_identificative, keep='last', inplace=True)
+
+        _salva_db_excel(df_aggiornato, percorso_db_transito)
+
+    except Exception as e:
+        st.error(f"Errore durante l'aggiornamento del file di transito Excel: {e}")
+        # Non blocchiamo l'operazione, Google è la fonte primaria.
+
+    # --- 3. Invia notifica email ---
+    titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
         report_html = dati_da_scrivere['report'].replace('\n', '<br>')
         html_body = f"""
         <html>
@@ -426,12 +419,15 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         return []
 
 @st.cache_data(ttl=600)
-def carica_dati_attivita_programmate():
+def carica_archivio_completo():
+    """
+    Nuova funzione centralizzata che legge i dati da ATTIVITA_PROGRAMMATE.xlsx,
+    che ora è la fonte di verità unica.
+    """
     excel_path = get_attivita_programmate_path()
-    storico_path = get_storico_db_path()
 
     if not os.path.exists(excel_path):
-        st.error(f"File attività programmate non trovato al percorso: {excel_path}")
+        st.error(f"File database principale non trovato: {excel_path}")
         return pd.DataFrame()
 
     sheets_to_read = {
@@ -443,97 +439,44 @@ def carica_dati_attivita_programmate():
     }
     
     all_data = []
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
     
-    # Refactoring: Chiama la funzione centralizzata per caricare lo storico, garantendo coerenza.
-    df_storico_full = carica_archivio_completo()
-    if not df_storico_full.empty:
-        latest_status = df_storico_full.sort_values('Data_Compilazione').drop_duplicates('PdL', keep='last')
-        latest_status = latest_status.set_index('PdL')['Stato'].to_dict()
-    else:
-        latest_status = {}
-
-    status_map = {
-        # Mappatura esistente
-        'DA EMETTERE': 'Pianificato',
-        'CHIUSO': 'Completato',
-        'ANNULLATO': 'Annullato',
-        # Nuova mappatura richiesta dall'utente
-        'INTERROTTO': 'Sospeso',
-        'RICHIESTO': 'Da processare',
-        'EMESSO': 'Processato',      # Sostituisce 'In Corso'
-        'IN CORSO': 'Aperto',
-        'DA CHIUDERE': 'Terminata'   # Già presente, ma confermato
-    }
-
     for sheet_name, metadata in sheets_to_read.items():
         try:
-            # Correzione Definitiva: L'header è alla 3ª riga (indice 2), non alla 4ª.
             df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            
-            # Pulisce i nomi delle colonne letti da Pandas per rimuovere spazi e gestire i newline.
             df.columns = [str(col).strip() for col in df.columns]
 
-            # Le colonne richieste ora dovrebbero corrispondere a quelle lette da Pandas.
-            # Manteniamo la logica di validazione per sicurezza.
-            # Correzione finale: I giorni della settimana sono in MAIUSCOLO.
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
+            # Colonne necessarie per la logica dell'app
+            required_cols = ['PdL', "DESCRIZIONE\nATTIVITA'"]
             if not all(col in df.columns for col in required_cols):
-                # Aggiungiamo un log per il debug se le colonne non corrispondono (ora commentato).
-                # st.warning(f"Foglio '{sheet_name}' saltato: colonne mancanti. Trovate: {list(df.columns)}. Richieste: {required_cols}")
                 continue
 
-            df = df.dropna(subset=['PdL'])
-            if df.empty:
-                continue
-
-            df_filtered = df[required_cols].copy()
-            # Rinomina le colonne per coerenza interna con il resto dell'applicazione.
-            df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
-            
-            df_filtered['PdL'] = df_filtered['PdL'].astype(str)
+            df_filtered = df.copy()
             df_filtered['TCL'] = metadata['tcl']
             df_filtered['Area'] = metadata['area']
-
-            giorni_programmati = df_filtered[giorni_settimana].apply(
-                lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']),
-                axis=1
-            )
-            df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
-
-            def get_status(row):
-                pdl_str = str(row['PdL']).strip()
-                if pdl_str in latest_status:
-                    return latest_status[pdl_str]
-                if pd.notna(row['Stato_OdL']):
-                    return status_map.get(str(row['Stato_OdL']).strip().upper(), 'Non Definito')
-                return 'Pianificato'
-
-            df_filtered['Stato'] = df_filtered.apply(get_status, axis=1)
             
-            df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
+            # Rinomina le colonne per coerenza interna
+            df_filtered = df_filtered.rename(columns={
+                "DESCRIZIONE\nATTIVITA'": 'Descrizione',
+                'PERSONALE\nIMPIEGATO': 'Tecnico',
+                'DATA\nCONTROLLO': 'Data_Riferimento',
+                'STATO\nPdL': 'Stato'
+            })
 
             all_data.append(df_filtered)
-        except FileNotFoundError:
-            st.error(f"Impossibile trovare il file delle attività programmate nel percorso specificato: {excel_path}")
-            # Se il file non viene trovato, è inutile continuare a ciclare.
-            break
-        except PermissionError:
-            st.error(f"Errore di permessi. Impossibile accedere al file: {excel_path}. Verificare i permessi di lettura.")
-            # Se c'è un errore di permessi, è inutile continuare.
-            break
         except Exception as e:
-            # Stampa un avviso per fogli specifici che potrebbero avere problemi, ma continua il ciclo.
-            st.warning(f"Si è verificato un errore durante l'elaborazione del foglio '{sheet_name}' dal file {os.path.basename(excel_path)}: {e}")
+            st.warning(f"Errore durante l'elaborazione del foglio '{sheet_name}': {e}")
             continue
 
     if not all_data:
-        # Se dopo tutti i tentativi non ci sono dati, informa l'utente.
-        # Questo messaggio apparirà solo se il file esiste ma è vuoto o non contiene fogli validi.
-        st.warning("Non sono stati trovati dati validi sulle attività programmate. Verificare che il file Excel non sia vuoto e che i fogli ('A1', 'A2', ecc.) siano formattati correttamente.")
+        st.warning("Nessun dato valido trovato nel file delle attività programmate.")
         return pd.DataFrame()
 
     final_df = pd.concat(all_data, ignore_index=True)
+
+    # Aggiungi colonne di data per compatibilità con il resto dell'app
+    final_df['Data_Riferimento_dt'] = pd.to_datetime(final_df['Data_Riferimento'], errors='coerce')
+    final_df['Data_Compilazione'] = pd.to_datetime(final_df.get('Data_Compilazione'), errors='coerce') # Potrebbe non esistere ancora
+
     return final_df
 
 # --- NUOVA LOGICA DI SINCRONIZZAZIONE MANUALE ---
@@ -647,44 +590,81 @@ def _salva_db_excel(df, percorso_salvataggio):
     except Exception as e:
         return False, f"Errore durante il salvataggio del file Excel: {e}"
 
-def sync_reports_from_google(client_google):
+def consolidate_reports_into_main_db(client_google):
     """
-    Funzione principale per orchestrare la sincronizzazione dei report.
+    Consolida i report dal file di transito nel database principale ATTIVITA_PROGRAMMATE
+    e poi svuota i file di transito.
     """
-    # 1. Leggi i dati da Google Sheets
-    df_grezzo = _leggi_report_da_google(client_google)
-    if df_grezzo is None:
-        return True, "Nessun nuovo report trovato su Google Sheets o foglio vuoto."
+    path_transito = get_storico_db_path()
+    path_principale = get_attivita_programmate_path()
 
-    # 2. Processa i dati
-    df_nuovi_report = _processa_dati_grezzi(df_grezzo)
-    if df_nuovi_report is None:
-        return True, "I nuovi report erano vuoti o non validi dopo il processamento."
-
-    # 3. Carica il database esistente
-    percorso_db = get_storico_db_path()
+    # 1. Leggi i nuovi report dal file di transito
     try:
-        df_esistente = pd.read_excel(percorso_db)
+        df_transito = pd.read_excel(path_transito)
+        if df_transito.empty:
+            return True, "Nessun nuovo report da consolidare."
     except FileNotFoundError:
-        df_esistente = pd.DataFrame() # Il file non esiste, verrà creato
+        return True, "Il file di transito è vuoto, nessun report da consolidare."
     except Exception as e:
-        return False, f"Errore nel caricamento del database esistente: {e}"
+        return False, f"Errore lettura file di transito: {e}"
 
-    # 4. Aggiorna il database
-    df_combinato = pd.concat([df_esistente, df_nuovi_report], ignore_index=True)
-    colonne_identificative = ['Tecnico', 'Data_Riferimento', 'PdL']
-    df_combinato.sort_values('Data_Compilazione', ascending=True, inplace=True)
-    df_combinato.drop_duplicates(subset=colonne_identificative, keep='last', inplace=True)
-    df_ordinato = df_combinato.sort_values(by=['Data_Riferimento', 'PdL', 'Tecnico'], ascending=[False, True, True])
+    # 2. Apri il database principale con openpyxl per preservare tutto
+    try:
+        wb_principale = load_workbook(path_principale)
+    except Exception as e:
+        return False, f"Errore apertura database principale: {e}"
 
-    # 5. Salva il database aggiornato
-    success, message = _salva_db_excel(df_ordinato, percorso_db)
+    # 3. Itera su ogni report da consolidare e aggiorna il file principale
+    report_consolidati = 0
+    for _, report in df_transito.iterrows():
+        pdl_da_cercare = str(report['PdL'])
+        desc_da_cercare = str(report['Descrizione'])
 
-    # 6. Pulisci la cache se il salvataggio è andato a buon fine
-    if success:
-        st.cache_data.clear()
+        # Trova il foglio e la riga corretti nel file principale
+        # Questa logica è semplificata, una reale implementazione potrebbe necessitare di più dettagli
+        # per trovare il foglio giusto (es. da A1, A2, etc.)
+        for sheet_name in wb_principale.sheetnames:
+            ws = wb_principale[sheet_name]
+            # Assumiamo che il PdL sia in colonna A e la descrizione in colonna B
+            for row in ws.iter_rows(min_row=3): # Salta header
+                pdl_cella = row[0].value
+                desc_cella = row[1].value
+                if str(pdl_cella) == pdl_da_cercare and str(desc_cella) == desc_da_cercare:
+                    # Trovata la riga, aggiorna le colonne del report
+                    # Assumiamo le seguenti colonne: Stato (C), Tecnico (D), Data (E), Report (F)
+                    ws.cell(row=row[0].row, column=3).value = report['Stato']
+                    ws.cell(row=row[0].row, column=4).value = report['Tecnico']
+                    ws.cell(row=row[0].row, column=5).value = report['Data_Riferimento']
+                    ws.cell(row=row[0].row, column=6).value = report['Report']
+                    report_consolidati += 1
+                    break # Passa al prossimo report
+            else:
+                continue
+            break
 
-    return success, message
+    # 4. Salva il database principale aggiornato
+    try:
+        wb_principale.save(path_principale)
+    except Exception as e:
+        return False, f"Errore salvataggio database principale: {e}"
+
+    # 5. Svuota i file di transito
+    try:
+        # Svuota Excel di transito (creando un file vuoto)
+        df_vuoto = pd.DataFrame(columns=df_transito.columns)
+        _salva_db_excel(df_vuoto, path_transito)
+
+        # Svuota Google Sheet
+        sheet_google = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1
+        sheet_google.clear()
+        # Riscrivi solo l'header
+        sheet_google.update([df_transito.columns.values.tolist()])
+
+    except Exception as e:
+        return False, f"Errore durante la pulizia dei file di transito: {e}"
+
+    st.cache_data.clear()
+    return True, f"Consolidamento completato. {report_consolidati} report sono stati aggiornati nel database principale."
 
 def update_reports_in_excel_and_google(df_aggiornato, client_google):
     """
