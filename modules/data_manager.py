@@ -581,8 +581,9 @@ def _salva_db_excel(df, percorso_salvataggio):
         ws = wb['Database_Attivita']
 
         # Cancella i vecchi dati ma non l'header
-        if ws.max_row > 1:
-            ws.delete_rows(2, ws.max_row) # Corrected to delete all data rows
+        for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+            for cell in row:
+                cell.value = None
 
         # Se il dataframe non è vuoto, aggiungi le nuove righe
         if not df.empty:
@@ -694,11 +695,14 @@ def consolida_report_giornalieri(client_google):
 
     # 3. Svuota il file di transito e Google Sheets
     try:
-        # Modifica per cancellare solo le righe di dati, non l'header
-        wb = openpyxl.load_workbook(path_transito)
+        # Modifica per cancellare solo i valori delle celle, non le righe, per evitare corruzione
+        wb = openpyxl.load_workbook(path_transito, keep_vba=True)
         ws = wb.active
-        if ws.max_row > 1:
-            ws.delete_rows(2, ws.max_row)
+        # Itera sulle righe dalla 2 all'ultima
+        for row in range(2, ws.max_row + 1):
+            # Itera sulle colonne da A a J (da 1 a 10)
+            for col in range(1, 11):
+                ws.cell(row=row, column=col).value = None
         wb.save(path_transito)
 
         sheet = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1

@@ -424,13 +424,19 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
             if row_idx:
                 completed_task_data = {**task, 'report': report_text, 'stato': stato, 'row_index': row_idx, 'answers': answers_dict}
                 
+                # Cerca la lista esistente o creane una nuova
                 completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
+                # Rimuovi eventuali vecchie versioni di questo task
                 completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
+                # Aggiungi il task aggiornato
                 completed_list.append(completed_task_data)
                 st.session_state[f"completed_tasks_{section_key}"] = completed_list
 
-                # Se l'attività completata è del giorno precedente, aggiungila alla lista di sessione
+                # Se l'attività completata è del giorno precedente, aggiungila anche alla lista di sessione specifica
                 if section_key == 'yesterday':
+                    # Assicurati che la lista esista
+                    if 'completed_tasks_yesterday' not in st.session_state:
+                        st.session_state.completed_tasks_yesterday = []
                     st.session_state.completed_tasks_yesterday.append(completed_task_data)
 
                 st.success("Report inviato con successo!")
