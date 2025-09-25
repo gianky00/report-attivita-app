@@ -1655,10 +1655,12 @@ def render_situazione_impianti_tab():
                 default=sorted(df['Area'].unique())
             )
         with col3:
+            # Converti tutti i valori in stringhe per evitare errori di tipo misto nell'ordinamento
+            stati_unici = [str(s) for s in df['Stato'].unique()]
             selected_stato = st.multiselect(
                 "Filtra per Stato",
-                options=sorted(df['Stato'].unique()),
-                default=sorted(df['Stato'].unique())
+                options=sorted(stati_unici),
+                default=sorted(stati_unici)
             )
 
         submitted = st.form_submit_button("Applica Filtri")
