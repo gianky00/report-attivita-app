@@ -86,7 +86,34 @@ def authenticate_user(username, password, df_contatti):
     # --- Gestione 2FA ---
     # Se la password è valida, controlla se la 2FA è configurata.
     if '2FA_Secret' in user_row and pd.notna(user_row['2FA_Secret']) and user_row['2FA_Secret']:
+        # Se la 2FA è già configurata, non restituiamo ancora SUCCESS.
+        # Il flusso principale gestirà la verifica del codice 2FA.
         return '2FA_REQUIRED', nome_completo
     else:
-        # L'utente non ha una 2FA, deve configurarla.
+        # Se la 2FA non è configurata, l'utente deve impostarla.
+        # Ma se la password è corretta, questo è un "successo parziale".
+        # Il flusso principale gestirà la configurazione.
         return '2FA_SETUP_REQUIRED', (nome_completo, ruolo)
+
+def log_access_attempt(gestionale_data, username, status):
+    """
+    Registra un tentativo di accesso nella cronologia.
+    """
+    import datetime
+
+    # Assicura che la lista dei log esista
+    if 'access_logs' not in gestionale_data or not isinstance(gestionale_data.get('access_logs'), list):
+        gestionale_data['access_logs'] = []
+
+    # Crea il nuovo record di log
+    new_log_entry = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "username": username,
+        "status": status,
+    }
+
+    # Aggiungi il nuovo log alla lista
+    # Usiamo .get() per sicurezza, anche se l'abbiamo già inizializzata
+    logs = gestionale_data.get('access_logs', [])
+    logs.append(new_log_entry)
+    gestionale_data['access_logs'] = logs
