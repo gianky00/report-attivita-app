@@ -34,7 +34,8 @@ from modules.data_manager import (
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate,
     consolida_report_giornalieri,
-    update_reports_in_excel_and_google
+    carica_report_transito,
+    aggiorna_report_transito
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
