@@ -239,55 +239,52 @@ def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_rif
 
     # --- 3. Invia notifica email ---
     titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
-        report_html = dati_da_scrivere['report'].replace('\n', '<br>')
-        html_body = f"""
-        <html>
-        <head>
-        <style>
-            body {{ font-family: Calibri, sans-serif; }}
-            table {{ border-collapse: collapse; width: 100%; }}
-            th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; }}
-            th {{ background-color: #f2f2f2; }}
-            .report-content {{ white-space: pre-wrap; word-wrap: break-word; }}
-        </style>
-        </head>
-        <body>
-        <h2>Riepilogo Report Attività</h2>
-        <p>Un report è stato <strong>{azione}</strong> dal tecnico {nome_completo}.</p>
-        <table>
-            <tr>
-                <th>Data di Riferimento Attività</th>
-                <td>{data_riferimento.strftime('%d/%m/%Y')}</td>
-            </tr>
-            <tr>
-                <th>Data e Ora Invio Report</th>
-                <td>{timestamp}</td>
-            </tr>
-            <tr>
-                <th>Tecnico</th>
-                <td>{nome_completo}</td>
-            </tr>
-            <tr>
-                <th>Attività</th>
-                <td>{dati_da_scrivere['descrizione']}</td>
-            </tr>
-            <tr>
-                <th>Stato Finale</th>
-                <td><b>{dati_da_scrivere['stato']}</b></td>
-            </tr>
-            <tr>
-                <th>Report Compilato</th>
-                <td class="report-content">{report_html}</td>
-            </tr>
-        </table>
-        </body>
-        </html>
-        """
-        invia_email_con_outlook_async(titolo_email, html_body)
-        return row_index
-    except Exception as e:
-        st.error(f"Errore salvataggio GSheets: {e}")
-        return None
+    report_html = dati_da_scrivere['report'].replace('\n', '<br>')
+    html_body = f"""
+    <html>
+    <head>
+    <style>
+        body {{ font-family: Calibri, sans-serif; }}
+        table {{ border-collapse: collapse; width: 100%; }}
+        th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; }}
+        th {{ background-color: #f2f2f2; }}
+        .report-content {{ white-space: pre-wrap; word-wrap: break-word; }}
+    </style>
+    </head>
+    <body>
+    <h2>Riepilogo Report Attività</h2>
+    <p>Un report è stato <strong>{azione}</strong> dal tecnico {nome_completo}.</p>
+    <table>
+        <tr>
+            <th>Data di Riferimento Attività</th>
+            <td>{data_riferimento.strftime('%d/%m/%Y')}</td>
+        </tr>
+        <tr>
+            <th>Data e Ora Invio Report</th>
+            <td>{timestamp}</td>
+        </tr>
+        <tr>
+            <th>Tecnico</th>
+            <td>{nome_completo}</td>
+        </tr>
+        <tr>
+            <th>Attività</th>
+            <td>{dati_da_scrivere['descrizione']}</td>
+        </tr>
+        <tr>
+            <th>Stato Finale</th>
+            <td><b>{dati_da_scrivere['stato']}</b></td>
+        </tr>
+        <tr>
+            <th>Report Compilato</th>
+            <td class="report-content">{report_html}</td>
+        </tr>
+    </table>
+    </body>
+    </html>
+    """
+    invia_email_con_outlook_async(titolo_email, html_body)
+    return row_index
 
 def _match_partial_name(partial_name, full_name):
     """
