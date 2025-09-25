@@ -32,7 +32,8 @@ from modules.data_manager import (
     carica_archivio_completo,
     trova_attivita,
     scrivi_o_aggiorna_risposta,
-    carica_dati_attivita_programmate
+    carica_dati_attivita_programmate,
+    sync_reports_from_google
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -1259,6 +1260,45 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
                     st.rerun()
 
 
+def render_sync_tab(client_google):
+    st.header("Sincronizzazione Dati e Visualizzazione Report")
+    st.info("Usa questa sezione per forzare l'aggiornamento dei report da Google Sheets e visualizzare i dati per un giorno specifico.")
+
+    # Pulsante di sincronizzazione
+    if st.button("🔄 Sincronizza Report da Google"):
+        with st.spinner("Sincronizzazione in corso... Questo potrebbe richiedere un minuto."):
+            success, message = sync_reports_from_google(client_google)
+            if success:
+                st.success(message)
+            else:
+                st.error(message)
+
+    st.divider()
+
+    # Filtro per data
+    st.subheader("Visualizza Report per Giorno")
+    selected_date = st.date_input("Seleziona una data:", value=datetime.date.today())
+
+    # Carica e visualizza i dati
+    archivio_df = carica_archivio_completo()
+
+    if archivio_df.empty:
+        st.warning("L'archivio dei report è vuoto.")
+        return
+
+    # Filtra per la data selezionata
+    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce').dt.date
+
+    report_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] == selected_date]
+
+    st.subheader(f"Report del {selected_date.strftime('%d/%m/%Y')}")
+    if report_del_giorno.empty:
+        st.info("Nessun report trovato per la data selezionata.")
+    else:
+        # Formattazione per una migliore visualizzazione
+        display_df = report_del_giorno[['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report']].copy()
+        st.dataframe(display_df, use_container_width=True)
+
 def render_access_logs_tab(gestionale_data):
     st.header("Cronologia Accessi al Sistema")
     st.info("Questa sezione mostra tutti i tentativi di accesso registrati, dal più recente al più vecchio.")
@@ -1472,6 +1512,13 @@ def render_guida_tab(ruolo):
             - **Nome Utente** inserito
             - **Esito** (es. 'Login riuscito', 'Credenziali non valide', 'Login 2FA fallito').
             Puoi usare i filtri in cima alla pagina per cercare accessi specifici per utente o per intervallo di date.
+            """)
+
+            st.subheader("Sincronizza Dati")
+            st.markdown("""
+            Questa scheda fornisce un controllo manuale sul processo di aggiornamento dei report.
+            - **Pulsante 'Sincronizza Report da Google'**: Cliccando questo pulsante, l'applicazione forzerà una lettura immediata di tutti i nuovi report inviati tramite Google Sheets e li consoliderà nel database principale (`Database_Report_Attivita.xlsm`). Usa questa funzione se hai bisogno di vedere i report più recenti senza attendere lo script di aggiornamento automatico.
+            - **Filtro per Giorno**: Sotto il pulsante, puoi selezionare una data (preimpostata su oggi) per visualizzare tutti i report registrati per quel giorno specifico.
             """)
 
     # Sezione Archivio
@@ -2329,7 +2376,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     render_technician_detail_view()
                 else:
                     # Altrimenti, mostra le tab principali della dashboard
-                    admin_tabs = st.tabs(["Performance Team", "Gestione IA", "Crea Nuovo Turno", "Gestione Account", "Cronologia Accessi"])
+                    admin_tabs = st.tabs(["Performance Team", "Gestione IA", "Crea Nuovo Turno", "Gestione Account", "Cronologia Accessi", "Sincronizza Dati"])
 
                     with admin_tabs[0]: # Performance Team
                         archivio_df_perf = carica_archivio_completo()
@@ -2525,6 +2572,9 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     with admin_tabs[4]: # Cronologia Accessi
                         render_access_logs_tab(gestionale_data)
+
+                    with admin_tabs[5]: # Sincronizza Dati
+                        render_sync_tab(autorizza_google())
 
 
 # --- GESTIONE LOGIN ---
