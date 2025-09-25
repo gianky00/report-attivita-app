@@ -431,7 +431,7 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
 
                 # Se l'attività completata è del giorno precedente, aggiungila alla lista di sessione
                 if section_key == 'yesterday':
-                    st.session_state.completed_yesterday_pdl.append(task['pdl'])
+                    pass # Non è più necessario, la logica è centralizzata
 
                 st.success("Report inviato con successo!")
                 del st.session_state.debriefing_task
@@ -1923,31 +1923,41 @@ def main_app(nome_utente_autenticato, ruolo):
             # Nuova logica per trovare attività non completate del giorno precedente
             attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
 
-            if attivita_pianificate_ieri and not dati_programmati_df.empty:
+            if attivita_pianificate_ieri:
                 # Definisci gli stati che consideriamo "finali" o "completati"
                 stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
 
-                # Crea un dizionario per una ricerca rapida dello stato per PdL
-                status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
+                # Crea un dizionario per una ricerca rapida dello stato per PdL dal DB principale
+                status_dict = {}
+                if not dati_programmati_df.empty:
+                    status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
 
                 # Ottieni la lista dei PdL già compilati nel file di transito per il giorno precedente
                 pdl_compilati_transito = []
                 if not report_transito_df.empty:
-                    # Assicurati che la colonna Data_Riferimento sia in formato data
                     report_transito_df['Data_Riferimento_dt'] = pd.to_datetime(report_transito_df['Data_Riferimento'], errors='coerce').dt.date
                     pdl_compilati_transito = report_transito_df[report_transito_df['Data_Riferimento_dt'] == giorno_precedente]['PdL'].unique().tolist()
 
+                # Ottieni i PdL completati nella sessione corrente
+                pdl_compilati_sessione = [task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])]
 
-                # Filtra le attività pianificate per ieri che non sono in uno stato finale
+                # Unisci le due liste di PdL compilati, assicurandoti che siano unici
+                pdl_gia_compilati = list(set(pdl_compilati_transito + pdl_compilati_sessione))
+
+                # Filtra le attività pianificate per ieri
                 for task in attivita_pianificate_ieri:
                     pdl = task['pdl']
-                    # Controlla se il PdL è già stato compilato nel file di transito
-                    if pdl in pdl_compilati_transito:
-                        continue # Salta questo task perché un report è già stato inviato
 
+                    # Salta se già compilato nel transito o nella sessione
+                    if pdl in pdl_gia_compilati:
+                        continue
+
+                    # Salta se lo stato nel DB principale è già finale
                     stato_attuale = status_dict.get(pdl, 'Pianificato') # Default a 'Pianificato' se non trovato
-                    if stato_attuale not in stati_finali:
-                        attivita_da_recuperare.append(task)
+                    if stato_attuale in stati_finali:
+                        continue
+
+                    attivita_da_recuperare.append(task)
 
             if attivita_da_recuperare:
                 num_attivita_mancanti = len(attivita_da_recuperare)
