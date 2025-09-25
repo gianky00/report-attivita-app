@@ -470,6 +470,21 @@ def carica_archivio_completo():
 
     final_df = pd.concat(all_data, ignore_index=True)
 
+    # Ripristina la logica per calcolare i giorni programmati
+    giorni_settimana = ["LUN", "MAR", "MER", "GIO", "VEN"]
+    # Assicurati che le colonne dei giorni esistano, altrimenti non fare nulla
+    colonne_giorni_presenti = [g for g in giorni_settimana if g in final_df.columns]
+
+    if colonne_giorni_presenti:
+        giorni_programmati = final_df[colonne_giorni_presenti].apply(
+            lambda row: ', '.join([col for col in colonne_giorni_presenti if str(row[col]).strip().upper() == 'X']),
+            axis=1
+        )
+        final_df['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
+    else:
+        # Se le colonne dei giorni non esistono, crea una colonna di default per evitare errori
+        final_df['GiorniProgrammati'] = 'Non Programmato'
+
     # Aggiungi colonne di data per compatibilità con il resto dell'app
     final_df['Data_Riferimento_dt'] = pd.to_datetime(final_df['Data_Riferimento'], errors='coerce')
     final_df['Data_Compilazione'] = pd.to_datetime(final_df.get('Data_Compilazione'), errors='coerce') # Potrebbe non esistere ancora
