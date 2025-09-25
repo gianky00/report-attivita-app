@@ -582,10 +582,12 @@ def _salva_db_excel(df, percorso_salvataggio):
 
         # Cancella i vecchi dati ma non l'header
         if ws.max_row > 1:
-            ws.delete_rows(2, ws.max_row - 1)
+            ws.delete_rows(2, ws.max_row) # Corrected to delete all data rows
 
-        for r in dataframe_to_rows(df, index=False, header=False):
-            ws.append(r)
+        # Se il dataframe non è vuoto, aggiungi le nuove righe
+        if not df.empty:
+            for r in dataframe_to_rows(df, index=False, header=False):
+                ws.append(r)
 
         # Rimuovi e ricrea la tabella per aggiornare il range
         if 'TabellaAttivita' in ws.tables:
@@ -692,9 +694,12 @@ def consolida_report_giornalieri(client_google):
 
     # 3. Svuota il file di transito e Google Sheets
     try:
-        success_clear_excel, msg_excel = _salva_db_excel(pd.DataFrame(columns=df_transito.columns), path_transito)
-        if not success_clear_excel:
-            raise IOError(f"Fallimento nello svuotare il file di transito: {msg_excel}")
+        # Modifica per cancellare solo le righe di dati, non l'header
+        wb = openpyxl.load_workbook(path_transito)
+        ws = wb.active
+        if ws.max_row > 1:
+            ws.delete_rows(2, ws.max_row)
+        wb.save(path_transito)
 
         sheet = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1
         header = sheet.row_values(1)
