@@ -535,3 +535,203 @@ def carica_dati_attivita_programmate():
 
     final_df = pd.concat(all_data, ignore_index=True)
     return final_df
+
+# --- NUOVA LOGICA DI SINCRONIZZAZIONE MANUALE ---
+
+def _leggi_report_da_google(client):
+    """Legge i dati grezzi dei report dal foglio Google specificato."""
+    try:
+        sheet = client.open(config.NOME_FOGLIO_RISPOSTE).sheet1
+        records = sheet.get_all_records()
+        df = pd.DataFrame(records)
+        if df.empty:
+            return None
+        return df
+    except Exception as e:
+        st.error(f"Errore durante la lettura dei dati da Google Sheets: {e}")
+        return None
+
+def _processa_dati_grezzi(df_grezzo):
+    """Processa i dati grezzi letti da Google per prepararli all'inserimento nel database."""
+    if df_grezzo is None:
+        return None
+
+    lista_attivita_pulite = []
+
+    # Nomi delle colonne come appaiono nel foglio Google
+    COLONNA_TIMESTAMP = 'Informazioni cronologiche'
+    COLONNA_UTENTE = 'Nome e Cognome'
+    COLONNA_DESCRIZIONE_PDL = '1. Descrizione PdL'
+    COLONNA_REPORT = '1. Report Attività'
+    COLONNA_STATO = '1. Stato attività'
+    COLONNA_DATA_RIFERIMENTO = 'Data Riferimento Attività'
+
+    # Validazione colonne
+    colonne_necessarie = [COLONNA_TIMESTAMP, COLONNA_UTENTE, COLONNA_DESCRIZIONE_PDL, COLONNA_REPORT, COLONNA_STATO]
+    for col in colonne_necessarie:
+        if col not in df_grezzo.columns:
+            st.error(f"Errore critico: La colonna '{col}' non è stata trovata nel foglio Google!")
+            return None
+
+    for _, riga in df_grezzo.iterrows():
+        if pd.isna(riga[COLONNA_DESCRIZIONE_PDL]) or str(riga[COLONNA_DESCRIZIONE_PDL]).strip() == '':
+            continue
+
+        descrizione_completa = str(riga[COLONNA_DESCRIZIONE_PDL])
+        pdl_match = re.search(r'PdL (\d{6}/[CS]|\d{6})', descrizione_completa)
+        pdl = pdl_match.group(1) if pdl_match else ''
+        descrizione_pulita = re.sub(r'PdL \d{6}/?[CS]?\s*[-:]?\s*', '', descrizione_completa).strip()
+
+        data_riferimento_str = str(riga.get(COLONNA_DATA_RIFERIMENTO, '')).strip()
+        if data_riferimento_str:
+            data_riferimento = data_riferimento_str
+        else:
+            timestamp_str = str(riga.get(COLONNA_TIMESTAMP, ''))
+            match = re.search(r'(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})', timestamp_str)
+            data_riferimento = match.group(1).replace('-', '/').replace('.', '/') if match else datetime.date.today().strftime('%d/%m/%Y')
+
+        nuova_riga = {
+            'PdL': pdl,
+            'Descrizione': descrizione_pulita,
+            'Stato': riga[COLONNA_STATO],
+            'Tecnico': riga[COLONNA_UTENTE],
+            'Report': riga[COLONNA_REPORT],
+            'Data_Compilazione': riga[COLONNA_TIMESTAMP],
+            'Data_Riferimento': data_riferimento
+        }
+        lista_attivita_pulite.append(nuova_riga)
+
+    if not lista_attivita_pulite:
+        return None
+
+    return pd.DataFrame(lista_attivita_pulite)
+
+def _salva_db_excel(df, percorso_salvataggio):
+    """Salva il DataFrame nel file Excel, preservando le macro."""
+    from openpyxl import load_workbook
+    from openpyxl.utils.dataframe import dataframe_to_rows
+    from openpyxl.styles import Font
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+    from openpyxl.utils import get_column_letter
+
+    file_template = os.path.join(os.path.dirname(percorso_salvataggio), "Database_Template.xlsm")
+    file_da_usare = percorso_salvataggio if os.path.exists(percorso_salvataggio) else file_template
+
+    try:
+        wb = load_workbook(file_da_usare, keep_vba=True)
+        ws = wb['Database_Attivita']
+
+        # Cancella i vecchi dati ma non l'header
+        if ws.max_row > 1:
+            ws.delete_rows(2, ws.max_row - 1)
+
+        for r in dataframe_to_rows(df, index=False, header=False):
+            ws.append(r)
+
+        # Rimuovi e ricrea la tabella per aggiornare il range
+        if 'TabellaAttivita' in ws.tables:
+            del ws.tables['TabellaAttivita']
+
+        if not df.empty:
+            max_row, max_col = len(df) + 1, len(df.columns)
+            table_range = f"A1:{get_column_letter(max_col)}{max_row}"
+            tab = Table(displayName="TabellaAttivita", ref=table_range)
+            style = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True)
+            tab.tableStyleInfo = style
+            ws.add_table(tab)
+
+        wb.save(percorso_salvataggio)
+        return True, f"Database salvato con successo in '{os.path.basename(percorso_salvataggio)}'."
+    except FileNotFoundError:
+        return False, f"Errore: File template '{os.path.basename(file_template)}' o database esistente non trovato."
+    except Exception as e:
+        return False, f"Errore durante il salvataggio del file Excel: {e}"
+
+def sync_reports_from_google(client_google):
+    """
+    Funzione principale per orchestrare la sincronizzazione dei report.
+    """
+    # 1. Leggi i dati da Google Sheets
+    df_grezzo = _leggi_report_da_google(client_google)
+    if df_grezzo is None:
+        return True, "Nessun nuovo report trovato su Google Sheets o foglio vuoto."
+
+    # 2. Processa i dati
+    df_nuovi_report = _processa_dati_grezzi(df_grezzo)
+    if df_nuovi_report is None:
+        return True, "I nuovi report erano vuoti o non validi dopo il processamento."
+
+    # 3. Carica il database esistente
+    percorso_db = get_storico_db_path()
+    try:
+        df_esistente = pd.read_excel(percorso_db)
+    except FileNotFoundError:
+        df_esistente = pd.DataFrame() # Il file non esiste, verrà creato
+    except Exception as e:
+        return False, f"Errore nel caricamento del database esistente: {e}"
+
+    # 4. Aggiorna il database
+    df_combinato = pd.concat([df_esistente, df_nuovi_report], ignore_index=True)
+    colonne_identificative = ['Tecnico', 'Data_Riferimento', 'PdL']
+    df_combinato.sort_values('Data_Compilazione', ascending=True, inplace=True)
+    df_combinato.drop_duplicates(subset=colonne_identificative, keep='last', inplace=True)
+    df_ordinato = df_combinato.sort_values(by=['Data_Riferimento', 'PdL', 'Tecnico'], ascending=[False, True, True])
+
+    # 5. Salva il database aggiornato
+    success, message = _salva_db_excel(df_ordinato, percorso_db)
+
+    # 6. Pulisci la cache se il salvataggio è andato a buon fine
+    if success:
+        st.cache_data.clear()
+
+    return success, message
+
+def update_reports_in_excel_and_google(df_aggiornato, client_google):
+    """
+    Aggiorna i report sia nel file Excel locale che nel foglio Google.
+    """
+    # 1. Salva nel file Excel
+    percorso_db = get_storico_db_path()
+    success_excel, message_excel = _salva_db_excel(df_aggiornato, percorso_db)
+
+    if not success_excel:
+        return False, f"Errore durante il salvataggio su Excel: {message_excel}"
+
+    # 2. Salva su Google Sheets
+    try:
+        sheet = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1
+
+        # Prepara il DataFrame per il caricamento
+        # Le colonne devono corrispondere a quelle del foglio Google
+        df_per_google = df_aggiornato.rename(columns={
+            'Data_Compilazione': 'Informazioni cronologiche',
+            'Tecnico': 'Nome e Cognome',
+            'Descrizione': '1. Descrizione PdL', # Questo richiede una ricostruzione
+            'Report': '1. Report Attività',
+            'Stato': '1. Stato attività',
+            'Data_Riferimento': 'Data Riferimento Attività'
+        })
+
+        # Ricostruisci la colonna '1. Descrizione PdL'
+        df_per_google['1. Descrizione PdL'] = 'PdL ' + df_per_google['PdL'].astype(str) + ' - ' + df_per_google['1. Descrizione PdL'].astype(str)
+
+        # Seleziona e ordina le colonne per corrispondere al foglio Google
+        colonne_google = [
+            'Informazioni cronologiche', 'Nome e Cognome', '1. Descrizione PdL',
+            '1. Report Attività', '1. Stato attività', 'Data Riferimento Attività'
+        ]
+        df_per_google = df_per_google[colonne_google]
+
+        # Svuota il foglio e scrivi i nuovi dati
+        sheet.clear()
+        sheet.update([df_per_google.columns.values.tolist()] + df_per_google.values.tolist())
+
+        message_google = "Foglio Google aggiornato con successo."
+
+    except Exception as e:
+        return False, f"Errore durante l'aggiornamento di Google Sheets: {e}"
+
+    # 3. Pulisci la cache
+    st.cache_data.clear()
+
+    return True, f"{message_excel}\n{message_google}"
