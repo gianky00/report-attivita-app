@@ -32,7 +32,9 @@ from modules.data_manager import (
     carica_archivio_completo,
     trova_attivita,
     scrivi_o_aggiorna_risposta,
-    carica_dati_attivita_programmate
+    carica_dati_attivita_programmate,
+    sync_reports_from_google,
+    update_reports_in_excel_and_google
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -1259,6 +1261,71 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
                     st.rerun()
 
 
+def render_update_reports_tab(client_google):
+    st.header("Aggiornamento e Modifica Report")
+    st.info("Usa questa sezione per forzare l'aggiornamento dei report da Google e per modificare i dati direttamente.")
+
+    if 'report_editor_key' not in st.session_state:
+        st.session_state.report_editor_key = str(uuid.uuid4())
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("🔄 Sincronizza Report da Google"):
+            with st.spinner("Sincronizzazione in corso..."):
+                success, message = sync_reports_from_google(client_google)
+                if success:
+                    st.success(message)
+                    st.session_state.report_editor_key = str(uuid.uuid4()) # Forza il ri-rendering del data_editor
+                else:
+                    st.error(message)
+
+    st.divider()
+
+    st.subheader("Visualizza e Modifica Report per Giorno")
+    selected_date = st.date_input("Seleziona una data:", value=datetime.date.today())
+
+    archivio_df = carica_archivio_completo()
+    if archivio_df.empty:
+        st.warning("L'archivio dei report è vuoto.")
+        return
+
+    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce').dt.date
+    report_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] == selected_date].copy()
+
+    if report_del_giorno.empty:
+        st.info("Nessun report trovato per la data selezionata.")
+    else:
+        st.caption("Puoi modificare le celle direttamente. Clicca su 'Salva Modifiche' per rendere permanenti i cambiamenti.")
+
+        # Colonne da mostrare e modificare
+        colonne_da_mostrare = ['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento']
+
+        # Usiamo una chiave di sessione per preservare lo stato dell'editor
+        edited_df = st.data_editor(
+            report_del_giorno[colonne_da_mostrare],
+            key=st.session_state.report_editor_key,
+            num_rows="dynamic",
+            use_container_width=True
+        )
+
+        if st.button("Salva Modifiche", type="primary"):
+            # Unisci le modifiche al DataFrame originale
+            # Preserva le colonne non mostrate nell'editor
+            df_originale_non_del_giorno = archivio_df[archivio_df['Data_Riferimento_dt'] != selected_date]
+
+            # Ricombina i dati non modificati con quelli potenzialmente modificati
+            df_finale_aggiornato = pd.concat([df_originale_non_del_giorno, edited_df], ignore_index=True)
+
+            with st.spinner("Salvataggio delle modifiche in corso..."):
+                success, message = update_reports_in_excel_and_google(df_finale_aggiornato, client_google)
+                if success:
+                    st.success("Modifiche salvate con successo su Excel e Google Sheets!")
+                    # Aggiorna la chiave per forzare il refresh del data editor con i nuovi dati
+                    st.session_state.report_editor_key = str(uuid.uuid4())
+                    st.rerun()
+                else:
+                    st.error(f"Errore durante il salvataggio: {message}")
+
 def render_access_logs_tab(gestionale_data):
     st.header("Cronologia Accessi al Sistema")
     st.info("Questa sezione mostra tutti i tentativi di accesso registrati, dal più recente al più vecchio.")
@@ -1443,35 +1510,25 @@ def render_guida_tab(ruolo):
     # Sezione Admin (visibile solo agli admin)
     if ruolo == "Amministratore":
         with st.expander("🔑 Funzionalità Amministratore"):
-            st.subheader("Dashboard Admin")
+            st.subheader("Dashboard Admin Riorganizzata")
             st.markdown("""
-            La `Dashboard Admin` è il tuo centro di controllo. Contiene diverse schede:
-            - **Performance Team**: Analizza le performance dei tecnici in un dato intervallo di tempo.
-            - **Gestione IA**: Contiene strumenti per migliorare e mantenere l'intelligenza artificiale.
+            La `Dashboard Admin` è stata suddivisa in due aree principali per separare le funzionalità operative da quelle puramente tecniche:
+            """)
+
+            st.markdown("#### 1. Dashboard Caposquadra")
+            st.markdown("""
+            Questa sezione contiene gli strumenti per la gestione quotidiana del team e delle attività:
+            - **Performance Team**: Analizza le metriche di performance dei tecnici.
             - **Crea Nuovo Turno**: Permette di creare nuovi turni di assistenza o straordinario.
-            - **Gestione Account**: Per modificare utenti esistenti o creare nuovi utenti placeholder.
+            - **Aggiorna Report**: Sincronizza manualmente i report da Google Sheets, li visualizza e permette di modificarli e salvarli.
             """)
 
-            st.subheader("Gestione IA (Nuova Struttura)")
+            st.markdown("#### 2. Dashboard Tecnica")
             st.markdown("""
-            La scheda **Gestione IA** è stata riorganizzata per maggiore chiarezza e ora contiene due sotto-schede:
-            - **Revisione Conoscenze**: Qui puoi approvare o respingere i suggerimenti di nuove conoscenze inviati dai tecnici quando usano la compilazione guidata. Questo aiuta l'IA ad apprendere nuovi tipi di interventi.
-            - **Memoria IA**: Contiene il pulsante per "Aggiorna Memoria IA". Cliccalo per ricostruire la base di conoscenza dell'IA usando tutte le relazioni inviate di recente. È un'operazione da fare periodicamente per mantenere l'IA aggiornata.
-            """)
-
-            st.subheader("Gestione Account")
-            st.markdown("""
-            - **Modificare un Utente**: Clicca su "Modifica" per cambiare ruolo, resettare la password o impostare un utente come "Placeholder" (senza accesso).
-            - **Creare Utente Placeholder**: Usa il modulo in fondo per creare rapidamente un utente esterno che non necessita di accesso.
-            """)
-
-            st.subheader("Cronologia Accessi")
-            st.markdown("""
-            Questa nuova scheda ti permette di monitorare tutti i tentativi di accesso al sistema. Per ogni tentativo, vengono registrati:
-            - **Data e Ora**
-            - **Nome Utente** inserito
-            - **Esito** (es. 'Login riuscito', 'Credenziali non valide', 'Login 2FA fallito').
-            Puoi usare i filtri in cima alla pagina per cercare accessi specifici per utente o per intervallo di date.
+            Questa sezione contiene gli strumenti per la gestione tecnica e la configurazione del sistema:
+            - **Gestione Account**: Per modificare utenti, resettare password e gestire i ruoli.
+            - **Cronologia Accessi**: Monitora tutti i tentativi di accesso al sistema.
+            - **Gestione IA**: Contiene le sotto-sezioni per la revisione delle conoscenze e l'aggiornamento della memoria dell'IA.
             """)
 
     # Sezione Archivio
@@ -2328,203 +2385,133 @@ def main_app(nome_utente_autenticato, ruolo):
                 if st.session_state.get('detail_technician'):
                     render_technician_detail_view()
                 else:
-                    # Altrimenti, mostra le tab principali della dashboard
-                    admin_tabs = st.tabs(["Performance Team", "Gestione IA", "Crea Nuovo Turno", "Gestione Account", "Cronologia Accessi"])
+                    # Nuova struttura a due livelli per la dashboard admin
+                    st.subheader("Dashboard di Controllo")
+                    main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
 
-                    with admin_tabs[0]: # Performance Team
-                        archivio_df_perf = carica_archivio_completo()
-                        if archivio_df_perf.empty:
-                            st.warning("Archivio storico non disponibile o vuoto. Impossibile calcolare le performance.")
-                        else:
-                            st.markdown("#### Seleziona Intervallo Temporale")
+                    # --- Dashboard Caposquadra ---
+                    with main_admin_tabs[0]:
+                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Aggiorna Report"])
 
-                            # Inizializza le date in session_state se non esistono
-                            if 'perf_start_date' not in st.session_state:
-                                st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
-                            if 'perf_end_date' not in st.session_state:
-                                st.session_state.perf_end_date = datetime.date.today()
-
-                            # Pulsanti di selezione rapida
-                            c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
-                            if c1.button("Oggi"):
-                                st.session_state.perf_start_date = datetime.date.today()
-                                st.session_state.perf_end_date = datetime.date.today()
-                            if c2.button("Ultimi 7 giorni"):
-                                st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7)
-                                st.session_state.perf_end_date = datetime.date.today()
-                            if c3.button("Ultimi 30 giorni"):
-                                st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
-                                st.session_state.perf_end_date = datetime.date.today()
-                            
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.date_input(
-                                    "Data di Inizio",
-                                    key="perf_start_date",
-                                    format="DD/MM/YYYY"
-                                )
-                            with col2:
-                                st.date_input(
-                                    "Data di Fine",
-                                    key="perf_end_date",
-                                    format="DD/MM/YYYY"
-                                )
-
-                            start_datetime = pd.to_datetime(st.session_state.perf_start_date)
-                            end_datetime = pd.to_datetime(st.session_state.perf_end_date)
-
-                            if st.button("📊 Calcola Performance", type="primary"):
-                                performance_df = calculate_technician_performance(archivio_df_perf, start_datetime, end_datetime)
-                                st.session_state['performance_results'] = {
-                                    'df': performance_df,
-                                    'start_date': start_datetime,
-                                    'end_date': end_datetime
-                                }
-
-                            if 'performance_results' in st.session_state and not st.session_state['performance_results']['df'].empty:
-                                results = st.session_state['performance_results']
-                                performance_df = results['df']
-
-                                st.markdown("---")
-                                st.markdown("### Riepilogo Performance del Team")
-
-                                total_interventions_team = performance_df['Totale Interventi'].sum()
-                                total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
-                                total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
-                                avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
-                                
-                                st.download_button(
-                                    label="📥 Esporta Riepilogo CSV",
-                                    data=to_csv(performance_df),
-                                    file_name='performance_team.csv',
-                                    mime='text/csv',
-                                )
-
-                                c1, c2, c3 = st.columns(3)
-                                c1.metric("Totale Interventi", f"{total_interventions_team}")
-                                c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
-                                c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
-
-                                st.markdown("#### Dettaglio Performance per Tecnico")
-                                for index, row in performance_df.iterrows():
-                                    st.write(f"**Tecnico:** {index}")
-                                    st.dataframe(row.to_frame().T)
-                                    if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                        st.session_state['detail_technician'] = index
-                                        st.session_state['detail_start_date'] = results['start_date']
-                                        st.session_state['detail_end_date'] = results['end_date']
-                                        st.rerun()
-
-                    with admin_tabs[1]: # Gestione IA (nuova scheda unificata)
-                        st.header("Gestione Intelligenza Artificiale")
-                        ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
-
-                        with ia_sub_tabs[0]: # Revisione Conoscenze
-                            st.markdown("### 🧠 Revisione Voci del Knowledge Core")
-                            unreviewed_entries = learning_module.load_unreviewed_knowledge()
-                            pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
-
-                            if not pending_entries:
-                                st.success("🎉 Nessuna nuova voce da revisionare!")
+                        with caposquadra_tabs[0]: # Performance Team
+                            archivio_df_perf = carica_archivio_completo()
+                            if archivio_df_perf.empty:
+                                st.warning("Archivio storico non disponibile o vuoto. Impossibile calcolare le performance.")
                             else:
-                                st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
-
-                            for i, entry in enumerate(pending_entries):
-                                with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
-                                    st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
-                                    st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
-
-                                    st.write("**Dettagli del report compilato:**")
-                                    st.json(entry['dettagli_report'])
-
+                                st.markdown("#### Seleziona Intervallo Temporale")
+                                if 'perf_start_date' not in st.session_state:
+                                    st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
+                                if 'perf_end_date' not in st.session_state:
+                                    st.session_state.perf_end_date = datetime.date.today()
+                                c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+                                if c1.button("Oggi"): st.session_state.perf_start_date = st.session_state.perf_end_date = datetime.date.today()
+                                if c2.button("Ultimi 7 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7); st.session_state.perf_end_date = datetime.date.today()
+                                if c3.button("Ultimi 30 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30); st.session_state.perf_end_date = datetime.date.today()
+                                col1, col2 = st.columns(2)
+                                with col1: st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
+                                with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
+                                start_datetime, end_datetime = pd.to_datetime(st.session_state.perf_start_date), pd.to_datetime(st.session_state.perf_end_date)
+                                if st.button("📊 Calcola Performance", type="primary"):
+                                    performance_df = calculate_technician_performance(archivio_df_perf, start_datetime, end_datetime)
+                                    st.session_state['performance_results'] = {'df': performance_df, 'start_date': start_datetime, 'end_date': end_datetime}
+                                if 'performance_results' in st.session_state and not st.session_state['performance_results']['df'].empty:
+                                    results = st.session_state['performance_results']
+                                    performance_df = results['df']
                                     st.markdown("---")
-                                    st.markdown("**Azione di Integrazione**")
+                                    st.markdown("### Riepilogo Performance del Team")
+                                    total_interventions_team, total_rushed_reports_team = performance_df['Totale Interventi'].sum(), performance_df['Report Sbrigativi'].sum()
+                                    total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
+                                    avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
+                                    st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
+                                    c1, c2, c3 = st.columns(3)
+                                    c1.metric("Totale Interventi", f"{total_interventions_team}")
+                                    c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
+                                    c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+                                    st.markdown("#### Dettaglio Performance per Tecnico")
+                                    for index, row in performance_df.iterrows():
+                                        st.write(f"**Tecnico:** {index}")
+                                        st.dataframe(row.to_frame().T)
+                                        if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
+                                            st.session_state.update({'detail_technician': index, 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
+                                            st.rerun()
 
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
-                                        new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
-                                    with col2:
-                                        if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
-                                            if new_equipment_key and new_display_name:
-                                                first_question = {
-                                                    "id": "sintomo_iniziale",
-                                                    "text": "Qual era il sintomo principale?",
-                                                    "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}
-                                                }
-                                                details = {
-                                                    "equipment_key": new_equipment_key,
-                                                    "display_name": new_display_name,
-                                                    "new_question": first_question
-                                                }
-                                                result = learning_module.integrate_knowledge(entry['id'], details)
-                                                if result.get("success"):
-                                                    st.success(f"Voce '{entry['id']}' integrata con successo!")
-                                                    st.cache_data.clear()
-                                                    st.rerun()
-                                                else:
-                                                    st.error(f"Errore integrazione: {result.get('error')}")
-                                            else:
-                                                st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
-
-                        with ia_sub_tabs[1]: # Memoria IA
-                            st.subheader("Gestione Modello IA")
-                            st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
-
-                            if st.button("🧠 Aggiorna Memoria IA", type="primary"):
-                                with st.spinner("Ricostruzione dell'indice in corso..."):
-                                    result = learning_module.build_knowledge_base()
-
-                                if result.get("success"):
-                                    st.success(result.get("message"))
-                                    # Pulisce la cache per forzare il ricaricamento dei dati IA
-                                    st.cache_data.clear()
-                                else:
-                                    st.error(result.get("message"))
-
-                    with admin_tabs[2]: # Crea Nuovo Turno
-                        with st.form("new_shift_form", clear_on_submit=True):
-                            st.subheader("Dettagli Nuovo Turno")
-                            tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
-                            desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
-                            data_turno = st.date_input("Data Turno")
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
-                            with col2:
-                                ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
-                            col3, col4 = st.columns(2)
-                            with col3:
-                                posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
-                            with col4:
-                                posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
-
-                            submitted = st.form_submit_button("Crea Turno")
-                            if submitted:
-                                if not desc_turno:
-                                    st.error("La descrizione non può essere vuota.")
-                                else:
-                                    new_id = f"T_{int(datetime.datetime.now().timestamp())}"
-                                    nuovo_turno = pd.DataFrame([{'ID_Turno': new_id, 'Descrizione': desc_turno, 'Data': pd.to_datetime(data_turno), 'OrarioInizio': ora_inizio.strftime('%H:%M'), 'OrarioFine': ora_fine.strftime('%H:%M'), 'PostiTecnico': posti_tech, 'PostiAiutante': posti_aiut, 'Tipo': tipo_turno}])
-                                    gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
-                                    df_contatti = gestionale_data.get('contatti')
-                                    if df_contatti is not None:
-                                        utenti_da_notificare = df_contatti['Nome Cognome'].tolist()
-                                        messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
-                                        for utente in utenti_da_notificare:
-                                            crea_notifica(gestionale_data, utente, messaggio)
-                                    if salva_gestionale_async(gestionale_data):
-                                        st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
-                                        st.toast("Tutti i tecnici sono stati notificati!")
-                                        st.rerun()
+                        with caposquadra_tabs[1]: # Crea Nuovo Turno
+                            with st.form("new_shift_form", clear_on_submit=True):
+                                st.subheader("Dettagli Nuovo Turno")
+                                tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
+                                desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
+                                data_turno = st.date_input("Data Turno")
+                                col1, col2 = st.columns(2)
+                                with col1: ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
+                                with col2: ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
+                                col3, col4 = st.columns(2)
+                                with col3: posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
+                                with col4: posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
+                                if st.form_submit_button("Crea Turno"):
+                                    if not desc_turno: st.error("La descrizione non può essere vuota.")
                                     else:
-                                        st.error("Errore nel salvataggio del nuovo turno.")
+                                        new_id = f"T_{int(datetime.datetime.now().timestamp())}"
+                                        nuovo_turno = pd.DataFrame([{'ID_Turno': new_id, 'Descrizione': desc_turno, 'Data': pd.to_datetime(data_turno), 'OrarioInizio': ora_inizio.strftime('%H:%M'), 'OrarioFine': ora_fine.strftime('%H:%M'), 'PostiTecnico': posti_tech, 'PostiAiutante': posti_aiut, 'Tipo': tipo_turno}])
+                                        gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
+                                        df_contatti = gestionale_data.get('contatti')
+                                        if df_contatti is not None:
+                                            utenti_da_notificare = df_contatti['Nome Cognome'].tolist()
+                                            messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
+                                            for utente in utenti_da_notificare: crea_notifica(gestionale_data, utente, messaggio)
+                                        if salva_gestionale_async(gestionale_data):
+                                            st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
+                                            st.rerun()
+                                        else: st.error("Errore nel salvataggio del nuovo turno.")
 
-                    with admin_tabs[3]: # Gestione Account
-                        render_gestione_account(gestionale_data)
+                        with caposquadra_tabs[2]: # Aggiorna Report
+                            render_update_reports_tab(autorizza_google())
 
-                    with admin_tabs[4]: # Cronologia Accessi
-                        render_access_logs_tab(gestionale_data)
+                    # --- Dashboard Tecnica ---
+                    with main_admin_tabs[1]:
+                        tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
+
+                        with tecnica_tabs[0]: # Gestione Account
+                            render_gestione_account(gestionale_data)
+
+                        with tecnica_tabs[1]: # Cronologia Accessi
+                            render_access_logs_tab(gestionale_data)
+
+                        with tecnica_tabs[2]: # Gestione IA
+                            st.header("Gestione Intelligenza Artificiale")
+                            ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
+                            with ia_sub_tabs[0]: # Revisione Conoscenze
+                                st.markdown("### 🧠 Revisione Voci del Knowledge Core")
+                                unreviewed_entries = learning_module.load_unreviewed_knowledge()
+                                pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
+                                if not pending_entries: st.success("🎉 Nessuna nuova voce da revisionare!")
+                                else: st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
+                                for i, entry in enumerate(pending_entries):
+                                    with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
+                                        st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
+                                        st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
+                                        st.write("**Dettagli del report compilato:**"); st.json(entry['dettagli_report'])
+                                        st.markdown("---"); st.markdown("**Azione di Integrazione**")
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
+                                            new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
+                                        with col2:
+                                            if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
+                                                if new_equipment_key and new_display_name:
+                                                    first_question = {"id": "sintomo_iniziale", "text": "Qual era il sintomo principale?", "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}}
+                                                    details = {"equipment_key": new_equipment_key, "display_name": new_display_name, "new_question": first_question}
+                                                    result = learning_module.integrate_knowledge(entry['id'], details)
+                                                    if result.get("success"): st.success(f"Voce '{entry['id']}' integrata con successo!"); st.cache_data.clear(); st.rerun()
+                                                    else: st.error(f"Errore integrazione: {result.get('error')}")
+                                                else: st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
+                            with ia_sub_tabs[1]: # Memoria IA
+                                st.subheader("Gestione Modello IA")
+                                st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
+                                if st.button("🧠 Aggiorna Memoria IA", type="primary"):
+                                    with st.spinner("Ricostruzione dell'indice in corso..."):
+                                        result = learning_module.build_knowledge_base()
+                                    if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
+                                    else: st.error(result.get("message"))
 
 
 # --- GESTIONE LOGIN ---
