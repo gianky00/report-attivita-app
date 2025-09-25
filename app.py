@@ -427,6 +427,8 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
                 st.session_state[f"completed_tasks_{section_key}"] = completed_list
 
                 st.success("Report inviato con successo!")
+                # Invalida la cache per forzare il ricalcolo del promemoria
+                st.cache_data.clear()
                 del st.session_state.debriefing_task
                 if 'answers' in st.session_state:
                     del st.session_state.answers
