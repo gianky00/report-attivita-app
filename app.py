@@ -127,7 +127,7 @@ def get_relevant_examples(user_text):
 
     return "\n".join(relevant_examples)
 
-from modules.instrumentation_logic import find_and_analyze_tags, get_technical_suggestions
+from modules.instrumentation_logic import find_and_analyze_tags, get_technical_suggestions, analyze_domain_terminology
 
 def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
     """
@@ -139,23 +139,29 @@ def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
     if not _testo_originale.strip():
         return {"info": "Il testo della relazione è vuoto."}
 
-    # 1. Analisi semantica della strumentazione
+    # 1. Analisi semantica della strumentazione e della terminologia
     loops, analyzed_tags = find_and_analyze_tags(_testo_originale)
+    domain_terms = analyze_domain_terminology(_testo_originale)
+
     technical_summary = ""
     if loops:
         technical_summary += "Analisi del Contesto Strumentale:\n"
         for loop_id, components in loops.items():
-            # Tenta di determinare la variabile principale del loop dal primo componente
             main_variable = components[0]['variable']
             technical_summary += f"- Loop di Controllo {loop_id} ({main_variable}):\n"
             for comp in components:
                 technical_summary += f"  - {comp['tag']}: È un {comp['type']} ({comp['description']}).\n"
 
-            # Inferenza della relazione Controllore -> Attuatore
             controller = next((c for c in components if c['type'] == '[CONTROLLORE]'), None)
             actuator = next((c for c in components if c['type'] == '[ATUTTATORE]'), None)
             if controller and actuator:
                 technical_summary += f"  - Relazione: Il controllore {controller['tag']} comanda l'attuatore {actuator['tag']}.\n"
+        technical_summary += "\n"
+
+    if domain_terms:
+        technical_summary += "Terminologia Specifica Rilevata:\n"
+        for term, definition in domain_terms.items():
+            technical_summary += f"- {term.upper()}: {definition}.\n"
         technical_summary += "\n"
 
     # 2. Costruzione del prompt per l'IA
@@ -165,13 +171,13 @@ def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
         if technical_summary:
             # Prompt avanzato con contesto tecnico
             prompt = f"""
-            Sei un Direttore Tecnico di Manutenzione con profonda conoscenza della strumentazione (standard ISA S5.1). Il tuo compito è riformulare la seguente relazione scritta da un tecnico, trasformandola in un report professionale, chiaro e tecnicamente consapevole.
+            Sei un Direttore Tecnico di Manutenzione con profonda conoscenza della strumentazione (standard ISA S5.1) e della terminologia di impianto. Il tuo compito è riformulare la seguente relazione scritta da un tecnico, trasformandola in un report professionale, chiaro e tecnicamente consapevole.
 
-            **INFORMAZIONI TECNICHE DA USARE (Know-How):**
+            **INFORMAZIONI TECNICHE E TERMINOLOGICHE DA USARE (Know-How):**
             ---
             {technical_summary}
             ---
-            Usa queste informazioni per interpretare correttamente le sigle e le relazioni tra i componenti. Ad esempio, non descrivere un controllore e una valvola come due elementi uguali, ma spiega la loro relazione causa-effetto. Riformula il testo per riflettere questa comprensione.
+            Usa queste informazioni per interpretare correttamente le sigle (es. CTG, FCV301) e le relazioni tra i componenti. Riformula il testo per riflettere questa comprensione approfondita.
 
             **RELAZIONE ORIGINALE DA RIFORMULARE:**
             ---
