@@ -426,6 +426,10 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
                 completed_list.append(completed_task_data)
                 st.session_state[f"completed_tasks_{section_key}"] = completed_list
 
+                # Se l'attività completata è del giorno precedente, aggiungila alla lista di sessione
+                if section_key == 'yesterday':
+                    st.session_state.completed_yesterday_pdl.append(task['pdl'])
+
                 st.success("Report inviato con successo!")
                 del st.session_state.debriefing_task
                 if 'answers' in st.session_state:
@@ -1858,12 +1862,23 @@ def main_app(nome_utente_autenticato, ruolo):
         elif oggi.weekday() == 6: giorno_precedente = oggi - datetime.timedelta(days=2)
         
         if ruolo in ["Amministratore", "Tecnico"]:
+            # Inizializza lo stato di sessione per le attività completate del giorno prima
+            if 'completed_yesterday_pdl' not in st.session_state:
+                st.session_state.completed_yesterday_pdl = []
+
             attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
             num_attivita_mancanti = 0
             if attivita_pianificate_ieri:
                 archivio_df = carica_archivio_completo()
-                pdl_compilati_ieri = set(archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]['PdL']) if not archivio_df.empty else set()
-                num_attivita_mancanti = len(attivita_pianificate_ieri) - len(pdl_compilati_ieri)
+
+                # Unisci i PdL dall'archivio con quelli completati nella sessione corrente
+                pdl_da_archivio = set(archivio_df[(archivio_df['Tecnico'] == nome_utente_autenticato) & (archivio_df['Data_Riferimento_dt'].dt.date == giorno_precedente)]['PdL']) if not archivio_df.empty else set()
+                pdl_da_sessione = set(st.session_state.completed_yesterday_pdl)
+                pdl_compilati_ieri = pdl_da_archivio.union(pdl_da_sessione)
+
+                # Calcola le attività mancanti escludendo quelle già compilate
+                attivita_da_fare_ieri = [task for task in attivita_pianificate_ieri if task['pdl'] not in pdl_compilati_ieri]
+                num_attivita_mancanti = len(attivita_da_fare_ieri)
             if num_attivita_mancanti > 0:
                 st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
 
