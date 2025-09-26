@@ -648,9 +648,12 @@ def consolida_report_giornalieri(client_google):
         return False, f"Errore durante la lettura del file di transito: {e}"
 
     # --- PRE-ELABORAZIONE DEI DATI DI TRANSITO ---
-    # Applica la mappatura dello stato e la formattazione del nome, convertendo tutto in maiuscolo.
+    # Applica la mappatura dello stato, formatta la data e il nome, convertendo tutto in maiuscolo.
     df_transito['Stato_Mappato'] = df_transito['Stato'].str.upper().map(status_mapping).fillna(df_transito['Stato'].str.upper())
-    df_transito['Report_Maiuscolo'] = df_transito['Report'].astype(str).str.upper()
+
+    # Formatta la data come GG/MM/AAAA, gestendo eventuali errori
+    df_transito['Data_Riferimento_Formatted'] = pd.to_datetime(df_transito['Data_Riferimento'], dayfirst=True, errors='coerce').dt.strftime('%d/%m/%Y')
+
     df_transito['Cognome_Maiuscolo'] = df_transito['Tecnico'].apply(
         lambda x: str(x).split()[-1].upper() if isinstance(x, str) and ' ' in x else str(x).upper()
     )
@@ -659,7 +662,7 @@ def consolida_report_giornalieri(client_google):
     report_map = {
         str(row['PdL']): {
             'stato': row['Stato_Mappato'],
-            'report': row['Report_Maiuscolo'],
+            'data_riferimento': row['Data_Riferimento_Formatted'],
             'tecnico': row['Cognome_Maiuscolo']
         } for _, row in df_transito.iterrows()
     }
@@ -710,7 +713,7 @@ def consolida_report_giornalieri(client_google):
 
                     # Scrivi i dati mappati nelle colonne corrette
                     ws.Cells(row_idx, stato_col_idx).Value = report_data['stato']
-                    ws.Cells(row_idx, report_col_idx).Value = report_data['report']
+                    ws.Cells(row_idx, report_col_idx).Value = report_data['data_riferimento']
                     ws.Cells(row_idx, personale_col_idx).Value = report_data['tecnico']
 
                     aggiornamenti_effettuati += 1
