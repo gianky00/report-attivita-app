@@ -580,14 +580,20 @@ def _salva_db_excel(df, percorso_salvataggio):
         wb = load_workbook(file_da_usare, keep_vba=True)
         ws = wb['Database_Attivita']
 
-        # Cancella i vecchi dati ma non l'header
+        # Cancella tutti i dati esistenti sotto l'header per evitare "dati fantasma"
+        # Itera da max_row a 2 in ordine inverso per evitare problemi con l'eliminazione
         if ws.max_row > 1:
-            ws.delete_rows(2, ws.max_row - 1)
+            for row_idx in range(ws.max_row, 1, -1):
+                # Elimina l'intera riga
+                ws.delete_rows(row_idx)
 
-        for r in dataframe_to_rows(df, index=False, header=False):
-            ws.append(r)
+        # Scrivi i nuovi dati direttamente nelle celle, a partire dalla riga 2
+        if not df.empty:
+            for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
+                for c_idx, value in enumerate(row, 1):
+                    ws.cell(row=r_idx, column=c_idx, value=value)
 
-        # Rimuovi e ricrea la tabella per aggiornare il range
+        # Rimuovi e ricrea la tabella per aggiornare il range in modo sicuro
         if 'TabellaAttivita' in ws.tables:
             del ws.tables['TabellaAttivita']
 
@@ -692,9 +698,15 @@ def consolida_report_giornalieri(client_google):
 
     # 3. Svuota il file di transito e Google Sheets
     try:
-        success_clear_excel, msg_excel = _salva_db_excel(pd.DataFrame(columns=df_transito.columns), path_transito)
-        if not success_clear_excel:
-            raise IOError(f"Fallimento nello svuotare il file di transito: {msg_excel}")
+        # Modifica per cancellare solo i valori delle celle, non le righe, per evitare corruzione
+        wb = openpyxl.load_workbook(path_transito, keep_vba=True)
+        ws = wb.active
+        # Itera sulle righe dalla 2 all'ultima
+        for row in range(2, ws.max_row + 1):
+            # Itera sulle colonne da A a J (da 1 a 10)
+            for col in range(1, 11):
+                ws.cell(row=row, column=col).value = None
+        wb.save(path_transito)
 
         sheet = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1
         header = sheet.row_values(1)
