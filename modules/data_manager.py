@@ -624,15 +624,17 @@ def consolida_report_giornalieri(client_google):
     path_principale = get_attivita_programmate_path()
     aggiornamenti_effettuati = 0
 
-    # --- NUOVE COLONNE DI DESTINAZIONE E MAPPATURA ---
-    colonna_stato_target = "STATO\nPdL"        # Colonna M
-    colonna_report_target = "STATO\nATTIVITA'"  # Colonna R
+    # --- MAPPATURA FINALE DELLE COLONNE E DEGLI STATI ---
+    colonna_stato_pdl_target = "STATO\nPdL"           # Colonna M
     colonna_personale_target = "PERSONALE\nIMPIEGATO" # Colonna S
+    colonna_stato_attivita_target = "STATO\nATTIVITA'" # Colonna Q
+    colonna_data_target = "DATA\nCONTROLLO"           # Colonna R
 
     status_mapping = {
-        'TERMINATA': 'TERMINATA',
-        'SOSPESA': 'INTERROTTO',
-        'IN CORSO': 'EMESSO'
+        'TERMINATA': 'DA CHIUDERE',
+        'NON SVOLTA': 'EMESSO',
+        'IN CORSO': 'EMESSO',
+        'SOSPESA': 'INTERROTTO'
     }
 
     # 1. Legge i report dal file di transito
@@ -647,21 +649,20 @@ def consolida_report_giornalieri(client_google):
         return False, f"Errore durante la lettura del file di transito: {e}"
 
     # --- PRE-ELABORAZIONE DEI DATI DI TRANSITO ---
-    # Applica la mappatura dello stato e la formattazione del nome
-    df_transito['Stato_Mappato'] = df_transito['Stato'].map(status_mapping).fillna(df_transito['Stato'])
+    df_transito['Stato_Mappato'] = df_transito['Stato'].str.upper().map(status_mapping).fillna(df_transito['Stato'])
     df_transito['Cognome_Maiuscolo'] = df_transito['Tecnico'].apply(
         lambda x: str(x).split()[-1].upper() if isinstance(x, str) and ' ' in x else str(x).upper()
     )
+    df_transito['Report_Maiuscolo'] = df_transito['Report'].astype(str).str.upper()
 
-    # Crea il dizionario per la ricerca rapida con i dati trasformati
     report_map = {
         str(row['PdL']): {
             'stato': row['Stato_Mappato'],
-            'report': row['Report'],
-            'tecnico': row['Cognome_Maiuscolo']
+            'tecnico': row['Cognome_Maiuscolo'],
+            'report': row['Report_Maiuscolo'],
+            'data_riferimento': row['Data_Riferimento']
         } for _, row in df_transito.iterrows()
     }
-
 
     # 2. Aggiorna il database principale usando l'automazione di Excel
     excel = None
@@ -679,42 +680,50 @@ def consolida_report_giornalieri(client_google):
 
         for sheet_name in sheets_to_read:
             ws = wb.Worksheets(sheet_name)
-
             header_row = 3
-            # Trova dinamicamente gli indici delle colonne target
-            pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx = None, None, None, None
-            for i in range(1, ws.UsedRange.Columns.Count + 1):
-                header_val = ws.Cells(header_row, i).Value
-                if header_val is None: continue
-                header_val = str(header_val).strip()
-                if header_val == 'PdL':
-                    pdl_col_idx = i
-                elif header_val == colonna_stato_target:
-                    stato_col_idx = i
-                elif header_val == colonna_report_target:
-                    report_col_idx = i
-                elif header_val == colonna_personale_target:
-                    personale_col_idx = i
 
-            # Se una delle colonne non viene trovata, passa al foglio successivo
-            if not all([pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx]):
+            # Trova dinamicamente gli indici di tutte le colonne target
+            col_indices = {}
+            target_headers = {
+                'pdl': 'PdL', 'stato_pdl': colonna_stato_pdl_target,
+                'personale': colonna_personale_target,
+                'stato_attivita': colonna_stato_attivita_target, 'data': colonna_data_target
+            }
+            for i in range(1, ws.UsedRange.Columns.Count + 20):
+                header_val = ws.Cells(header_row, i).Value
+                if header_val:
+                    header_val = str(header_val).strip()
+                    for key, val in target_headers.items():
+                        if header_val == val:
+                            col_indices[key] = i
+
+            # Se una colonna chiave manca, passa al foglio successivo
+            if 'pdl' not in col_indices:
                 continue
 
-            # Itera sulle righe dei dati
-            for row_idx in range(header_row + 1, ws.UsedRange.Rows.Count + header_row):
-                pdl_value = str(ws.Cells(row_idx, pdl_col_idx).Value).strip()
+            last_row = ws.Cells(ws.Rows.Count, col_indices['pdl']).End(-4162).Row # xlUp
+            for row_idx in range(header_row + 1, last_row + 1):
+                pdl_cell = ws.Cells(row_idx, col_indices['pdl'])
+                if pdl_cell.Value is None: continue
+                pdl_value = str(pdl_cell.Value).strip()
+
                 if pdl_value in report_map:
                     report_data = report_map[pdl_value]
 
-                    # Scrivi i dati mappati nelle colonne corrette
-                    ws.Cells(row_idx, stato_col_idx).Value = report_data['stato']
-                    ws.Cells(row_idx, report_col_idx).Value = report_data['report']
-                    ws.Cells(row_idx, personale_col_idx).Value = report_data['tecnico']
+                    # Scrivi i dati mappati e in MAIUSCOLO nelle colonne corrette
+                    if 'stato_pdl' in col_indices:
+                        ws.Cells(row_idx, col_indices['stato_pdl']).Value = report_data['stato'].upper()
+                    if 'personale' in col_indices:
+                        ws.Cells(row_idx, col_indices['personale']).Value = report_data['tecnico']
+                    if 'stato_attivita' in col_indices:
+                        ws.Cells(row_idx, col_indices['stato_attivita']).Value = report_data['report']
+                    if 'data' in col_indices:
+                        ws.Cells(row_idx, col_indices['data']).Value = report_data['data_riferimento']
 
                     aggiornamenti_effettuati += 1
                     del report_map[pdl_value]
 
-            if not report_map: # Se tutti i report sono stati trovati, esci dal loop dei fogli
+            if not report_map:
                 break
 
         wb.Save()
