@@ -648,8 +648,9 @@ def consolida_report_giornalieri(client_google):
         return False, f"Errore durante la lettura del file di transito: {e}"
 
     # --- PRE-ELABORAZIONE DEI DATI DI TRANSITO ---
-    # Applica la mappatura dello stato e la formattazione del nome
-    df_transito['Stato_Mappato'] = df_transito['Stato'].map(status_mapping).fillna(df_transito['Stato'])
+    # Applica la mappatura dello stato e la formattazione del nome, convertendo tutto in maiuscolo.
+    df_transito['Stato_Mappato'] = df_transito['Stato'].str.upper().map(status_mapping).fillna(df_transito['Stato'].str.upper())
+    df_transito['Report_Maiuscolo'] = df_transito['Report'].astype(str).str.upper()
     df_transito['Cognome_Maiuscolo'] = df_transito['Tecnico'].apply(
         lambda x: str(x).split()[-1].upper() if isinstance(x, str) and ' ' in x else str(x).upper()
     )
@@ -658,7 +659,7 @@ def consolida_report_giornalieri(client_google):
     report_map = {
         str(row['PdL']): {
             'stato': row['Stato_Mappato'],
-            'report': row['Report'],
+            'report': row['Report_Maiuscolo'],
             'tecnico': row['Cognome_Maiuscolo']
         } for _, row in df_transito.iterrows()
     }
