@@ -615,15 +615,25 @@ def _salva_db_excel(df, percorso_salvataggio):
 def consolida_report_giornalieri(client_google):
     """
     Funzione di consolidamento definitiva che usa l'automazione di Excel per preservare l'integrità del file.
+    Applica la mappatura dei dati richiesta.
     """
     import win32com.client as win32
     import pythoncom
 
     path_transito = get_storico_db_path()
     path_principale = get_attivita_programmate_path()
-    colonna_stato_target = "STATO\nPdL"
-    colonna_report_target = "STATO\nATTIVITA'"
     aggiornamenti_effettuati = 0
+
+    # --- NUOVE COLONNE DI DESTINAZIONE E MAPPATURA ---
+    colonna_stato_target = "STATO\nPdL"        # Colonna M
+    colonna_report_target = "STATO\nATTIVITA'"  # Colonna R
+    colonna_personale_target = "PERSONALE\nIMPIEGATO" # Colonna S
+
+    status_mapping = {
+        'TERMINATA': 'TERMINATA',
+        'SOSPESA': 'INTERROTTO',
+        'IN CORSO': 'EMESSO'
+    }
 
     # 1. Legge i report dal file di transito
     try:
@@ -635,6 +645,23 @@ def consolida_report_giornalieri(client_google):
         return True, "File di transito non trovato o vuoto. Nessuna azione eseguita."
     except Exception as e:
         return False, f"Errore durante la lettura del file di transito: {e}"
+
+    # --- PRE-ELABORAZIONE DEI DATI DI TRANSITO ---
+    # Applica la mappatura dello stato e la formattazione del nome
+    df_transito['Stato_Mappato'] = df_transito['Stato'].map(status_mapping).fillna(df_transito['Stato'])
+    df_transito['Cognome_Maiuscolo'] = df_transito['Tecnico'].apply(
+        lambda x: str(x).split()[-1].upper() if isinstance(x, str) and ' ' in x else str(x).upper()
+    )
+
+    # Crea il dizionario per la ricerca rapida con i dati trasformati
+    report_map = {
+        str(row['PdL']): {
+            'stato': row['Stato_Mappato'],
+            'report': row['Report'],
+            'tecnico': row['Cognome_Maiuscolo']
+        } for _, row in df_transito.iterrows()
+    }
+
 
     # 2. Aggiorna il database principale usando l'automazione di Excel
     excel = None
@@ -650,14 +677,12 @@ def consolida_report_giornalieri(client_google):
         wb = excel.Workbooks.Open(abs_path_principale)
         sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
 
-        # Pre-processa i report in un dizionario per una ricerca più veloce
-        report_map = {str(row['PdL']): {'stato': row['Stato'], 'report': row['Report']} for _, row in df_transito.iterrows()}
-
         for sheet_name in sheets_to_read:
             ws = wb.Worksheets(sheet_name)
 
             header_row = 3
-            pdl_col_idx, stato_col_idx, report_col_idx = None, None, None
+            # Trova dinamicamente gli indici delle colonne target
+            pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx = None, None, None, None
             for i in range(1, ws.UsedRange.Columns.Count + 1):
                 header_val = ws.Cells(header_row, i).Value
                 if header_val is None: continue
@@ -668,8 +693,11 @@ def consolida_report_giornalieri(client_google):
                     stato_col_idx = i
                 elif header_val == colonna_report_target:
                     report_col_idx = i
+                elif header_val == colonna_personale_target:
+                    personale_col_idx = i
 
-            if not all([pdl_col_idx, stato_col_idx, report_col_idx]):
+            # Se una delle colonne non viene trovata, passa al foglio successivo
+            if not all([pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx]):
                 continue
 
             # Itera sulle righe dei dati
@@ -677,13 +705,16 @@ def consolida_report_giornalieri(client_google):
                 pdl_value = str(ws.Cells(row_idx, pdl_col_idx).Value).strip()
                 if pdl_value in report_map:
                     report_data = report_map[pdl_value]
+
+                    # Scrivi i dati mappati nelle colonne corrette
                     ws.Cells(row_idx, stato_col_idx).Value = report_data['stato']
                     ws.Cells(row_idx, report_col_idx).Value = report_data['report']
+                    ws.Cells(row_idx, personale_col_idx).Value = report_data['tecnico']
+
                     aggiornamenti_effettuati += 1
-                    # Rimuovi il PdL dalla mappa per non cercarlo più
                     del report_map[pdl_value]
 
-            if not report_map: # Se tutti i report sono stati trovati, esci
+            if not report_map: # Se tutti i report sono stati trovati, esci dal loop dei fogli
                 break
 
         wb.Save()
