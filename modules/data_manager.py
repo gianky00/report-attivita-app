@@ -630,9 +630,10 @@ def consolida_report_giornalieri(client_google):
     colonna_personale_target = "PERSONALE\nIMPIEGATO" # Colonna S
 
     status_mapping = {
-        'TERMINATA': 'TERMINATA',
+        'TERMINATA': 'DA CHIUDERE',
         'SOSPESA': 'INTERROTTO',
-        'IN CORSO': 'EMESSO'
+        'IN CORSO': 'EMESSO',
+        'NON SVOLTA': 'EMESSO'
     }
 
     # 1. Legge i report dal file di transito
