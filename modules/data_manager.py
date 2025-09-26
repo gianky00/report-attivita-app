@@ -413,7 +413,7 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         st.error(f"Errore lettura giornaliera: {e}")
         return []
 
-@st.cache_data(ttl=600)
+#@st.cache_data(ttl=600)
 def carica_dati_attivita_programmate():
     excel_path = get_attivita_programmate_path()
 
