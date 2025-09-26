@@ -336,8 +336,8 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
         pdls_utente = set()
         for _, riga in df_range.iterrows():
             if 5 < len(riga) and 9 < len(riga):
-                nome_in_giornaliera = str(riga[5]).strip()
-                if _match_partial_name(nome_in_giornaliera, utente_completo):
+                nome_in_giornaliera = str(riga[5]).strip().lower()
+                if nome_in_giornaliera and nome_in_giornaliera in utente_completo.lower():
                     pdl_text = str(riga[9])
                     if not pd.isna(pdl_text):
                         pdls_found = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)

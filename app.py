@@ -1925,55 +1925,6 @@ def main_app(nome_utente_autenticato, ruolo):
         if oggi.weekday() == 0: giorno_precedente = oggi - datetime.timedelta(days=3)
         elif oggi.weekday() == 6: giorno_precedente = oggi - datetime.timedelta(days=2)
         
-        # Carica i dati delle attività una sola volta
-        dati_programmati_df = carica_dati_attivita_programmate()
-        report_transito_df = carica_report_transito()
-        attivita_da_recuperare = []
-
-        if ruolo in ["Amministratore", "Tecnico"]:
-            # Nuova logica per trovare attività non completate del giorno precedente
-            attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
-
-            if attivita_pianificate_ieri:
-                # Definisci gli stati che consideriamo "finali" o "completati"
-                stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
-
-                # Crea un dizionario per una ricerca rapida dello stato per PdL dal DB principale
-                status_dict = {}
-                if not dati_programmati_df.empty:
-                    status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
-
-                # Ottieni la lista dei PdL già compilati nel file di transito per il giorno precedente
-                pdl_compilati_transito = []
-                if not report_transito_df.empty:
-                    report_transito_df['Data_Riferimento_dt'] = pd.to_datetime(report_transito_df['Data_Riferimento'], errors='coerce').dt.date
-                    pdl_compilati_transito = report_transito_df[report_transito_df['Data_Riferimento_dt'] == giorno_precedente]['PdL'].unique().tolist()
-
-                # Ottieni i PdL completati nella sessione corrente
-                pdl_compilati_sessione = [task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])]
-
-                # Unisci le due liste di PdL compilati, assicurandoti che siano unici
-                pdl_gia_compilati = list(set(pdl_compilati_transito + pdl_compilati_sessione))
-
-                # Filtra le attività pianificate per ieri
-                for task in attivita_pianificate_ieri:
-                    pdl = task['pdl']
-
-                    # Salta se già compilato nel transito o nella sessione
-                    if pdl in pdl_gia_compilati:
-                        continue
-
-                    # Salta se lo stato nel DB principale è già finale
-                    stato_attuale = status_dict.get(pdl, 'Pianificato') # Default a 'Pianificato' se non trovato
-                    if stato_attuale in stati_finali:
-                        continue
-
-                    attivita_da_recuperare.append(task)
-
-            if attivita_da_recuperare:
-                num_attivita_mancanti = len(attivita_da_recuperare)
-                st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
-
         # Lista delle schede principali con i nuovi nomi e la nuova struttura
         main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
 
@@ -1997,7 +1948,45 @@ def main_app(nome_utente_autenticato, ruolo):
 
             with sub_tabs[1]:
                 st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-                # La lista `attivita_da_recuperare` è già stata calcolata in precedenza
+
+                # --- LOGICA DI CARICAMENTO ON-DEMAND ---
+                attivita_da_recuperare = []
+                if ruolo in ["Amministratore", "Tecnico"]:
+                    # Carica i dati necessari per il controllo qui, per garantire che siano freschi
+                    dati_programmati_df = carica_dati_attivita_programmate()
+                    report_transito_df = carica_report_transito()
+
+                    # Trova le attività del giorno precedente ogni volta che si entra nella scheda
+                    attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
+
+                    if attivita_pianificate_ieri:
+                        stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
+
+                        status_dict = {}
+                        if not dati_programmati_df.empty:
+                            status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
+
+                        pdl_compilati_transito = []
+                        if not report_transito_df.empty:
+                            report_transito_df['Data_Riferimento_dt'] = pd.to_datetime(report_transito_df['Data_Riferimento'], errors='coerce').dt.date
+                            pdl_compilati_transito = report_transito_df[report_transito_df['Data_Riferimento_dt'] == giorno_precedente]['PdL'].unique().tolist()
+
+                        pdl_compilati_sessione = [task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])]
+                        pdl_gia_compilati = list(set(pdl_compilati_transito + pdl_compilati_sessione))
+
+                        for task in attivita_pianificate_ieri:
+                            pdl = task['pdl']
+                            if pdl in pdl_gia_compilati:
+                                continue
+                            stato_attuale = status_dict.get(pdl, 'Pianificato')
+                            if stato_attuale in stati_finali:
+                                continue
+                            attivita_da_recuperare.append(task)
+
+                if attivita_da_recuperare:
+                    num_attivita_mancanti = len(attivita_da_recuperare)
+                    st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
+
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             # Contenuto per la nuova scheda "Compila Relazione"
