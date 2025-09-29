@@ -23,7 +23,7 @@ echo.
 
 REM --- 3. Avvia ngrok in una nuova finestra ---
 echo [3/5] Avvio di ngrok per esporre la porta 8501...
-START "Ngrok" cmd /c "ngrok http 8501"
+START "Ngrok" cmd /c "ngrok http --domain opencircuit-grimily-mirta.ngrok-free.app 8501"
 
 REM --- Attende qualche secondo per dare a ngrok il tempo di avviarsi e creare l'API ---
 echo.
