@@ -1777,7 +1777,7 @@ def main_app(nome_utente_autenticato, ruolo):
     elif st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
-            render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today(), autorizza_google())
+            render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today())
     else:
         # Header con titolo, notifiche e pulsante di logout
         col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
