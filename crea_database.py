@@ -45,7 +45,8 @@ def crea_tabella():
                 Ruolo TEXT,
                 PasswordHash TEXT,
                 "Link Attività" TEXT,
-                "2FA_Secret" TEXT
+                "2FA_Secret" TEXT,
+                Matricola TEXT
             )""",
             "turni": """(
                 ID_Turno TEXT PRIMARY KEY,
