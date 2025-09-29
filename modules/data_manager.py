@@ -200,7 +200,7 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
             'Data_Riferimento_dt': data_riferimento.isoformat()
         }
 
-        conn = sqlite3.connect(config.DB_NAME)
+        conn = sqlite3.connect(config.PATH_STORICO_DB)
         cursor = conn.cursor()
 
         with conn:
@@ -213,11 +213,11 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
 
             nuovo_storico_json = json.dumps(storico_esistente, default=json_serial)
             nuovo_stato = dati_da_scrivere['stato']
-            db_last_modified_ts = timestamp.isoformat()
+            row_last_modified_ts = timestamp.isoformat()
 
             cursor.execute(
-                "UPDATE attivita_programmate SET Storico = ?, Stato = ?, db_last_modified = ? WHERE PdL = ?",
-                (nuovo_storico_json, nuovo_stato, db_last_modified_ts, pdl)
+                "UPDATE attivita_programmate SET Storico = ?, App_Stato = ?, row_last_modified = ? WHERE PdL = ?",
+                (nuovo_storico_json, nuovo_stato, row_last_modified_ts, pdl)
             )
 
         from modules.email_sender import invia_email_con_outlook_async

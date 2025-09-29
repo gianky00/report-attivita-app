@@ -17,14 +17,18 @@ except FileNotFoundError:
     print("Per favore, crea il file 'secrets.toml' copiando 'secrets.toml.example' e inserendo i percorsi corretti.")
     sys.exit(1) # Esce dal programma
 
+import os
+
 # --- PATHS ---
-# I percorsi vengono ora letti in modo sicuro dal file di configurazione.
-# Se una chiave non è presente nel file, il programma si fermerà con un errore chiaro.
+# Converte i percorsi relativi in percorsi assoluti per garantire coerenza
+# tra gli script, basandosi sulla directory del progetto.
+_PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 try:
-    PATH_STORICO_DB = secrets["path_storico_db"]
-    PATH_GESTIONALE = secrets["path_gestionale"]
-    PATH_GIORNALIERA_BASE = secrets["path_giornaliera_base"]
-    PATH_ATTIVITA_PROGRAMMATE = secrets["path_attivita_programmate"]
+    PATH_STORICO_DB = os.path.join(_PROJECT_DIR, secrets["path_storico_db"])
+    PATH_GESTIONALE = os.path.join(_PROJECT_DIR, secrets["path_gestionale"])
+    PATH_GIORNALIERA_BASE = os.path.join(_PROJECT_DIR, secrets["path_giornaliera_base"])
+    PATH_ATTIVITA_PROGRAMMATE = os.path.join(_PROJECT_DIR, secrets["path_attivita_programmate"])
 except KeyError as e:
     print(f"ERRORE CRITICO: Chiave di configurazione mancante in 'secrets.toml': {e}")
     sys.exit(1)

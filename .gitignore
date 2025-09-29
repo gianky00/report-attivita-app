@@ -1,15 +1,29 @@
-# Credenziali e segreti
-credentials.json
+# File di database locali
+schedario.db
+*.db
+*.sqlite
+*.sqlite3
+
+# File Excel generati o di test
+ATTIVITA_PROGRAMMATE.xlsm
+
+# File di configurazione locali
 secrets.toml
-.streamlit/secrets.toml
 
-# File eseguibili e di dati sensibili
-ngrok.exe
-*.xlsx
-*.xlsm
-
-# File di ambiente Python e cache
+# Directory e file di cache di Python
 __pycache__/
 *.pyc
-.env
-venv/
+*.pyo
+*.pyd
+
+# File di output e log
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Dipendenze
+node_modules/
+dist/
+build/

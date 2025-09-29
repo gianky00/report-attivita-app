@@ -1,8 +1,9 @@
 import sqlite3
 import os
+import config
 
 # --- CONFIGURAZIONE ---
-DB_NAME = "schedario.db"
+DB_NAME = config.PATH_STORICO_DB
 TABLE_NAME = "attivita_programmate"
 
 def crea_tabella():
@@ -19,19 +20,30 @@ def crea_tabella():
         cursor.execute("PRAGMA foreign_keys = ON;")
 
         # --- TABELLA ATTIVITA' PROGRAMMATE ---
+        # Questa tabella è uno specchio del file Excel, con colonne aggiuntive per la logica di sinc.
         cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            PdL TEXT NOT NULL,
+            PdL TEXT NOT NULL UNIQUE,
+            Cantiere TEXT,
             Impianto TEXT,
-            Descrizione TEXT,
-            Stato_OdL TEXT,
-            Lunedì TEXT, Martedì TEXT, Mercoledì TEXT, Giovedì TEXT, Venerdì TEXT,
+            Descrizione_Attivita TEXT,
+            Stato_PdL TEXT,
+            Stato_Attivita TEXT,
+            Lunedi TEXT,
+            Martedi TEXT,
+            Mercoledi TEXT,
+            Giovedi TEXT,
+            Venerdi TEXT,
+            Data_Fine TEXT,
             TCL TEXT,
             Area TEXT,
             GiorniProgrammati TEXT,
-            Stato TEXT,
-            Storico TEXT
+            App_Stato TEXT,
+            Storico TEXT,
+            excel_row_hash TEXT,
+            row_last_modified TEXT,
+            excel_row_index INTEGER
         );
         """)
 
@@ -127,7 +139,7 @@ def crea_tabella():
         # --- CREAZIONE INDICI PER OTTIMIZZAZIONE QUERY ---
         indici = {
             "idx_attivita_pdl": f"CREATE INDEX IF NOT EXISTS idx_attivita_pdl ON {TABLE_NAME}(PdL);",
-            "idx_attivita_stato": f"CREATE INDEX IF NOT EXISTS idx_attivita_stato ON {TABLE_NAME}(Stato);",
+            "idx_attivita_stato": f"CREATE INDEX IF NOT EXISTS idx_attivita_stato ON {TABLE_NAME}(App_Stato);",
             "idx_attivita_area_tcl": f"CREATE INDEX IF NOT EXISTS idx_attivita_area_tcl ON {TABLE_NAME}(Area, TCL);",
             "idx_turni_tipo_data": "CREATE INDEX IF NOT EXISTS idx_turni_tipo_data ON turni(Tipo, Data);",
             "idx_prenotazioni_turno_utente": "CREATE INDEX IF NOT EXISTS idx_prenotazioni_turno_utente ON prenotazioni(ID_Turno, \"Nome Cognome\");",
@@ -156,7 +168,6 @@ def crea_tabella():
                 print("Schema aggiornato.")
 
         add_column_if_not_exists("contatti", "Matricola", "TEXT")
-        add_column_if_not_exists(TABLE_NAME, "db_last_modified", "TEXT")
 
         conn.commit()
         print(f"Database '{DB_NAME}' e tabelle ottimizzate pronti per l'uso.")
@@ -167,5 +178,6 @@ def crea_tabella():
         if conn:
             conn.close()
 
-if __name__ == "__main__":
-    crea_tabella()
+# Il blocco if __name__ == "__main__" è stato rimosso per garantire
+# che questo script venga eseguito solo tramite l'orchestratore run_process.py
+# per mantenere la coerenza dell'ambiente.
