@@ -420,6 +420,8 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento):
     st.title("✍️ Debriefing Guidato (IA)")
     st.subheader(f"PdL `{task['pdl']}` - {task['attivita']}")
 
+    is_editing = bool(task.get('answers'))
+
     if 'answers' not in st.session_state:
         st.session_state.answers = task.get('answers', {}) if is_editing else {}
         if not st.session_state.answers:
