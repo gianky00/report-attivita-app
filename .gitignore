@@ -9,6 +9,7 @@ ATTIVITA_PROGRAMMATE.xlsm
 
 # File di configurazione locali
 secrets.toml
+credentials.json
 
 # Directory e file di cache di Python
 __pycache__/
