@@ -8,7 +8,6 @@ import threading
 import openpyxl
 
 import config
-from modules.email_sender import invia_email_con_outlook_async
 from config import get_attivita_programmate_path, get_storico_db_path, get_gestionale_path
 
 @st.cache_data
@@ -261,6 +260,7 @@ def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_rif
         st.warning(f"Un errore non gestito è occorso durante la scrittura sul file di transito: {e}")
 
     # --- 3. INVIO EMAIL DI NOTIFICA ---
+    from modules.email_sender import invia_email_con_outlook_async
     titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
     report_html = dati_da_scrivere['report'].replace('\n', '<br>')
     html_body = f"""
@@ -415,85 +415,52 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
 
 @st.cache_data(ttl=600)
 def carica_dati_attivita_programmate():
-    excel_path = get_attivita_programmate_path()
+    """
+    Carica i dati delle attività programmate direttamente dal database SQLite.
+    Questa funzione è molto più veloce rispetto alla lettura del file Excel.
+    """
+    import sqlite3
 
-    if not os.path.exists(excel_path):
-        st.error(f"File attività programmate non trovato al percorso: {excel_path}")
+    DB_NAME = "schedario.db"
+    TABLE_NAME = "attivita_programmate"
+
+    if not os.path.exists(DB_NAME):
+        st.error(f"Database '{DB_NAME}' non trovato. Eseguire lo script di avvio per crearlo e sincronizzarlo.")
         return pd.DataFrame()
 
-    sheets_to_read = {
-        'A1': {'tcl': 'Francesco Naselli', 'area': 'Area 1'},
-        'A2': {'tcl': 'Francesco Naselli', 'area': 'Area 2'},
-        'A3': {'tcl': 'Ferdinando Caldarella', 'area': 'Area 3'},
-        'CTE': {'tcl': 'Ferdinando Caldarella', 'area': 'CTE'},
-        'BLENDING': {'tcl': 'Ivan Messina', 'area': 'BLENDING'},
-    }
-    
-    all_data = []
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-    
-    # La mappatura dello stato rimane, ma ora verrà usata come unica fonte.
-    status_map = {
-        'DA EMETTERE': 'Pianificato', 'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato',
-        'INTERROTTO': 'Sospeso', 'RICHIESTO': 'Da processare', 'EMESSO': 'Processato',
-        'IN CORSO': 'Aperto', 'DA CHIUDERE': 'Terminata',
-        # Aggiunte per coerenza con gli stati inviati dall'UI
-        'TERMINATA': 'Terminata',
-        'SOSPESA': 'Sospeso',
-        'NON SVOLTA': 'Non Svolta'
-    }
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        # Leggi tutti i dati dalla tabella e caricali in un DataFrame pandas
+        df = pd.read_sql_query(f"SELECT * FROM {TABLE_NAME}", conn)
 
-    # Carica l'intero storico in una volta per le ricerche successive
-    df_storico_full = carica_archivio_completo()
+        # La colonna 'Storico' è memorizzata come stringa JSON.
+        # Dobbiamo riconvertirla in un oggetto Python (lista di dizionari).
+        def parse_storico_json(json_string):
+            try:
+                # Se la stringa non è vuota o None, la parsifichiamo
+                if json_string:
+                    return json.loads(json_string)
+                # Altrimenti, restituiamo una lista vuota, come si aspetta l'UI
+                return []
+            except (json.JSONDecodeError, TypeError):
+                # In caso di errore (es. stringa non valida), restituisci una lista vuota
+                return []
 
-    for sheet_name, metadata in sheets_to_read.items():
-        try:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            df.columns = [str(col).strip() for col in df.columns]
+        if 'Storico' in df.columns:
+            df['Storico'] = df['Storico'].apply(parse_storico_json)
+        else:
+            # Se la colonna non dovesse esistere, la creiamo vuota per sicurezza
+            df['Storico'] = [[] for _ in range(len(df))]
 
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
-            if not all(col in df.columns for col in required_cols):
-                continue
+        return df
 
-            df = df.dropna(subset=['PdL'])
-            if df.empty:
-                continue
-
-            df_filtered = df[required_cols].copy()
-            df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
-            
-            df_filtered['PdL'] = df_filtered['PdL'].astype(str)
-            df_filtered['TCL'] = metadata['tcl']
-            df_filtered['Area'] = metadata['area']
-
-            giorni_programmati = df_filtered[giorni_settimana].apply(
-                lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']),
-                axis=1
-            )
-            df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
-
-            # Logica dello stato semplificata: legge direttamente dalla colonna STATO\nPdL
-            df_filtered['Stato'] = df_filtered['Stato_OdL'].apply(
-                lambda x: status_map.get(str(x).strip().upper(), 'Non Definito') if pd.notna(x) else 'Pianificato'
-            )
-            
-            # La ricerca dello storico rimane invariata, usando la nuova `carica_archivio_completo`
-            df_filtered['Storico'] = df_filtered['PdL'].apply(
-                lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records')
-                if p in df_storico_full['PdL'].values else []
-            )
-
-            all_data.append(df_filtered)
-        except Exception as e:
-            st.warning(f"Errore durante l'elaborazione del foglio '{sheet_name}': {e}")
-            continue
-
-    if not all_data:
-        st.warning("Nessun dato valido trovato in ATTIVITA_PROGRAMMATE.xlsx.")
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        st.error(f"Errore durante la lettura dal database: {e}")
         return pd.DataFrame()
-
-    final_df = pd.concat(all_data, ignore_index=True)
-    return final_df
+    finally:
+        if conn:
+            conn.close()
 
 # --- NUOVA LOGICA DI SINCRONIZZAZIONE MANUALE ---
 
