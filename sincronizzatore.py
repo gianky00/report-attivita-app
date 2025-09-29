@@ -161,6 +161,11 @@ def sincronizza_dati():
             if pdls_to_update:
                 for pdl in pdls_to_update:
                     row_to_update = df_excel.loc[pdl]
+                    # Se ci sono duplicati, df_excel.loc[pdl] restituisce un DataFrame.
+                    # In tal caso, prendiamo solo la prima riga per evitare errori.
+                    if isinstance(row_to_update, pd.DataFrame):
+                        row_to_update = row_to_update.iloc[0]
+
                     cursor.execute(f"""
                         UPDATE {TABLE_NAME} SET
                             Impianto = ?, Descrizione = ?, Stato_OdL = ?, Lunedì = ?, Martedì = ?,
