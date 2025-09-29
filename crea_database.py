@@ -41,7 +41,6 @@ def crea_tabella():
         tabelle_gestionali = {
             "contatti": """(
                 "Nome Cognome" TEXT PRIMARY KEY,
-                Password TEXT,
                 Ruolo TEXT,
                 PasswordHash TEXT,
                 "Link Attività" TEXT,
