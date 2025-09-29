@@ -57,14 +57,18 @@ def carica_archivio_completo_locale():
 
 def sincronizza_dati():
     """
-    Legge i dati dal file Excel e li inserisce nel database SQLite.
+    Legge i dati da Excel e li inserisce nel DB, restituendo un risultato.
+    Restituisce:
+        (bool, str): Tupla con (successo, messaggio_di_stato)
     """
     excel_path = config.get_attivita_programmate_path()
 
     if not os.path.exists(excel_path):
-        print(f"ERRORE: File attività programmate non trovato: {excel_path}")
-        return
+        msg = f"File attività programmate non trovato: {excel_path}"
+        print(f"ERRORE: {msg}")
+        return False, msg
 
+    # ... (la logica di lettura da Excel rimane la stessa)
     sheets_to_read = {
         'A1': {'tcl': 'Francesco Naselli', 'area': 'Area 1'},
         'A2': {'tcl': 'Francesco Naselli', 'area': 'Area 2'},
@@ -72,7 +76,6 @@ def sincronizza_dati():
         'CTE': {'tcl': 'Ferdinando Caldarella', 'area': 'CTE'},
         'BLENDING': {'tcl': 'Ivan Messina', 'area': 'BLENDING'},
     }
-
     all_data = []
     giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
     status_map = {
@@ -81,54 +84,39 @@ def sincronizza_dati():
         'IN CORSO': 'Aperto', 'DA CHIUDERE': 'Terminata',
         'TERMINATA': 'Terminata', 'SOSPESA': 'Sospeso', 'NON SVOLTA': 'Non Svolta'
     }
-
     df_storico_full = carica_archivio_completo_locale()
 
-    print("Inizio lettura file Excel...")
     for sheet_name, metadata in sheets_to_read.items():
         try:
             df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
             df.columns = [str(col).strip() for col in df.columns]
-
             required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
-            if not all(col in df.columns for col in required_cols):
-                continue
-
+            if not all(col in df.columns for col in required_cols): continue
             df = df.dropna(subset=['PdL'])
-            if df.empty:
-                continue
-
+            if df.empty: continue
             df_filtered = df[required_cols].copy()
             df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
             df_filtered['PdL'] = df_filtered['PdL'].astype(str)
             df_filtered['TCL'] = metadata['tcl']
             df_filtered['Area'] = metadata['area']
-
-            giorni_programmati = df_filtered[giorni_settimana].apply(
-                lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']),
-                axis=1
-            )
+            giorni_programmati = df_filtered[giorni_settimana].apply(lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']), axis=1)
             df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
-            df_filtered['Stato'] = df_filtered['Stato_OdL'].apply(
-                lambda x: status_map.get(str(x).strip().upper(), 'Non Definito') if pd.notna(x) else 'Pianificato'
-            )
-            df_filtered['Storico'] = df_filtered['PdL'].apply(
-                lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records')
-                if p in df_storico_full['PdL'].values else []
-            )
-
+            df_filtered['Stato'] = df_filtered['Stato_OdL'].apply(lambda x: status_map.get(str(x).strip().upper(), 'Non Definito') if pd.notna(x) else 'Pianificato')
+            df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
             all_data.append(df_filtered)
-            print(f"- Foglio '{sheet_name}' elaborato con successo.")
         except Exception as e:
-            print(f"ATTENZIONE: Errore durante l'elaborazione del foglio '{sheet_name}': {e}")
+            msg = f"Errore durante l'elaborazione del foglio '{sheet_name}': {e}"
+            print(f"ATTENZIONE: {msg}")
+            # Non blocchiamo per un singolo foglio fallito, ma continuiamo
             continue
 
     if not all_data:
-        print("Nessun dato valido trovato nel file Excel. Sincronizzazione terminata.")
-        return
+        msg = "Nessun dato valido trovato nel file Excel. Sincronizzazione non eseguita."
+        print(msg)
+        return True, msg # Restituisce True perché non è un errore bloccante
 
     final_df = pd.concat(all_data, ignore_index=True)
-    print(f"Lettura completata. Trovate {len(final_df)} attività totali.")
+    num_rows = len(final_df)
 
     final_df['Storico'] = final_df['Storico'].apply(json.dumps)
     colonne_db = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'TCL', 'Area', 'GiorniProgrammati', 'Stato', 'Storico']
@@ -138,14 +126,16 @@ def sincronizza_dati():
     try:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
-        print("Cancellazione dei dati vecchi dalla tabella...")
         cursor.execute(f"DELETE FROM {TABLE_NAME};")
-        print("Inserimento dei nuovi dati nel database...")
         df_per_db.to_sql(TABLE_NAME, conn, if_exists='append', index=False)
         conn.commit()
-        print("Sincronizzazione completata con successo!")
+        msg = f"Database aggiornato con successo con {num_rows} attività."
+        print(msg)
+        return True, msg
     except sqlite3.Error as e:
-        print(f"ERRORE: Si è verificato un errore durante la sincronizzazione con il database: {e}")
+        msg = f"Errore SQLite durante la scrittura nel database: {e}"
+        print(f"ERRORE: {msg}")
+        return False, msg
     finally:
         if conn:
             conn.close()

@@ -1269,8 +1269,31 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
 
 def render_update_reports_tab(client_google):
-    st.header("Modifica Report in Transito")
-    st.info("Usa questa sezione per visualizzare e modificare i report inviati di recente, prima che vengano consolidati nel database principale.")
+    st.header("Gestione Dati")
+    st.info("Usa questa sezione per avviare manualmente la sincronizzazione dei dati o per modificare i report in transito.")
+
+    # --- Sezione Sincronizzazione Manuale ---
+    st.subheader("Sincronizzazione Manuale da Excel")
+    st.warning("**Attenzione:** La sincronizzazione sovrascrive i dati nel database con quelli del file Excel. Usare solo se sono state fatte modifiche offline sul file `attivita_programmate.xlsm`.")
+
+    if st.button("🚀 Sincronizza Dati da Excel", help="Copia i dati aggiornati dal file Excel al database dell'applicazione."):
+        # Importa la funzione qui per evitare dipendenze circolari o inutili al caricamento
+        from sincronizzatore import sincronizza_dati
+        with st.spinner("Sincronizzazione in corso... Questo potrebbe richiedere alcuni istanti."):
+            # Modificheremo sincronizzatore.py per restituire un risultato
+            success, message = sincronizza_dati()
+            if success:
+                st.success(f"Sincronizzazione completata! {message}")
+                # Pulisce la cache per forzare il ricaricamento dei dati dal DB
+                st.cache_data.clear()
+            else:
+                st.error(f"Errore durante la sincronizzazione: {message}")
+
+    st.divider()
+
+
+    # --- Sezione Modifica Report in Transito ---
+    st.subheader("Modifica Report in Transito")
 
     if 'report_editor_key' not in st.session_state:
         st.session_state.report_editor_key = str(uuid.uuid4())
@@ -2420,7 +2443,7 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     # --- Dashboard Caposquadra ---
                     with main_admin_tabs[0]:
-                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Aggiorna Report"])
+                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati"])
 
                         with caposquadra_tabs[0]: # Performance Team
                             archivio_df_perf = carica_archivio_completo()
@@ -2492,7 +2515,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                             st.rerun()
                                         else: st.error("Errore nel salvataggio del nuovo turno.")
 
-                        with caposquadra_tabs[2]: # Aggiorna Report
+                        with caposquadra_tabs[2]: # Gestione Dati
                             render_update_reports_tab(autorizza_google())
 
                     # --- Dashboard Tecnica ---
