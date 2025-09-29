@@ -13,7 +13,8 @@ import urllib.parse
 # --- FUNZIONE PER OTTENERE L'URL DI NGROK ---
 def get_ngrok_url():
     url_api = "http://127.0.0.1:4040/api/tunnels"
-    for _ in range(5):
+    # Aumentato il numero di tentativi per dare più tempo a ngrok di avviarsi
+    for _ in range(10):
         try:
             with urllib.request.urlopen(url_api) as response:
                 data = json.loads(response.read().decode())

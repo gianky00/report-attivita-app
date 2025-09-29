@@ -107,7 +107,7 @@ def sincronizza_dati():
                 if df.empty: continue
                 df_filtered = df[required_cols].copy()
                 df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
-                df_filtered['PdL'] = df_filtered['PdL'].astype(str)
+                df_filtered['PdL'] = df_filtered['PdL'].astype(str).str.strip()
                 df_filtered['TCL'] = metadata['tcl']
                 df_filtered['Area'] = metadata['area']
                 all_data.append(df_filtered)
@@ -117,7 +117,10 @@ def sincronizza_dati():
         if not all_data:
             return True, "Nessun dato di attività trovato in Excel da sincronizzare."
 
-        df_excel = pd.concat(all_data, ignore_index=True).set_index('PdL')
+        df_excel = pd.concat(all_data, ignore_index=True)
+        # Rimuovi i PdL duplicati, mantenendo solo la prima occorrenza.
+        df_excel.drop_duplicates(subset=['PdL'], keep='first', inplace=True)
+        df_excel.set_index('PdL', inplace=True)
 
         giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
         giorni_programmati = df_excel[giorni_settimana].apply(
@@ -126,7 +129,10 @@ def sincronizza_dati():
         df_excel['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
 
         # 3. Carica i dati esistenti dal DB per confronto
-        df_db = pd.read_sql_query(f"SELECT * FROM {TABLE_NAME}", conn, index_col='PdL')
+        df_db_raw = pd.read_sql_query(f"SELECT * FROM {TABLE_NAME}", conn)
+        # Rimuovi i duplicati dal DB per evitare errori di confronto, un retaggio di vecchie versioni
+        df_db_raw.drop_duplicates(subset=['PdL'], keep='first', inplace=True)
+        df_db = df_db_raw.set_index('PdL')
 
         # 4. Esegui la sincronizzazione intelligente
         excel_pdls = set(df_excel.index)
@@ -161,10 +167,6 @@ def sincronizza_dati():
             if pdls_to_update:
                 for pdl in pdls_to_update:
                     row_to_update = df_excel.loc[pdl]
-                    # Se ci sono duplicati, df_excel.loc[pdl] restituisce un DataFrame.
-                    # In tal caso, prendiamo solo la prima riga per evitare errori.
-                    if isinstance(row_to_update, pd.DataFrame):
-                        row_to_update = row_to_update.iloc[0]
 
                     cursor.execute(f"""
                         UPDATE {TABLE_NAME} SET
