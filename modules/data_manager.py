@@ -156,7 +156,7 @@ def carica_archivio_completo():
     }, inplace=True)
 
     # Riempi i report vuoti con un testo standard
-    df_archivio['Report'].fillna("Nessun report disponibile.", inplace=True)
+    df_archivio['Report'] = df_archivio['Report'].fillna("Nessun report disponibile.")
 
     # Aggiungi colonne mancanti per compatibilità
     df_archivio['Data_Compilazione'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
