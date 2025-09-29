@@ -1360,15 +1360,18 @@ def render_access_logs_tab(gestionale_data):
     st.header("Cronologia Accessi al Sistema")
     st.info("Questa sezione mostra tutti i tentativi di accesso registrati, dal più recente al più vecchio.")
 
-    logs = gestionale_data.get('access_logs', [])
-    if not logs:
+    logs_df = gestionale_data.get('access_logs')
+
+    # La nuova funzione carica un DataFrame, quindi il controllo va fatto con .empty
+    if logs_df is None or logs_df.empty:
         st.warning("Nessun tentativo di accesso registrato.")
         return
 
-    # Converti i log in un DataFrame per una facile manipolazione
-    logs_df = pd.DataFrame(logs)
-    logs_df['timestamp'] = pd.to_datetime(logs_df['timestamp'])
-    logs_df = logs_df.sort_values(by='timestamp', ascending=False)
+    # Non è più necessario convertire in DataFrame, lo è già.
+    # Assicuriamoci solo che la colonna timestamp sia nel formato corretto
+    if 'timestamp' in logs_df.columns:
+        logs_df['timestamp'] = pd.to_datetime(logs_df['timestamp'])
+        logs_df = logs_df.sort_values(by='timestamp', ascending=False)
 
     # --- Filtri ---
     st.subheader("Filtra Cronologia")
