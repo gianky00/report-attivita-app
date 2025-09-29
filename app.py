@@ -35,7 +35,7 @@ from modules.data_manager import (
     carica_dati_attivita_programmate,
     consolida_report_giornalieri
 )
-from modules.db_manager import get_shifts_by_type, get_filtered_activities, get_technician_performance_data
+from modules.db_manager import get_shifts_by_type, get_filtered_activities, get_technician_performance_data, get_interventions_for_technician
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
     sync_oncall_shifts,
@@ -945,7 +945,6 @@ def render_technician_detail_view():
         st.rerun()
 
     # Utilizza la nuova funzione per caricare i dati in modo efficiente
-    from modules.db_manager import get_interventions_for_technician
     technician_interventions = get_interventions_for_technician(tecnico, start_date, end_date)
 
 
