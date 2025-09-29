@@ -16,11 +16,8 @@ def crea_tabella():
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
 
-        # Definisci la struttura della tabella.
-        # Le colonne sono basate sul DataFrame generato in data_manager.py
-        # Usiamo TEXT per la maggior parte delle colonne per flessibilità.
-        # Il campo Storico verrà memorizzato come una stringa JSON.
-        create_table_query = f"""
+        # Definisci la struttura della tabella per le attività programmate
+        cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             PdL TEXT,
@@ -38,10 +35,86 @@ def crea_tabella():
             Stato TEXT,
             Storico TEXT
         );
-        """
+        """)
 
-        # Esegui la query
-        cursor.execute(create_table_query)
+        # Definisci e crea le tabelle per i dati gestionali
+        tabelle_gestionali = {
+            "contatti": """(
+                "Nome Cognome" TEXT PRIMARY KEY,
+                Password TEXT,
+                Ruolo TEXT,
+                PasswordHash TEXT,
+                "Link Attività" TEXT,
+                "2FA_Secret" TEXT
+            )""",
+            "turni": """(
+                ID_Turno TEXT PRIMARY KEY,
+                Descrizione TEXT,
+                Data TEXT,
+                OrarioInizio TEXT,
+                OrarioFine TEXT,
+                PostiTecnico INTEGER,
+                PostiAiutante INTEGER,
+                Tipo TEXT
+            )""",
+            "prenotazioni": """(
+                ID_Prenotazione TEXT PRIMARY KEY,
+                ID_Turno TEXT,
+                "Nome Cognome" TEXT,
+                RuoloOccupato TEXT,
+                Timestamp TEXT
+            )""",
+            "sostituzioni": """(
+                ID_Richiesta TEXT PRIMARY KEY,
+                ID_Turno TEXT,
+                Richiedente TEXT,
+                Ricevente TEXT,
+                Timestamp TEXT
+            )""",
+            "notifiche": """(
+                ID_Notifica TEXT PRIMARY KEY,
+                Timestamp TEXT,
+                Destinatario TEXT,
+                Messaggio TEXT,
+                Stato TEXT,
+                Link_Azione TEXT
+            )""",
+            "bacheca": """(
+                ID_Bacheca TEXT PRIMARY KEY,
+                ID_Turno TEXT,
+                Tecnico_Originale TEXT,
+                Ruolo_Originale TEXT,
+                Timestamp_Pubblicazione TEXT,
+                Stato TEXT,
+                Tecnico_Subentrante TEXT,
+                Timestamp_Assegnazione TEXT
+            )""",
+            "richieste_materiali": """(
+                ID_Richiesta TEXT PRIMARY KEY,
+                Richiedente TEXT,
+                Timestamp TEXT,
+                Stato TEXT,
+                Dettagli TEXT
+            )""",
+            "richieste_assenze": """(
+                ID_Richiesta TEXT PRIMARY KEY,
+                Richiedente TEXT,
+                Timestamp TEXT,
+                Tipo_Assenza TEXT,
+                Data_Inizio TEXT,
+                Data_Fine TEXT,
+                Note TEXT,
+                Stato TEXT
+            )""",
+             "access_logs": """(
+                timestamp TEXT,
+                username TEXT,
+                status TEXT
+            )"""
+        }
+
+        for nome_tabella, schema in tabelle_gestionali.items():
+            cursor.execute(f"CREATE TABLE IF NOT EXISTS {nome_tabella} {schema}")
 
         # Commit delle modifiche
         conn.commit()
