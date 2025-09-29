@@ -1814,7 +1814,6 @@ def main_app(nome_utente_autenticato, ruolo):
         
         # Carica i dati delle attività una sola volta
         dati_programmati_df = carica_dati_attivita_programmate()
-        report_transito_df = carica_report_transito()
         attivita_da_recuperare = []
 
         if ruolo in ["Amministratore", "Tecnico"]:
@@ -1822,36 +1821,22 @@ def main_app(nome_utente_autenticato, ruolo):
             attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
 
             if attivita_pianificate_ieri:
-                # Definisci gli stati che consideriamo "finali" o "completati"
                 stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
-
-                # Crea un dizionario per una ricerca rapida dello stato per PdL dal DB principale
                 status_dict = {}
                 if not dati_programmati_df.empty:
                     status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
 
-                # Ottieni la lista dei PdL già compilati nel file di transito per il giorno precedente
-                pdl_compilati_transito = []
-                if not report_transito_df.empty:
-                    report_transito_df['Data_Riferimento_dt'] = pd.to_datetime(report_transito_df['Data_Riferimento'], errors='coerce').dt.date
-                    pdl_compilati_transito = report_transito_df[report_transito_df['Data_Riferimento_dt'] == giorno_precedente]['PdL'].unique().tolist()
+                pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
 
-                # Ottieni i PdL completati nella sessione corrente
-                pdl_compilati_sessione = [task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])]
-
-                # Unisci le due liste di PdL compilati, assicurandoti che siano unici
-                pdl_gia_compilati = list(set(pdl_compilati_transito + pdl_compilati_sessione))
-
-                # Filtra le attività pianificate per ieri
                 for task in attivita_pianificate_ieri:
                     pdl = task['pdl']
 
-                    # Salta se già compilato nel transito o nella sessione
-                    if pdl in pdl_gia_compilati:
+                    # Salta se già compilato nella sessione corrente
+                    if pdl in pdl_compilati_sessione:
                         continue
 
                     # Salta se lo stato nel DB principale è già finale
-                    stato_attuale = status_dict.get(pdl, 'Pianificato') # Default a 'Pianificato' se non trovato
+                    stato_attuale = status_dict.get(pdl, 'Pianificato')
                     if stato_attuale in stati_finali:
                         continue
 
