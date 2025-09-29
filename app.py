@@ -33,9 +33,7 @@ from modules.data_manager import (
     trova_attivita,
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate,
-    consolida_report_giornalieri,
-    carica_report_transito,
-    aggiorna_report_transito
+    consolida_report_giornalieri
 )
 from modules.db_manager import get_shifts_by_type, get_filtered_activities, get_technician_performance_data
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
