@@ -4,6 +4,7 @@ import json
 import sqlite3
 import config
 import datetime
+import bcrypt
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
@@ -135,9 +136,19 @@ def sincronizza_dati():
         for nome_foglio, nome_tabella_db in tabelle_da_sincronizzare.items():
             if nome_foglio in xls.sheet_names:
                 df_gest = pd.read_excel(xls, sheet_name=nome_foglio)
-                # Converte tutte le colonne a stringa per evitare problemi di tipo con SQLite
-                for col in df_gest.columns:
-                    df_gest[col] = df_gest[col].astype(str)
+
+                # --- GESTIONE SICURA DELLE PASSWORD PER LA TABELLA CONTATTI ---
+                if nome_tabella_db == 'contatti' and 'Password' in df_gest.columns:
+                    def hash_password(password):
+                        if pd.isna(password) or str(password).strip() == '':
+                            return None
+                        password_bytes = str(password).encode('utf-8')
+                        hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+                        return hashed.decode('utf-8')
+
+                    df_gest['PasswordHash'] = df_gest['Password'].apply(hash_password)
+                    df_gest = df_gest.drop(columns=['Password'])
+
                 cursor.execute(f"DELETE FROM {nome_tabella_db};")
                 df_gest.to_sql(nome_tabella_db, conn, if_exists='append', index=False)
 
