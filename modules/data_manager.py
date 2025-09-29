@@ -164,109 +164,105 @@ def carica_archivio_completo():
 
     return df_archivio
 
-def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_riferimento, row_index=None):
+def json_serial(obj):
+    """JSON serializer for objects not serializable by default json code"""
+    if isinstance(obj, (datetime.datetime, datetime.date, pd.Timestamp)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento):
     """
-    Orchestra la scrittura di un report su tutte le destinazioni necessarie:
-    1. Google Sheets (come "inbox" primaria).
-    2. File di transito Excel (Database_Report_Attivita.xlsm) per la disponibilità immediata.
-    3. Notifica via email.
+    Scrive un report direttamente nel database SQLite aggiornando lo storico
+    e lo stato dell'attività corrispondente.
     """
-    row_index_gs = None
-    azione = "sconosciuta"
-    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    import sqlite3
+
+    azione = "inviato"
+    timestamp = datetime.datetime.now()
     data_riferimento_str = data_riferimento.strftime('%d/%m/%Y')
 
-    # --- 1. SCRITTURA SU GOOGLE SHEETS ---
     try:
-        foglio_risposte = client.open(config.NOME_FOGLIO_RISPOSTE).sheet1
-        dati_formattati_gs = [timestamp, nome_completo, dati_da_scrivere['descrizione'], dati_da_scrivere['report'], dati_da_scrivere['stato'], data_riferimento_str]
-
-        if row_index:
-            foglio_risposte.update(f'A{row_index}:F{row_index}', [dati_formattati_gs])
-            row_index_gs = row_index
-            azione = "aggiornato"
-        else:
-            foglio_risposte.append_row(dati_formattati_gs)
-            row_index_gs = len(foglio_risposte.get_all_values())
-            azione = "inviato"
-    except Exception as e:
-        st.error(f"Errore critico durante il salvataggio su Google Sheets: {e}")
-        return None # Blocca l'operazione se la scrittura primaria fallisce
-
-    # --- 2. SCRITTURA SU FILE DI TRANSITO EXCEL (UPSERT) ---
-    try:
-        # Estrai PdL e Descrizione dal testo combinato
+        # 1. Estrai PdL
         descrizione_completa = str(dati_da_scrivere['descrizione'])
         pdl_match = re.search(r'PdL (\d{6}/[CS]|\d{6})', descrizione_completa)
-        pdl = pdl_match.group(1) if pdl_match else ''
-        descrizione_pulita = re.sub(r'PdL \d{6}/?[CS]?\s*[-:]?\s*', '', descrizione_completa).strip()
+        if not pdl_match:
+            st.error("Errore: Impossibile estrarre il PdL dalla descrizione.")
+            return False
+        pdl = pdl_match.group(1)
 
-        # Prepara la riga per il DataFrame
-        dati_per_excel = {
+        # 2. Prepara il nuovo record per lo storico
+        nuovo_record_storico = {
             'PdL': pdl,
-            'Descrizione': descrizione_pulita,
+            'Descrizione': dati_da_scrivere['descrizione'],
             'Stato': dati_da_scrivere['stato'],
+            'Data_Riferimento': data_riferimento_str,
             'Tecnico': nome_completo,
             'Report': dati_da_scrivere['report'],
-            'Data_Compilazione': timestamp,
-            'Data_Riferimento': data_riferimento_str
+            'Data_Compilazione': timestamp.isoformat(),
+            'Data_Riferimento_dt': data_riferimento.isoformat()
         }
-        df_nuovo_report = pd.DataFrame([dati_per_excel])
 
-        percorso_db = get_storico_db_path()
-        with config.EXCEL_LOCK:
-            try:
-                df_esistente = pd.read_excel(percorso_db, sheet_name='Database_Attivita')
-            except (FileNotFoundError, ValueError): # Gestisce sia file non trovato che foglio vuoto
-                df_esistente = pd.DataFrame()
+        # 3. Aggiorna il database in modo atomico
+        conn = sqlite3.connect(config.DB_NAME)
+        cursor = conn.cursor()
 
-            # Logica di "upsert": rimuovi la vecchia riga se esiste
-            if not df_esistente.empty:
-                # Normalizza le colonne per un confronto sicuro
-                df_esistente['PdL'] = df_esistente['PdL'].astype(str)
-                df_esistente['Tecnico'] = df_esistente['Tecnico'].astype(str)
-                df_esistente['Data_Riferimento'] = pd.to_datetime(df_esistente['Data_Riferimento'], errors='coerce').dt.strftime('%d/%m/%Y')
+        with conn:
+            cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
+            risultato = cursor.fetchone()
 
-                mask = (
-                    (df_esistente['PdL'] == dati_per_excel['PdL']) &
-                    (df_esistente['Tecnico'] == dati_per_excel['Tecnico']) &
-                    (df_esistente['Data_Riferimento'] == dati_per_excel['Data_Riferimento'])
-                )
-                df_esistente = df_esistente[~mask]
+            storico_esistente = []
+            if risultato and risultato[0]:
+                try:
+                    storico_esistente = json.loads(risultato[0])
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
-            df_aggiornato = pd.concat([df_esistente, df_nuovo_report], ignore_index=True)
+            storico_esistente.append(nuovo_record_storico)
+            storico_esistente.sort(key=lambda x: x.get('Data_Compilazione', ''), reverse=True)
 
-            success, message = _salva_db_excel(df_aggiornato, percorso_db)
-            if not success:
-                st.warning(f"Salvataggio su file di transito Excel fallito: {message}")
+            nuovo_storico_json = json.dumps(storico_esistente, default=json_serial)
+            nuovo_stato = dati_da_scrivere['stato']
 
+            cursor.execute(
+                "UPDATE attivita_programmate SET Storico = ?, Stato = ? WHERE PdL = ?",
+                (nuovo_storico_json, nuovo_stato, pdl)
+            )
+
+        # 4. Invia notifica email
+        from modules.email_sender import invia_email_con_outlook_async
+        titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
+        report_html = dati_da_scrivere['report'].replace('\n', '<br>')
+        html_body = f"""
+        <html><head><style>
+            body {{ font-family: Calibri, sans-serif; }} table {{ border-collapse: collapse; width: 100%; }}
+            th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; }} th {{ background-color: #f2f2f2; }}
+            .report-content {{ white-space: pre-wrap; word-wrap: break-word; }}
+        </style></head><body>
+        <h2>Riepilogo Report Attività</h2>
+        <p>Un report è stato <strong>{azione}</strong> dal tecnico {nome_completo}.</p>
+        <table>
+            <tr><th>Data di Riferimento Attività</th><td>{data_riferimento_str}</td></tr>
+            <tr><th>Data e Ora Invio Report</th><td>{timestamp.strftime('%d/%m/%Y %H:%M:%S')}</td></tr>
+            <tr><th>Tecnico</th><td>{nome_completo}</td></tr>
+            <tr><th>Attività</th><td>{dati_da_scrivere['descrizione']}</td></tr>
+            <tr><th>Stato Finale</th><td><b>{dati_da_scrivere['stato']}</b></td></tr>
+            <tr><th>Report Compilato</th><td class="report-content">{report_html}</td></tr>
+        </table></body></html>
+        """
+        invia_email_con_outlook_async(titolo_email, html_body)
+
+        st.cache_data.clear()
+        return True
+
+    except sqlite3.Error as e:
+        st.error(f"Errore durante l'aggiornamento del database: {e}")
+        return False
     except Exception as e:
-        st.warning(f"Un errore non gestito è occorso durante la scrittura sul file di transito: {e}")
-
-    # --- 3. INVIO EMAIL DI NOTIFICA ---
-    from modules.email_sender import invia_email_con_outlook_async
-    titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
-    report_html = dati_da_scrivere['report'].replace('\n', '<br>')
-    html_body = f"""
-    <html><head><style>
-        body {{ font-family: Calibri, sans-serif; }} table {{ border-collapse: collapse; width: 100%; }}
-        th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; }} th {{ background-color: #f2f2f2; }}
-        .report-content {{ white-space: pre-wrap; word-wrap: break-word; }}
-    </style></head><body>
-    <h2>Riepilogo Report Attività</h2>
-    <p>Un report è stato <strong>{azione}</strong> dal tecnico {nome_completo}.</p>
-    <table>
-        <tr><th>Data di Riferimento Attività</th><td>{data_riferimento_str}</td></tr>
-        <tr><th>Data e Ora Invio Report</th><td>{timestamp}</td></tr>
-        <tr><th>Tecnico</th><td>{nome_completo}</td></tr>
-        <tr><th>Attività</th><td>{dati_da_scrivere['descrizione']}</td></tr>
-        <tr><th>Stato Finale</th><td><b>{dati_da_scrivere['stato']}</b></td></tr>
-        <tr><th>Report Compilato</th><td class="report-content">{report_html}</td></tr>
-    </table></body></html>
-    """
-    invia_email_con_outlook_async(titolo_email, html_body)
-
-    return row_index_gs
+        st.error(f"Errore imprevisto durante il salvataggio del report: {e}")
+        return False
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
 
 def _match_partial_name(partial_name, full_name):
     """
@@ -446,230 +442,120 @@ def carica_dati_attivita_programmate():
         if conn:
             conn.close()
 
-# --- NUOVA LOGICA DI SINCRONIZZAZIONE MANUALE ---
-
-def _leggi_report_da_google(client):
-    """Legge i dati grezzi dei report dal foglio Google specificato."""
-    try:
-        sheet = client.open(config.NOME_FOGLIO_RISPOSTE).sheet1
-        records = sheet.get_all_records()
-        df = pd.DataFrame(records)
-        if df.empty:
-            return None
-        return df
-    except Exception as e:
-        st.error(f"Errore durante la lettura dei dati da Google Sheets: {e}")
-        return None
-
-def _processa_dati_grezzi(df_grezzo):
-    """Processa i dati grezzi letti da Google per prepararli all'inserimento nel database."""
-    if df_grezzo is None:
-        return None
-
-    lista_attivita_pulite = []
-
-    # Nomi delle colonne come appaiono nel foglio Google
-    COLONNA_TIMESTAMP = 'Informazioni cronologiche'
-    COLONNA_UTENTE = 'Nome e Cognome'
-    COLONNA_DESCRIZIONE_PDL = '1. Descrizione PdL'
-    COLONNA_REPORT = '1. Report Attività'
-    COLONNA_STATO = '1. Stato attività'
-    COLONNA_DATA_RIFERIMENTO = 'Data Riferimento Attività'
-
-    # Validazione colonne
-    colonne_necessarie = [COLONNA_TIMESTAMP, COLONNA_UTENTE, COLONNA_DESCRIZIONE_PDL, COLONNA_REPORT, COLONNA_STATO]
-    for col in colonne_necessarie:
-        if col not in df_grezzo.columns:
-            st.error(f"Errore critico: La colonna '{col}' non è stata trovata nel foglio Google!")
-            return None
-
-    for _, riga in df_grezzo.iterrows():
-        if pd.isna(riga[COLONNA_DESCRIZIONE_PDL]) or str(riga[COLONNA_DESCRIZIONE_PDL]).strip() == '':
-            continue
-
-        descrizione_completa = str(riga[COLONNA_DESCRIZIONE_PDL])
-        pdl_match = re.search(r'PdL (\d{6}/[CS]|\d{6})', descrizione_completa)
-        pdl = pdl_match.group(1) if pdl_match else ''
-        descrizione_pulita = re.sub(r'PdL \d{6}/?[CS]?\s*[-:]?\s*', '', descrizione_completa).strip()
-
-        data_riferimento_str = str(riga.get(COLONNA_DATA_RIFERIMENTO, '')).strip()
-        if data_riferimento_str:
-            data_riferimento = data_riferimento_str
-        else:
-            timestamp_str = str(riga.get(COLONNA_TIMESTAMP, ''))
-            match = re.search(r'(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})', timestamp_str)
-            data_riferimento = match.group(1).replace('-', '/').replace('.', '/') if match else datetime.date.today().strftime('%d/%m/%Y')
-
-        nuova_riga = {
-            'PdL': pdl,
-            'Descrizione': descrizione_pulita,
-            'Stato': riga[COLONNA_STATO],
-            'Tecnico': riga[COLONNA_UTENTE],
-            'Report': riga[COLONNA_REPORT],
-            'Data_Compilazione': riga[COLONNA_TIMESTAMP],
-            'Data_Riferimento': data_riferimento
-        }
-        lista_attivita_pulite.append(nuova_riga)
-
-    if not lista_attivita_pulite:
-        return None
-
-    return pd.DataFrame(lista_attivita_pulite)
-
-def _salva_db_excel(df, percorso_salvataggio):
-    """Salva il DataFrame nel file Excel, preservando le macro."""
-    from openpyxl import load_workbook
-    from openpyxl.utils.dataframe import dataframe_to_rows
-    from openpyxl.styles import Font
-    from openpyxl.worksheet.table import Table, TableStyleInfo
-    from openpyxl.utils import get_column_letter
-
-    file_template = os.path.join(os.path.dirname(percorso_salvataggio), "Database_Template.xlsm")
-    file_da_usare = percorso_salvataggio if os.path.exists(percorso_salvataggio) else file_template
-
-    try:
-        wb = load_workbook(file_da_usare, keep_vba=True)
-        ws = wb['Database_Attivita']
-
-        # Cancella tutti i dati esistenti sotto l'header per evitare "dati fantasma"
-        # Itera da max_row a 2 in ordine inverso per evitare problemi con l'eliminazione
-        if ws.max_row > 1:
-            for row_idx in range(ws.max_row, 1, -1):
-                # Elimina l'intera riga
-                ws.delete_rows(row_idx)
-
-        # Scrivi i nuovi dati direttamente nelle celle, a partire dalla riga 2
-        if not df.empty:
-            for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=False), 2):
-                for c_idx, value in enumerate(row, 1):
-                    ws.cell(row=r_idx, column=c_idx, value=value)
-
-        # Rimuovi e ricrea la tabella per aggiornare il range in modo sicuro
-        if 'TabellaAttivita' in ws.tables:
-            del ws.tables['TabellaAttivita']
-
-        if not df.empty:
-            max_row, max_col = len(df) + 1, len(df.columns)
-            table_range = f"A1:{get_column_letter(max_col)}{max_row}"
-            tab = Table(displayName="TabellaAttivita", ref=table_range)
-            style = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True)
-            tab.tableStyleInfo = style
-            ws.add_table(tab)
-
-        wb.save(percorso_salvataggio)
-        return True, f"Database salvato con successo in '{os.path.basename(percorso_salvataggio)}'."
-    except FileNotFoundError:
-        return False, f"Errore: File template '{os.path.basename(file_template)}' o database esistente non trovato."
-    except Exception as e:
-        return False, f"Errore durante il salvataggio del file Excel: {e}"
-
-def consolida_report_giornalieri(client_google):
+def consolida_report_giornalieri():
     """
-    Funzione di consolidamento definitiva che usa l'automazione di Excel per preservare l'integrità del file.
-    Applica la mappatura dei dati richiesta.
+    Consolida i report più recenti dal database SQLite al file Excel principale.
+    Legge lo storico di ogni attività dal DB, estrae l'ultimo report e aggiorna
+    il file ATTIVITA_PROGRAMMATE.xlsm in modo sicuro.
     """
+    import sqlite3
     import win32com.client as win32
     import pythoncom
 
-    path_transito = get_storico_db_path()
     path_principale = get_attivita_programmate_path()
     aggiornamenti_effettuati = 0
 
-    # --- NUOVE COLONNE DI DESTINAZIONE E MAPPATURA ---
-    colonna_stato_target = "STATO\nPdL"        # Colonna M
-    colonna_report_target = "STATO\nATTIVITA'"  # Colonna R
-    colonna_personale_target = "PERSONALE\nIMPIEGATO" # Colonna S
+    # Colonne di destinazione in Excel
+    colonna_stato_target = "STATO\nPdL"
+    colonna_report_target = "STATO\nATTIVITA'"
+    colonna_personale_target = "PERSONALE\nIMPIEGATO"
 
     status_mapping = {
-        'TERMINATA': 'TERMINATA',
-        'SOSPESA': 'INTERROTTO',
-        'IN CORSO': 'EMESSO'
+        'TERMINATA': 'TERMINATA', 'SOSPESA': 'INTERROTTO', 'IN CORSO': 'EMESSO',
+        'NON SVOLTA': 'NON SVOLTA'
     }
 
-    # 1. Legge i report dal file di transito
+    report_map = {}
+    conn = None
     try:
-        with config.EXCEL_LOCK:
-            df_transito = pd.read_excel(path_transito, sheet_name='Database_Attivita')
-        if df_transito.empty:
-            return True, "Nessun nuovo report da consolidare."
-    except (FileNotFoundError, ValueError):
-        return True, "File di transito non trovato o vuoto. Nessuna azione eseguita."
-    except Exception as e:
-        return False, f"Errore durante la lettura del file di transito: {e}"
+        # 1. Leggi i dati dal database SQLite
+        conn = sqlite3.connect(config.DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute("SELECT PdL, Storico FROM attivita_programmate WHERE Storico IS NOT NULL AND Storico != '[]'")
+        activities = cursor.fetchall()
 
-    # --- PRE-ELABORAZIONE DEI DATI DI TRANSITO ---
-    # Applica la mappatura dello stato e la formattazione del nome
-    df_transito['Stato_Mappato'] = df_transito['Stato'].map(status_mapping).fillna(df_transito['Stato'])
-    df_transito['Cognome_Maiuscolo'] = df_transito['Tecnico'].apply(
-        lambda x: str(x).split()[-1].upper() if isinstance(x, str) and ' ' in x else str(x).upper()
-    )
+        if not activities:
+            return True, "Nessun report da consolidare nel database."
 
-    # Crea il dizionario per la ricerca rapida con i dati trasformati
-    report_map = {
-        str(row['PdL']): {
-            'stato': row['Stato_Mappato'],
-            'report': row['Report'],
-            'tecnico': row['Cognome_Maiuscolo']
-        } for _, row in df_transito.iterrows()
-    }
+        # 2. Pre-elabora i dati per l'aggiornamento, trovando solo il report più recente
+        for pdl, storico_json in activities:
+            try:
+                storico = json.loads(storico_json)
+                if not storico: continue
 
+                ultimo_report = storico[0]
 
-    # 2. Aggiorna il database principale usando l'automazione di Excel
+                stato_originale = ultimo_report.get('Stato', '')
+                report_text = ultimo_report.get('Report', '')
+                tecnico_originale = ultimo_report.get('Tecnico', '')
+
+                stato_mappato = status_mapping.get(stato_originale, stato_originale)
+                tecnico_formattato = tecnico_originale.split()[-1].upper() if ' ' in str(tecnico_originale) else str(tecnico_originale).upper()
+
+                report_map[pdl] = {
+                    'stato': stato_mappato,
+                    'report': report_text,
+                    'tecnico': tecnico_formattato
+                }
+            except (json.JSONDecodeError, IndexError):
+                continue
+
+    except sqlite3.Error as e:
+        return False, f"Errore durante la lettura dal database: {e}"
+    finally:
+        if conn:
+            conn.close()
+
+    if not report_map:
+        return True, "Nessun report valido trovato nel database da consolidare."
+
+    # 3. Aggiorna il file Excel principale
     excel = None
     try:
         pythoncom.CoInitialize()
         excel = win32.Dispatch('Excel.Application')
         excel.Visible = False
-
         abs_path_principale = os.path.abspath(path_principale)
         if not os.path.exists(abs_path_principale):
-            raise FileNotFoundError(f"File principale non trovato al percorso: {abs_path_principale}")
+            raise FileNotFoundError(f"File principale non trovato: {abs_path_principale}")
 
         wb = excel.Workbooks.Open(abs_path_principale)
         sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
 
         for sheet_name in sheets_to_read:
             ws = wb.Worksheets(sheet_name)
-
             header_row = 3
-            # Trova dinamicamente gli indici delle colonne target
             pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx = None, None, None, None
+
             for i in range(1, ws.UsedRange.Columns.Count + 1):
                 header_val = ws.Cells(header_row, i).Value
                 if header_val is None: continue
                 header_val = str(header_val).strip()
-                if header_val == 'PdL':
-                    pdl_col_idx = i
-                elif header_val == colonna_stato_target:
-                    stato_col_idx = i
-                elif header_val == colonna_report_target:
-                    report_col_idx = i
-                elif header_val == colonna_personale_target:
-                    personale_col_idx = i
+                if header_val == 'PdL': pdl_col_idx = i
+                elif header_val == colonna_stato_target: stato_col_idx = i
+                elif header_val == colonna_report_target: report_col_idx = i
+                elif header_val == colonna_personale_target: personale_col_idx = i
 
-            # Se una delle colonne non viene trovata, passa al foglio successivo
-            if not all([pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx]):
-                continue
+            if not all([pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx]): continue
 
-            # Itera sulle righe dei dati
             for row_idx in range(header_row + 1, ws.UsedRange.Rows.Count + header_row):
-                pdl_value = str(ws.Cells(row_idx, pdl_col_idx).Value).strip()
-                if pdl_value in report_map:
-                    report_data = report_map[pdl_value]
+                pdl_value_cell = ws.Cells(row_idx, pdl_col_idx).Value
+                if pdl_value_cell is None: continue
+                pdl_value = str(pdl_value_cell).strip()
 
-                    # Scrivi i dati mappati nelle colonne corrette
+                if pdl_value in report_map:
+                    report_data = report_map.pop(pdl_value) # Rimuovi per efficienza
                     ws.Cells(row_idx, stato_col_idx).Value = report_data['stato']
                     ws.Cells(row_idx, report_col_idx).Value = report_data['report']
                     ws.Cells(row_idx, personale_col_idx).Value = report_data['tecnico']
-
                     aggiornamenti_effettuati += 1
-                    del report_map[pdl_value]
 
-            if not report_map: # Se tutti i report sono stati trovati, esci dal loop dei fogli
-                break
+            if not report_map: break
 
         wb.Save()
         wb.Close(SaveChanges=False)
+        st.cache_data.clear()
+        return True, f"Consolidamento completato. {aggiornamenti_effettuati} attività aggiornate in Excel."
 
     except Exception as e:
         return False, f"Errore durante l'automazione di Excel: {e}"
@@ -677,55 +563,3 @@ def consolida_report_giornalieri(client_google):
         if excel:
             excel.Quit()
         pythoncom.CoUninitialize()
-
-    # 3. Svuota il file di transito e Google Sheets
-    try:
-        # Modifica per cancellare solo i valori delle celle, non le righe, per evitare corruzione
-        wb = openpyxl.load_workbook(path_transito, keep_vba=True)
-        ws = wb.active
-        # Itera sulle righe dalla 2 all'ultima
-        for row in range(2, ws.max_row + 1):
-            # Itera sulle colonne da A a J (da 1 a 10)
-            for col in range(1, 11):
-                ws.cell(row=row, column=col).value = None
-        wb.save(path_transito)
-
-        sheet = client_google.open(config.NOME_FOGLIO_RISPOSTE).sheet1
-        header = sheet.row_values(1)
-        sheet.clear()
-        if header:
-            sheet.append_row(header)
-
-        st.cache_data.clear()
-        return True, f"Consolidamento completato. {aggiornamenti_effettuati} attività aggiornate. File di transito e Google Sheets sono stati svuotati."
-
-    except Exception as e:
-        return False, f"Errore durante la fase di pulizia: {e}"
-
-def carica_report_transito():
-    """
-    Carica i report solo dal file di transito (Database_Report_Attivita.xlsm).
-    """
-    storico_path = get_storico_db_path()
-    try:
-        with config.EXCEL_LOCK:
-            df_transito = pd.read_excel(storico_path, sheet_name='Database_Attivita')
-        return df_transito
-    except FileNotFoundError:
-        # Se il file non esiste, restituisce un dataframe vuoto con le colonne corrette
-        return pd.DataFrame(columns=['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento'])
-    except Exception as e:
-        st.error(f"Errore imprevisto durante il caricamento del file di transito: {e}")
-        return pd.DataFrame()
-
-def aggiorna_report_transito(df_aggiornato):
-    """
-    Aggiorna e sovrascrive il file di transito con i dati modificati dall'utente.
-    """
-    percorso_db = get_storico_db_path()
-    success, message = _salva_db_excel(df_aggiornato, percorso_db)
-
-    if success:
-        st.cache_data.clear()
-
-    return success, message

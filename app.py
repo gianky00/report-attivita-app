@@ -37,6 +37,7 @@ from modules.data_manager import (
     carica_report_transito,
     aggiorna_report_transito
 )
+from modules.db_manager import get_shifts_by_type, get_filtered_activities, get_technician_performance_data
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
     sync_oncall_shifts,
@@ -220,52 +221,11 @@ def to_csv(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv(index=False).encode('utf-8')
 
-def calculate_technician_performance(archivio_df, start_date, end_date):
-    """Calcola le metriche di performance per i tecnici in un dato intervallo di tempo."""
-    
-    # Converte le date in formato datetime di pandas, gestendo errori
-    archivio_df['Data_Riferimento_dt'] = pd.to_datetime(archivio_df['Data_Riferimento'], format='%d/%m/%Y', errors='coerce')
-    # Estrae la data dalla colonna timestamp della compilazione
-    archivio_df['Data_Compilazione_dt'] = pd.to_datetime(archivio_df['Data_Compilazione'], errors='coerce').dt.date
-    archivio_df['Data_Compilazione_dt'] = pd.to_datetime(archivio_df['Data_Compilazione_dt']) # Riconverte a datetime64 per la sottrazione
-
-    # Filtra il DataFrame per l'intervallo di date selezionato (basato sulla data di riferimento dell'attività)
-    mask = (archivio_df['Data_Riferimento_dt'] >= start_date) & (archivio_df['Data_Riferimento_dt'] <= end_date)
-    df_filtered = archivio_df[mask].copy()
-
-    if df_filtered.empty:
-        return pd.DataFrame()
-
-    # Calcola il ritardo di compilazione in giorni
-    # Assicura che entrambe le colonne siano datetime valide prima di sottrarre
-    valid_dates = df_filtered.dropna(subset=['Data_Riferimento_dt', 'Data_Compilazione_dt'])
-    valid_dates['Ritardo_Compilazione'] = (valid_dates['Data_Compilazione_dt'] - valid_dates['Data_Riferimento_dt']).dt.days
-    
-    # Raggruppa per tecnico
-    performance_data = {}
-    for tecnico, group in df_filtered.groupby('Tecnico'):
-        # Filtra anche il gruppo con date valide per il calcolo del ritardo
-        group_valid_dates = valid_dates[valid_dates['Tecnico'] == tecnico]
-
-        total_interventions = len(group)
-        completed_interventions = len(group[group['Stato'] == 'TERMINATA'])
-        completion_rate = (completed_interventions / total_interventions) * 100 if total_interventions > 0 else 0
-        
-        # Definisce un report "sbrigativo" se ha meno di 20 caratteri
-        rushed_reports = len(group[group['Report'].str.len() < 20])
-
-        # Calcola il ritardo medio solo se ci sono dati validi
-        avg_delay = group_valid_dates['Ritardo_Compilazione'].mean() if not group_valid_dates.empty else 0
-
-        performance_data[tecnico] = {
-            "Totale Interventi": total_interventions,
-            "Tasso Completamento (%)": f"{completion_rate:.1f}",
-            "Ritardo Medio Compilazione (gg)": f"{avg_delay:.1f}",
-            "Report Sbrigativi": rushed_reports
-        }
-        
-    performance_df = pd.DataFrame.from_dict(performance_data, orient='index')
-    return performance_df
+# La funzione calculate_technician_performance è stata rimossa perché
+# la logica è stata spostata in modules/db_manager.py per efficienza.
+# La nuova funzione get_technician_performance_data esegue i calcoli
+# direttamente nel database, riducendo drasticamente il carico sulla memoria
+# e il tempo di elaborazione.
 
 
 # --- FUNZIONI INTERFACCIA UTENTE ---
@@ -395,15 +355,12 @@ def render_notification_center(notifications_df, gestionale_data):
                             st.rerun()
                 st.divider()
 
-def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google):
+def render_debriefing_ui(knowledge_core, utente, data_riferimento):
     task = st.session_state.debriefing_task
     section_key = task['section_key']
-    is_editing = 'row_index' in task
 
-    # La funzione 'handle_submit' è definita QUI DENTRO
     def handle_submit(report_text, stato, answers_dict=None):
         if report_text.strip():
-            # Logica per l'apprendimento
             if answers_dict and 'equipment' in answers_dict and answers_dict['equipment'].startswith("Altro:"):
                 report_lines = {k: v for k, v in answers_dict.items() if k != 'equipment'}
                 learning_module.add_new_entry(
@@ -417,34 +374,32 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento, client_google
             dati = {
                 'descrizione': f"PdL {task['pdl']} - {task['attivita']}",
                 'report': report_text,
-                'stato': stato,
-                'storico': task.get('storico', [])
+                'stato': stato
             }
-            row_idx = scrivi_o_aggiorna_risposta(client_google, dati, utente, data_riferimento, row_index=task.get('row_index'))
-            if row_idx:
-                completed_task_data = {**task, 'report': report_text, 'stato': stato, 'row_index': row_idx, 'answers': answers_dict}
+
+            # La nuova funzione scrive direttamente nel DB e non ha più bisogno del client_google o del row_index
+            success = scrivi_o_aggiorna_risposta(dati, utente, data_riferimento)
+
+            if success:
+                completed_task_data = {**task, 'report': report_text, 'stato': stato, 'answers': answers_dict}
                 
-                # Cerca la lista esistente o creane una nuova
                 completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
-                # Rimuovi eventuali vecchie versioni di questo task
                 completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
-                # Aggiungi il task aggiornato
                 completed_list.append(completed_task_data)
                 st.session_state[f"completed_tasks_{section_key}"] = completed_list
 
-                # Se l'attività completata è del giorno precedente, aggiungila anche alla lista di sessione specifica
                 if section_key == 'yesterday':
-                    # Assicurati che la lista esista
                     if 'completed_tasks_yesterday' not in st.session_state:
                         st.session_state.completed_tasks_yesterday = []
                     st.session_state.completed_tasks_yesterday.append(completed_task_data)
 
-                st.success("Report inviato con successo!")
+                st.success("Report inviato con successo al database!")
                 del st.session_state.debriefing_task
-                if 'answers' in st.session_state:
-                    del st.session_state.answers
+                if 'answers' in st.session_state: del st.session_state.answers
                 st.balloons()
                 st.rerun()
+            else:
+                st.error("Si è verificato un errore durante il salvataggio del report nel database.")
         else:
             st.warning("Il report non può essere vuoto.")
 
@@ -730,7 +685,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
 
                     # A user is a placeholder if they don't have a password entry.
                     # pd.isna() correctly handles None, NaN, etc.
-                    is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('Password'))
+                    is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('PasswordHash'))
 
                     if is_placeholder:
                         display_name = f"*{nome_utente} (Esterno)*"
@@ -978,12 +933,12 @@ def render_technician_detail_view():
             
             # Mostra le metriche specifiche per il tecnico
             st.markdown("#### Riepilogo Metriche")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Totale Interventi", technician_metrics['Totale Interventi'])
-        c2.metric("Tasso Completamento", f"{technician_metrics['Tasso Completamento (%)']}%")
-        c3.metric("Ritardo Medio (gg)", technician_metrics['Ritardo Medio Compilazione (gg)'])
-        c4.metric("Report Sbrigativi", technician_metrics['Report Sbrigativi'])
-        st.markdown("---")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Totale Interventi", technician_metrics['Totale Interventi'])
+            c2.metric("Tasso Completamento", f"{technician_metrics['Tasso Completamento (%)']}%")
+            c3.metric("Ritardo Medio (gg)", technician_metrics['Ritardo Medio Compilazione (gg)'])
+            c4.metric("Report Sbrigativi", technician_metrics['Report Sbrigativi'])
+            st.markdown("---")
 
     if st.button("⬅️ Torna alla Dashboard"):
         del st.session_state['detail_technician']
@@ -991,13 +946,10 @@ def render_technician_detail_view():
         del st.session_state['detail_end_date']
         st.rerun()
 
-    archivio_df = carica_archivio_completo()
-    mask = (
-        (archivio_df['Tecnico'] == tecnico) &
-        (archivio_df['Data_Riferimento_dt'] >= start_date) &
-        (archivio_df['Data_Riferimento_dt'] <= end_date)
-    )
-    technician_interventions = archivio_df[mask]
+    # Utilizza la nuova funzione per caricare i dati in modo efficiente
+    from modules.db_manager import get_interventions_for_technician
+    technician_interventions = get_interventions_for_technician(tecnico, start_date, end_date)
+
 
     if technician_interventions.empty:
         st.warning("Nessun intervento trovato per questo tecnico nel periodo selezionato.")
@@ -1005,7 +957,7 @@ def render_technician_detail_view():
 
     st.markdown("### Riepilogo Interventi")
     # Formatta la colonna della data prima di visualizzarla
-    technician_interventions['Data'] = technician_interventions['Data_Riferimento_dt'].dt.strftime('%d/%m/%Y')
+    technician_interventions['Data'] = pd.to_datetime(technician_interventions['Data_Riferimento_dt']).dt.strftime('%d/%m/%Y')
     st.dataframe(technician_interventions[['Data', 'PdL', 'Descrizione', 'Stato', 'Report']])
 
     st.download_button(
@@ -1268,93 +1220,10 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
                     st.rerun()
 
 
-def render_update_reports_tab(client_google):
-    st.header("Gestione Dati")
-    st.info("Usa questa sezione per avviare manualmente la sincronizzazione dei dati o per modificare i report in transito.")
-
-    # --- Sezione Sincronizzazione Manuale ---
-    st.subheader("Sincronizzazione Manuale da Excel")
-    st.warning("**Attenzione:** La sincronizzazione sovrascrive i dati nel database con quelli del file Excel. Usare solo se sono state fatte modifiche offline sul file `attivita_programmate.xlsm`.")
-
-    if st.button("🚀 Sincronizza Dati da Excel", help="Copia i dati aggiornati dal file Excel al database dell'applicazione."):
-        # Importa la funzione qui per evitare dipendenze circolari o inutili al caricamento
-        from sincronizzatore import sincronizza_dati
-        with st.spinner("Sincronizzazione in corso... Questo potrebbe richiedere alcuni istanti."):
-            # Modificheremo sincronizzatore.py per restituire un risultato
-            success, message = sincronizza_dati()
-            if success:
-                st.success(f"Sincronizzazione completata! {message}")
-                # Pulisce la cache per forzare il ricaricamento dei dati dal DB
-                st.cache_data.clear()
-            else:
-                st.error(f"Errore durante la sincronizzazione: {message}")
-
-    st.divider()
-
-
-    # --- Sezione Modifica Report in Transito ---
-    st.subheader("Modifica Report in Transito")
-
-    if 'report_editor_key' not in st.session_state:
-        st.session_state.report_editor_key = str(uuid.uuid4())
-
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button("⚙️ Consolida Report nel DB Principale"):
-            with st.spinner("Consolidamento dei report in corso..."):
-                success, message = consolida_report_giornalieri(client_google)
-                if success:
-                    st.success(message)
-                    st.session_state.report_editor_key = str(uuid.uuid4())
-                    st.rerun()
-                else:
-                    st.error(message)
-
-    st.divider()
-
-    st.subheader("Visualizza e Modifica Report nel File di Transito")
-
-    # Carica i dati direttamente dal file di transito
-    report_transito_df = carica_report_transito()
-
-    if report_transito_df.empty:
-        st.info("Nessun report in transito da modificare.")
-        return
-
-    # Memorizza l'ordine originale delle colonne
-    original_columns = report_transito_df.columns.tolist()
-
-    st.caption("Le modifiche verranno salvate solo nel file temporaneo, pronte per il consolidamento.")
-
-    # Colonne da mostrare e modificare in un ordine più leggibile
-    colonne_da_mostrare = ['Tecnico', 'PdL', 'Descrizione', 'Stato', 'Report', 'Data_Riferimento']
-
-    # Assicurati che tutte le colonne da mostrare esistano per evitare KeyError
-    for col in colonne_da_mostrare:
-        if col not in report_transito_df.columns:
-            report_transito_df[col] = "" # Aggiungi colonna vuota se mancante
-
-    edited_df = st.data_editor(
-        report_transito_df[colonne_da_mostrare],
-        key=st.session_state.report_editor_key,
-        num_rows="dynamic",
-        use_container_width=True,
-        # Disabilita l'aggiunta/rimozione di righe per evitare complicazioni
-        disabled=['Data_Compilazione']
-    )
-
-    if st.button("Salva Modifiche nel File di Transito", type="primary"):
-        with st.spinner("Salvataggio delle modifiche in corso..."):
-            # Ripristina l'ordine originale delle colonne prima di salvare
-            df_to_save = edited_df.reindex(columns=original_columns)
-
-            success, message = aggiorna_report_transito(df_to_save)
-            if success:
-                st.success("Modifiche salvate con successo nel file di transito!")
-                st.session_state.report_editor_key = str(uuid.uuid4()) # Invalida la cache dell'editor
-                st.rerun()
-            else:
-                st.error(f"Errore durante il salvataggio: {message}")
+# La funzione render_update_reports_tab è stata integrata direttamente
+# nella dashboard dell'amministratore per una maggiore chiarezza e per
+# riflettere il nuovo flusso di dati bidirezionale.
+# La logica ora risiede nella scheda "Gestione Dati" della "Dashboard Caposquadra".
 
 def render_access_logs_tab(gestionale_data):
     st.header("Cronologia Accessi al Sistema")
@@ -1666,34 +1535,28 @@ def delete_session(token):
 def render_situazione_impianti_tab():
     st.header("📊 Situazione Generale Impianti")
 
-    # Carica i dati aggiornati
-    df = carica_dati_attivita_programmate()
+    # Carica i dati una sola volta per ottenere le opzioni dei filtri
+    # @st.cache_data
+    def get_filter_options():
+        df_all = carica_dati_attivita_programmate()
+        if df_all.empty:
+            return {}, {}, {}
+        return sorted(df_all['TCL'].unique()), sorted(df_all['Area'].unique()), sorted(df_all['Stato'].unique())
 
-    if df.empty:
-        st.warning("Non sono stati trovati dati sulle attività programmate. Verificare il file Excel.")
-        st.info("Questa sezione mostra lo stato di avanzamento delle attività (es. SOSPESO, COMPLETATO) raggruppate per Area e TCL.")
+    tcl_options, area_options, stato_options = get_filter_options()
+
+    if not tcl_options:
+        st.warning("Nessun dato di attività trovato nel database per popolare i filtri.")
         return
 
     with st.form("situazione_filters_form"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            selected_tcl = st.multiselect(
-                "Filtra per TCL",
-                options=sorted(df['TCL'].unique()),
-                default=sorted(df['TCL'].unique())
-            )
+            selected_tcl = st.multiselect("Filtra per TCL", options=tcl_options, default=tcl_options)
         with col2:
-            selected_area = st.multiselect(
-                "Filtra per Area",
-                options=sorted(df['Area'].unique()),
-                default=sorted(df['Area'].unique())
-            )
+            selected_area = st.multiselect("Filtra per Area", options=area_options, default=area_options)
         with col3:
-            selected_stato = st.multiselect(
-                "Filtra per Stato",
-                options=sorted(df['Stato'].unique()),
-                default=sorted(df['Stato'].unique())
-            )
+            selected_stato = st.multiselect("Filtra per Stato", options=stato_options, default=stato_options)
 
         submitted = st.form_submit_button("Applica Filtri")
 
@@ -1701,16 +1564,13 @@ def render_situazione_impianti_tab():
         st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
         return
 
-    if not selected_tcl or not selected_area or not selected_stato:
-        st.warning("Seleziona almeno un valore per ogni filtro.")
-        return
-
-    # Applica i filtri
-    filtered_df = df[
-        df['TCL'].isin(selected_tcl) &
-        df['Area'].isin(selected_area) &
-        df['Stato'].isin(selected_stato)
-    ].copy()
+    # Applica i filtri tramite la query al DB
+    filters = {
+        'tcl': selected_tcl,
+        'area': selected_area,
+        'stato': selected_stato
+    }
+    filtered_df = get_filtered_activities(filters)
 
     st.download_button(
         label="📥 Esporta Dati Filtrati CSV",
@@ -1768,46 +1628,49 @@ def render_situazione_impianti_tab():
 def render_programmazione_tab():
     st.header("🗓️ Programmazione Attività Settimanale")
 
-    df = carica_dati_attivita_programmate()
+    # Carica i dati una sola volta per ottenere le opzioni dei filtri
+    # @st.cache_data
+    def get_filter_options():
+        # Ottimizzazione: potremmo voler caricare solo le colonne necessarie per i filtri
+        df_all = carica_dati_attivita_programmate()
+        if df_all.empty:
+            return [], [], []
+        return sorted(df_all['Area'].unique()), sorted(df_all['TCL'].unique()), ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
 
-    if df.empty:
-        st.warning("Non sono stati trovati dati sulle attività programmate.")
+    area_options, tcl_options, day_options = get_filter_options()
+
+    if not area_options:
+        st.warning("Nessun dato di attività trovato nel database per popolare i filtri.")
         return
-
-    # Filtra per mostrare solo le attività effettivamente programmate
-    scheduled_df = df[df['GiorniProgrammati'] != 'Non Programmato'].copy()
-
-    if scheduled_df.empty:
-        st.info("Nessuna attività risulta programmata per la settimana corrente nel file Excel.")
-        return
-
-    st.info(f"Sono state trovate {len(scheduled_df)} attività programmate.")
 
     with st.form("programmazione_filters_form"):
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             pdl_filter = st.text_input("Filtra per PdL...")
         with col2:
-            area_filter = st.multiselect("Filtra per Area", options=sorted(scheduled_df['Area'].unique()))
+            area_filter = st.multiselect("Filtra per Area", options=area_options)
         with col3:
-            tcl_filter = st.multiselect("Filtra per TCL", options=sorted(scheduled_df['TCL'].unique()))
+            tcl_filter = st.multiselect("Filtra per TCL", options=tcl_options)
         with col4:
-            day_filter = st.multiselect("Filtra per Giorno", options=["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"])
+            day_filter = st.multiselect("Filtra per Giorno", options=day_options)
 
         submitted = st.form_submit_button("Applica Filtri")
 
-    df_to_show = scheduled_df.copy()
-
+    # Applica i filtri solo se il form è stato sottomesso
     if submitted:
-        if pdl_filter:
-            df_to_show = df_to_show[df_to_show['PdL'].astype(str).str.contains(pdl_filter, case=False, na=False)]
-        if area_filter:
-            df_to_show = df_to_show[df_to_show['Area'].isin(area_filter)]
-        if tcl_filter:
-            df_to_show = df_to_show[df_to_show['TCL'].isin(tcl_filter)]
-        if day_filter:
-            day_regex = '|'.join(day_filter)
-            df_to_show = df_to_show[df_to_show['GiorniProgrammati'].str.contains(day_regex, case=False, na=False)]
+        filters = {
+            'pdl_search': pdl_filter if pdl_filter else None,
+            'area': area_filter if area_filter else None,
+            'tcl': tcl_filter if tcl_filter else None,
+            'day_filter': day_filter if day_filter else None
+        }
+        # Rimuovi le chiavi con valori None/vuoti per non applicare filtri non necessari
+        active_filters = {k: v for k, v in filters.items() if v}
+
+        df_to_show = get_filtered_activities(active_filters)
+    else:
+        # Di default, mostra tutte le attività programmate
+        df_to_show = get_filtered_activities({'day_filter': day_options})
 
     # --- Grafico a barre raggruppato ---
     if not df_to_show.empty:
@@ -2246,13 +2109,11 @@ def main_app(nome_utente_autenticato, ruolo):
             turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
             with turni_disponibili_tab:
                 assistenza_tab, straordinario_tab, reperibilita_tab = st.tabs(["Turni Assistenza", "Turni Straordinario", "Turni Reperibilità"])
-                df_turni_totale = gestionale_data['turni'].copy()
-                df_turni_totale.dropna(subset=['ID_Turno'], inplace=True)
                 with assistenza_tab:
-                    df_assistenza = df_turni_totale[df_turni_totale['Tipo'] == 'Assistenza']
+                    df_assistenza = get_shifts_by_type('Assistenza')
                     render_turni_list(df_assistenza, gestionale_data, nome_utente_autenticato, ruolo, "assistenza")
                 with straordinario_tab:
-                    df_straordinario = df_turni_totale[df_turni_totale['Tipo'] == 'Straordinario']
+                    df_straordinario = get_shifts_by_type('Straordinario')
                     render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
                 with reperibilita_tab:
                     render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
@@ -2449,46 +2310,53 @@ def main_app(nome_utente_autenticato, ruolo):
                         caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati"])
 
                         with caposquadra_tabs[0]: # Performance Team
-                            archivio_df_perf = carica_archivio_completo()
-                            if archivio_df_perf.empty:
-                                st.warning("Archivio storico non disponibile o vuoto. Impossibile calcolare le performance.")
-                            else:
-                                st.markdown("#### Seleziona Intervallo Temporale")
-                                if 'perf_start_date' not in st.session_state:
-                                    st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
-                                if 'perf_end_date' not in st.session_state:
-                                    st.session_state.perf_end_date = datetime.date.today()
-                                c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
-                                if c1.button("Oggi"): st.session_state.perf_start_date = st.session_state.perf_end_date = datetime.date.today()
-                                if c2.button("Ultimi 7 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7); st.session_state.perf_end_date = datetime.date.today()
-                                if c3.button("Ultimi 30 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30); st.session_state.perf_end_date = datetime.date.today()
-                                col1, col2 = st.columns(2)
-                                with col1: st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
-                                with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
-                                start_datetime, end_datetime = pd.to_datetime(st.session_state.perf_start_date), pd.to_datetime(st.session_state.perf_end_date)
-                                if st.button("📊 Calcola Performance", type="primary"):
-                                    performance_df = calculate_technician_performance(archivio_df_perf, start_datetime, end_datetime)
-                                    st.session_state['performance_results'] = {'df': performance_df, 'start_date': start_datetime, 'end_date': end_datetime}
-                                if 'performance_results' in st.session_state and not st.session_state['performance_results']['df'].empty:
-                                    results = st.session_state['performance_results']
-                                    performance_df = results['df']
-                                    st.markdown("---")
-                                    st.markdown("### Riepilogo Performance del Team")
-                                    total_interventions_team, total_rushed_reports_team = performance_df['Totale Interventi'].sum(), performance_df['Report Sbrigativi'].sum()
-                                    total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
-                                    avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
-                                    st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
-                                    c1, c2, c3 = st.columns(3)
-                                    c1.metric("Totale Interventi", f"{total_interventions_team}")
-                                    c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
-                                    c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
-                                    st.markdown("#### Dettaglio Performance per Tecnico")
-                                    for index, row in performance_df.iterrows():
-                                        st.write(f"**Tecnico:** {index}")
-                                        st.dataframe(row.to_frame().T)
-                                        if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                            st.session_state.update({'detail_technician': index, 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
-                                            st.rerun()
+                            st.markdown("#### Seleziona Intervallo Temporale")
+                            if 'perf_start_date' not in st.session_state:
+                                st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
+                            if 'perf_end_date' not in st.session_state:
+                                st.session_state.perf_end_date = datetime.date.today()
+
+                            c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+                            if c1.button("Oggi"): st.session_state.perf_start_date = st.session_state.perf_end_date = datetime.date.today()
+                            if c2.button("Ultimi 7 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7); st.session_state.perf_end_date = datetime.date.today()
+                            if c3.button("Ultimi 30 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30); st.session_state.perf_end_date = datetime.date.today()
+
+                            col1, col2 = st.columns(2)
+                            with col1: st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
+                            with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
+
+                            start_datetime, end_datetime = st.session_state.perf_start_date, st.session_state.perf_end_date
+
+                            if st.button("📊 Calcola Performance", type="primary"):
+                                with st.spinner("Calcolo delle performance in corso..."):
+                                    performance_df = get_technician_performance_data(start_datetime, end_datetime)
+                                st.session_state['performance_results'] = {'df': performance_df, 'start_date': pd.to_datetime(start_datetime), 'end_date': pd.to_datetime(end_datetime)}
+
+                            if 'performance_results' in st.session_state and not st.session_state['performance_results']['df'].empty:
+                                results = st.session_state['performance_results']
+                                performance_df = results['df']
+                                st.markdown("---")
+                                st.markdown("### Riepilogo Performance del Team")
+
+                                total_interventions_team = performance_df['Totale Interventi'].sum()
+                                total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
+                                # Calcolo ponderato del tasso di completamento
+                                total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
+                                avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
+
+                                st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
+                                c1, c2, c3 = st.columns(3)
+                                c1.metric("Totale Interventi", f"{total_interventions_team}")
+                                c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
+                                c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+
+                                st.markdown("#### Dettaglio Performance per Tecnico")
+                                for index, row in performance_df.iterrows():
+                                    st.write(f"**Tecnico:** {index}")
+                                    st.dataframe(row.to_frame().T)
+                                    if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
+                                        st.session_state.update({'detail_technician': index, 'detail_start_date': results['start_date'], 'end_date': results['end_date']})
+                                        st.rerun()
 
                         with caposquadra_tabs[1]: # Crea Nuovo Turno
                             with st.form("new_shift_form", clear_on_submit=True):
@@ -2519,7 +2387,42 @@ def main_app(nome_utente_autenticato, ruolo):
                                         else: st.error("Errore nel salvataggio del nuovo turno.")
 
                         with caposquadra_tabs[2]: # Gestione Dati
-                            render_update_reports_tab(autorizza_google())
+                            st.header("Gestione e Sincronizzazione Dati")
+                            st.info("Usa questa sezione per gestire il flusso di dati tra il file Excel di pianificazione e il database dell'applicazione.")
+                            st.divider()
+
+                            # --- 1. Sincronizzazione da Excel a Database ---
+                            st.subheader("1. Sincronizza Pianificazione da Excel")
+                            st.warning(
+                                "**Azione:** Copia i dati dal file `attivita_programmate.xlsm` al database.\n\n"
+                                "**Uso:** Eseguire questa azione quando il file di pianificazione è stato aggiornato con nuove attività o programmazioni settimanali."
+                            )
+                            if st.button("🚀 Sincronizza Pianificazione da Excel", help="Sovrascrive la tabella delle attività nel DB con i dati del file Excel."):
+                                from sincronizzatore import sincronizza_dati
+                                with st.spinner("Sincronizzazione da Excel in corso..."):
+                                    success, message = sincronizza_dati()
+                                    if success:
+                                        st.success(f"Sincronizzazione completata! {message}")
+                                        st.cache_data.clear()
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Errore durante la sincronizzazione: {message}")
+
+                            st.divider()
+
+                            # --- 2. Consolidamento da Database a Excel ---
+                            st.subheader("2. Consolida Report in Excel")
+                            st.warning(
+                                "**Azione:** Aggiorna il file `attivita_programmate.xlsm` con gli ultimi report compilati dai tecnici nel database.\n\n"
+                                "**Uso:** Eseguire questa azione per salvare i progressi dal database al file master di pianificazione."
+                            )
+                            if st.button("⚙️ Consolida Report in Excel", help="Aggiorna il file Excel con i dati dei report presenti nel database."):
+                                with st.spinner("Consolidamento dei report in Excel in corso..."):
+                                    success, message = consolida_report_giornalieri()
+                                    if success:
+                                        st.success(message)
+                                    else:
+                                        st.error(message)
 
                     # --- Dashboard Tecnica ---
                     with main_admin_tabs[1]:
