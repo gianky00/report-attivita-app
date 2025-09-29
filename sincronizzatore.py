@@ -64,85 +64,93 @@ def carica_archivio_completo_locale():
 
 def sincronizza_dati():
     """
-    Legge i dati da Excel e li inserisce nel DB, restituendo un risultato.
+    Sincronizza TUTTI i dati (attività e gestionali) dai file Excel al DB.
     Restituisce:
         (bool, str): Tupla con (successo, messaggio_di_stato)
     """
-    excel_path = config.get_attivita_programmate_path()
-
-    if not os.path.exists(excel_path):
-        msg = f"File attività programmate non trovato: {excel_path}"
-        print(f"ERRORE: {msg}")
-        return False, msg
-
-    # ... (la logica di lettura da Excel rimane la stessa)
-    sheets_to_read = {
-        'A1': {'tcl': 'Francesco Naselli', 'area': 'Area 1'},
-        'A2': {'tcl': 'Francesco Naselli', 'area': 'Area 2'},
-        'A3': {'tcl': 'Ferdinando Caldarella', 'area': 'Area 3'},
-        'CTE': {'tcl': 'Ferdinando Caldarella', 'area': 'CTE'},
-        'BLENDING': {'tcl': 'Ivan Messina', 'area': 'BLENDING'},
-    }
-    all_data = []
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-    status_map = {
-        'DA EMETTERE': 'Pianificato', 'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato',
-        'INTERROTTO': 'Sospeso', 'RICHIESTO': 'Da processare', 'EMESSO': 'Processato',
-        'IN CORSO': 'Aperto', 'DA CHIUDERE': 'Terminata',
-        'TERMINATA': 'Terminata', 'SOSPESA': 'Sospeso', 'NON SVOLTA': 'Non Svolta'
-    }
-    df_storico_full = carica_archivio_completo_locale()
-
-    for sheet_name, metadata in sheets_to_read.items():
-        try:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            df.columns = [str(col).strip() for col in df.columns]
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
-            if not all(col in df.columns for col in required_cols): continue
-            df = df.dropna(subset=['PdL'])
-            if df.empty: continue
-            df_filtered = df[required_cols].copy()
-            df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
-            df_filtered['PdL'] = df_filtered['PdL'].astype(str)
-            df_filtered['TCL'] = metadata['tcl']
-            df_filtered['Area'] = metadata['area']
-            giorni_programmati = df_filtered[giorni_settimana].apply(lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']), axis=1)
-            df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
-            df_filtered['Stato'] = df_filtered['Stato_OdL'].apply(lambda x: status_map.get(str(x).strip().upper(), 'Non Definito') if pd.notna(x) else 'Pianificato')
-            df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
-            all_data.append(df_filtered)
-        except Exception as e:
-            msg = f"Errore durante l'elaborazione del foglio '{sheet_name}': {e}"
-            print(f"ATTENZIONE: {msg}")
-            # Non blocchiamo per un singolo foglio fallito, ma continuiamo
-            continue
-
-    if not all_data:
-        msg = "Nessun dato valido trovato nel file Excel. Sincronizzazione non eseguita."
-        print(msg)
-        return True, msg # Restituisce True perché non è un errore bloccante
-
-    final_df = pd.concat(all_data, ignore_index=True)
-    num_rows = len(final_df)
-
-    # Usa il serializzatore custom per gestire le date nello storico
-    final_df['Storico'] = final_df['Storico'].apply(lambda x: json.dumps(x, default=json_serial))
-    colonne_db = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'TCL', 'Area', 'GiorniProgrammati', 'Stato', 'Storico']
-    df_per_db = final_df[colonne_db]
-
     conn = None
     try:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
-        cursor.execute(f"DELETE FROM {TABLE_NAME};")
-        df_per_db.to_sql(TABLE_NAME, conn, if_exists='append', index=False)
+
+        # --- 1. Sincronizzazione Attività Programmate ---
+        excel_path_attivita = config.get_attivita_programmate_path()
+        if not os.path.exists(excel_path_attivita):
+            raise FileNotFoundError(f"File attività programmate non trovato: {excel_path_attivita}")
+
+        sheets_to_read = {
+            'A1': {'tcl': 'Francesco Naselli', 'area': 'Area 1'}, 'A2': {'tcl': 'Francesco Naselli', 'area': 'Area 2'},
+            'A3': {'tcl': 'Ferdinando Caldarella', 'area': 'Area 3'}, 'CTE': {'tcl': 'Ferdinando Caldarella', 'area': 'CTE'},
+            'BLENDING': {'tcl': 'Ivan Messina', 'area': 'BLENDING'},
+        }
+        all_data = []
+        df_storico_full = carica_archivio_completo_locale()
+        for sheet_name, metadata in sheets_to_read.items():
+            try:
+                df = pd.read_excel(excel_path_attivita, sheet_name=sheet_name, header=2)
+                df.columns = [str(col).strip() for col in df.columns]
+                required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
+                if not all(col in df.columns for col in required_cols): continue
+                df = df.dropna(subset=['PdL'])
+                if df.empty: continue
+                df_filtered = df[required_cols].copy()
+                df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
+                df_filtered['PdL'] = df_filtered['PdL'].astype(str)
+                df_filtered['TCL'] = metadata['tcl']
+                df_filtered['Area'] = metadata['area']
+                giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+                giorni_programmati = df_filtered[giorni_settimana].apply(lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']), axis=1)
+                df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
+                status_map = {
+                    'DA EMETTERE': 'Pianificato', 'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato', 'INTERROTTO': 'Sospeso',
+                    'RICHIESTO': 'Da processare', 'EMESSO': 'Processato', 'IN CORSO': 'Aperto', 'DA CHIUDERE': 'Terminata',
+                    'TERMINATA': 'Terminata', 'SOSPESA': 'Sospeso', 'NON SVOLTA': 'Non Svolta'
+                }
+                df_filtered['Stato'] = df_filtered['Stato_OdL'].apply(lambda x: status_map.get(str(x).strip().upper(), 'Non Definito') if pd.notna(x) else 'Pianificato')
+                df_filtered['Storico'] = df_filtered['PdL'].apply(lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records') if p in df_storico_full['PdL'].values else [])
+                all_data.append(df_filtered)
+            except Exception:
+                continue
+
+        if all_data:
+            final_df = pd.concat(all_data, ignore_index=True)
+            final_df['Storico'] = final_df['Storico'].apply(lambda x: json.dumps(x, default=json_serial))
+            colonne_db = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'TCL', 'Area', 'GiorniProgrammati', 'Stato', 'Storico']
+            df_per_db = final_df[colonne_db]
+            cursor.execute(f"DELETE FROM {TABLE_NAME};")
+            df_per_db.to_sql(TABLE_NAME, conn, if_exists='append', index=False)
+
+        # --- 2. Sincronizzazione Dati Gestionali ---
+        excel_path_gestionale = config.get_gestionale_path()
+        if not os.path.exists(excel_path_gestionale):
+            raise FileNotFoundError(f"File gestionale non trovato: {excel_path_gestionale}")
+
+        xls = pd.ExcelFile(excel_path_gestionale)
+        tabelle_da_sincronizzare = {
+            "Contatti": "contatti", "TurniDisponibili": "turni", "Prenotazioni": "prenotazioni",
+            "SostituzioniPendenti": "sostituzioni", "Notifiche": "notifiche", "TurniInBacheca": "bacheca",
+            "RichiesteMateriali": "richieste_materiali", "RichiesteAssenze": "richieste_assenze"
+        }
+
+        for nome_foglio, nome_tabella_db in tabelle_da_sincronizzare.items():
+            if nome_foglio in xls.sheet_names:
+                df_gest = pd.read_excel(xls, sheet_name=nome_foglio)
+                # Converte tutte le colonne a stringa per evitare problemi di tipo con SQLite
+                for col in df_gest.columns:
+                    df_gest[col] = df_gest[col].astype(str)
+                cursor.execute(f"DELETE FROM {nome_tabella_db};")
+                df_gest.to_sql(nome_tabella_db, conn, if_exists='append', index=False)
+
         conn.commit()
-        msg = f"Database aggiornato con successo con {num_rows} attività."
+        msg = "Sincronizzazione completata con successo per tutti i dati."
         print(msg)
         return True, msg
-    except sqlite3.Error as e:
-        msg = f"Errore SQLite durante la scrittura nel database: {e}"
+
+    except (FileNotFoundError, sqlite3.Error, Exception) as e:
+        msg = f"Errore durante la sincronizzazione: {e}"
         print(f"ERRORE: {msg}")
+        if conn:
+            conn.rollback() # Annulla le modifiche in caso di errore
         return False, msg
     finally:
         if conn:
