@@ -117,6 +117,18 @@ def crea_tabella():
         for nome_tabella, schema in tabelle_gestionali.items():
             cursor.execute(f"CREATE TABLE IF NOT EXISTS {nome_tabella} {schema}")
 
+        # --- Schema Migration: Assicura che la colonna Matricola esista ---
+        # Questo approccio è più robusto rispetto a cancellare e ricreare.
+        # Controlla le colonne esistenti nella tabella 'contatti'.
+        cursor.execute("PRAGMA table_info(contatti)")
+        colonne_esistenti = [info[1] for info in cursor.fetchall()]
+
+        # Se 'Matricola' non è tra le colonne, la aggiunge.
+        if "Matricola" not in colonne_esistenti:
+            print("Aggiornamento dello schema: aggiunta della colonna 'Matricola' alla tabella 'contatti'...")
+            cursor.execute("ALTER TABLE contatti ADD COLUMN Matricola TEXT")
+            print("Schema aggiornato con successo.")
+
         # Commit delle modifiche
         conn.commit()
 
