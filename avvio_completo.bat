@@ -38,20 +38,7 @@ echo.
 echo Attendo 5 secondi per la stabilizzazione di ngrok...
 timeout /t 5 /nobreak >nul
 
-REM --- 6. Esegue lo script Python per generare i link ---
-echo.
-echo [6/7] Eseguo genera_link.py per aggiornare i contatti con il nuovo URL...
-python genera_link.py
-
-REM --- Controlla se lo script precedente ha avuto successo ---
-IF %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo ❌ ERRORE: Lo script genera_link.py ha fallito.
-    echo Controlla i messaggi di errore qui sopra. L'app non verra' avviata.
-    echo.
-    pause
-    exit /b
-)
+REM --- Step 6 (genera_link.py) rimosso in quanto non più necessario. Il link ngrok è ora statico. ---
 
 REM --- 7. Avvia l'app Streamlit ---
 echo.
