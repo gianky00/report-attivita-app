@@ -32,6 +32,75 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+
+def get_unvalidated_reports():
+    """
+    Recupera l'ultimo report per ogni attività in attesa di validazione.
+    Un report è considerato "in attesa" se `db_last_modified` non è NULL.
+    """
+    import json
+    conn = get_db_connection()
+    reports_to_validate = []
+    try:
+        query = """
+            SELECT PdL, Descrizione, Storico, db_last_modified
+            FROM attivita_programmate
+            WHERE db_last_modified IS NOT NULL
+            ORDER BY db_last_modified DESC
+        """
+        cursor = conn.cursor()
+        cursor.execute(query)
+        activities = cursor.fetchall()
+
+        for activity in activities:
+            pdl = activity['PdL']
+            descrizione_attivita = activity['Descrizione']
+            storico_json = activity['Storico']
+            mod_time = activity['db_last_modified']
+
+            if storico_json:
+                try:
+                    storico_list = json.loads(storico_json)
+                    if storico_list:
+                        latest_report = storico_list[0]
+                        reports_to_validate.append({
+                            'PdL': pdl,
+                            'Descrizione': descrizione_attivita,
+                            'Tecnico': latest_report.get('Tecnico', 'N/D'),
+                            'Stato': latest_report.get('Stato', 'N/D'),
+                            'Report': latest_report.get('Report', 'Nessun report.'),
+                            'Data_Compilazione': latest_report.get('Data_Compilazione', mod_time)
+                        })
+                except json.JSONDecodeError:
+                    continue
+        return reports_to_validate
+    except sqlite3.Error as e:
+        print(f"Errore nel recuperare i report da validare: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
+def validate_report(pdl: str):
+    """
+    Marca un report come validato impostando 'db_last_modified' a NULL.
+    """
+    conn = get_db_connection()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE attivita_programmate SET db_last_modified = NULL WHERE PdL = ?",
+                (pdl,)
+            )
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante la validazione del report per PdL {pdl}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def get_interventions_for_technician(technician_name: str, start_date, end_date) -> pd.DataFrame:
     """
     Recupera tutti gli interventi per un dato tecnico in un intervallo di tempo,

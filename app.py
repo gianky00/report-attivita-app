@@ -35,7 +35,7 @@ from modules.data_manager import (
     carica_dati_attivita_programmate,
     consolida_report_giornalieri
 )
-from modules.db_manager import get_shifts_by_type, get_filtered_activities, get_technician_performance_data, get_interventions_for_technician
+from modules.db_manager import get_shifts_by_type, get_filtered_activities, get_technician_performance_data, get_interventions_for_technician, get_unvalidated_reports, validate_report
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
     sync_oncall_shifts,
@@ -998,6 +998,33 @@ def render_technician_detail_view():
             st.info(f"**Data:** {row['Data']} - **PdL:** {row['PdL']} - **Report:** *'{row['Report']}'*")
     else:
         st.success("Nessun report sbrigativo trovato in questo periodo.")
+
+def render_report_validation_tab():
+    st.subheader("Report in Attesa di Validazione")
+    st.info("Questa sezione mostra gli ultimi report inviati dai tecnici. Clicca su 'Valida' per confermare di averli presi in carico. Il report verrà rimosso da questa lista.")
+
+    unvalidated_reports = get_unvalidated_reports()
+
+    if not unvalidated_reports:
+        st.success("🎉 Nessun report da validare al momento.")
+        return
+
+    for report in unvalidated_reports:
+        with st.container(border=True):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"**PdL:** `{report['PdL']}` - {report['Descrizione']}")
+                st.caption(f"Tecnico: {report['Tecnico']} | Stato: {report['Stato']} | Inviato il: {pd.to_datetime(report['Data_Compilazione']).strftime('%d/%m/%Y %H:%M')}")
+            with col2:
+                if st.button("✅ Valida", key=f"validate_{report['PdL']}_{report['Data_Compilazione']}", use_container_width=True):
+                    if validate_report(report['PdL']):
+                        st.toast(f"Report per PdL {report['PdL']} validato!")
+                        st.rerun()
+                    else:
+                        st.error("Errore durante la validazione.")
+
+            with st.expander("Mostra Dettaglio Report"):
+                st.markdown(report['Report'])
 
 def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_utente):
     st.subheader("📅 Calendario Reperibilità Settimanale")
@@ -2291,7 +2318,7 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     # --- Dashboard Caposquadra ---
                     with main_admin_tabs[0]:
-                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati"])
+                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
 
                         with caposquadra_tabs[0]: # Performance Team
                             st.markdown("#### Seleziona Intervallo Temporale")
@@ -2407,6 +2434,9 @@ def main_app(nome_utente_autenticato, ruolo):
                                         st.success(message)
                                     else:
                                         st.error(message)
+
+                        with caposquadra_tabs[3]: # Validazione Report
+                            render_report_validation_tab()
 
                     # --- Dashboard Tecnica ---
                     with main_admin_tabs[1]:
