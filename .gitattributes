@@ -1,0 +1,22 @@
+# Imposta il comportamento predefinito per tutti i file di testo.
+# Git proverà a normalizzare le terminazioni di riga a LF (Linea Feed) nei commit.
+* text=auto eol=lf
+
+# Specifica che i file batch di Windows devono usare terminazioni CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Specifica che i file di shell Unix devono usare terminazioni LF.
+*.sh text eol=lf
+
+# Mantieni le terminazioni di riga originali per i file binari.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.db binary
+*.xlsm binary
+*.xlsx binary
+*.sqlite3 binary
+*.pkl binary

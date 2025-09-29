@@ -78,15 +78,6 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
     df_prenotazioni = gestionale_data['prenotazioni']
     df_contatti = gestionale_data['contatti']
 
-    # Crea una mappa Cognome -> Nome Cognome per una ricerca veloce
-    surname_map = {}
-    for _, row in df_contatti.iterrows():
-        # Assicura che il nome sia una stringa valida e non vuota
-        if isinstance(row['Nome Cognome'], str) and row['Nome Cognome'].strip():
-            full_name = row['Nome Cognome'].strip()
-            surname = full_name.split()[-1].upper()
-            surname_map[surname] = full_name
-
     changes_made = False
     current_date = start_date
 
@@ -115,10 +106,13 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
         }
         df_turni = pd.concat([df_turni, pd.DataFrame([new_shift])], ignore_index=True)
 
-        # 2. Crea le nuove prenotazioni
-        for surname in team_surnames:
-            full_name = surname_map.get(surname.upper())
-            if full_name:
+        # 2. Crea le nuove prenotazioni con una ricerca flessibile
+        for surname_from_calendar in team_surnames:
+            # Cerca se il cognome è contenuto nel nome completo, ignorando maiuscole/minuscole
+            contact_match_df = df_contatti[df_contatti['Nome Cognome'].str.contains(surname_from_calendar, case=False, na=False)]
+
+            if not contact_match_df.empty:
+                full_name = contact_match_df.iloc[0]['Nome Cognome']
                 new_booking = {
                     'ID_Prenotazione': f"P_{shift_id}_{full_name.replace(' ', '')}",
                     'ID_Turno': shift_id,
@@ -128,7 +122,7 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
                 }
                 df_prenotazioni = pd.concat([df_prenotazioni, pd.DataFrame([new_booking])], ignore_index=True)
             else:
-                st.warning(f"Attenzione: Il cognome '{surname}' dal calendario reperibilità non è stato trovato nei contatti.")
+                st.warning(f"Attenzione: Il cognome '{surname_from_calendar}' dal calendario reperibilità non è stato trovato nei contatti.")
 
         current_date += datetime.timedelta(days=1)
 

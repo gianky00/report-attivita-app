@@ -30,6 +30,5 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# File Excel fittizi usati per i test
-Gestionale_Tecnici.xlsx
-attivita_programmate.xlsm
+# File Excel fittizi usati per i test non devono essere tracciati.
+# Se presenti localmente, verranno ignorati se non aggiunti esplicitamente.
