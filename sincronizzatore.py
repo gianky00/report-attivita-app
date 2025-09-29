@@ -3,10 +3,17 @@ import os
 import json
 import sqlite3
 import config
+import datetime
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
 TABLE_NAME = "attivita_programmate"
+
+def json_serial(obj):
+    """JSON serializer for objects not serializable by default json code"""
+    if isinstance(obj, (datetime.datetime, datetime.date, pd.Timestamp)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 def carica_archivio_completo_locale():
     """
@@ -49,7 +56,7 @@ def carica_archivio_completo_locale():
         "STATO\nATTIVITA'": "Report"
     }, inplace=True)
 
-    df_archivio['Report'].fillna("Nessun report disponibile.", inplace=True)
+    df_archivio['Report'] = df_archivio['Report'].fillna("Nessun report disponibile.")
     df_archivio['Data_Compilazione'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
     df_archivio['Data_Riferimento_dt'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
 
@@ -118,7 +125,8 @@ def sincronizza_dati():
     final_df = pd.concat(all_data, ignore_index=True)
     num_rows = len(final_df)
 
-    final_df['Storico'] = final_df['Storico'].apply(json.dumps)
+    # Usa il serializzatore custom per gestire le date nello storico
+    final_df['Storico'] = final_df['Storico'].apply(lambda x: json.dumps(x, default=json_serial))
     colonne_db = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'TCL', 'Area', 'GiorniProgrammati', 'Stato', 'Storico']
     df_per_db = final_df[colonne_db]
 
