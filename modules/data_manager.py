@@ -172,8 +172,8 @@ def json_serial(obj):
 
 def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento):
     """
-    Scrive un report direttamente nel database SQLite aggiornando lo storico
-    e lo stato dell'attività corrispondente.
+    Scrive un report direttamente nel database SQLite, aggiornando lo storico,
+    lo stato e il timestamp di modifica dell'attività.
     """
     import sqlite3
 
@@ -182,7 +182,6 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
     data_riferimento_str = data_riferimento.strftime('%d/%m/%Y')
 
     try:
-        # 1. Estrai PdL
         descrizione_completa = str(dati_da_scrivere['descrizione'])
         pdl_match = re.search(r'PdL (\d{6}/[CS]|\d{6})', descrizione_completa)
         if not pdl_match:
@@ -190,7 +189,6 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
             return False
         pdl = pdl_match.group(1)
 
-        # 2. Prepara il nuovo record per lo storico
         nuovo_record_storico = {
             'PdL': pdl,
             'Descrizione': dati_da_scrivere['descrizione'],
@@ -202,7 +200,6 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
             'Data_Riferimento_dt': data_riferimento.isoformat()
         }
 
-        # 3. Aggiorna il database in modo atomico
         conn = sqlite3.connect(config.DB_NAME)
         cursor = conn.cursor()
 
@@ -210,25 +207,19 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
             cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
             risultato = cursor.fetchone()
 
-            storico_esistente = []
-            if risultato and risultato[0]:
-                try:
-                    storico_esistente = json.loads(risultato[0])
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
+            storico_esistente = json.loads(risultato[0]) if risultato and risultato[0] else []
             storico_esistente.append(nuovo_record_storico)
             storico_esistente.sort(key=lambda x: x.get('Data_Compilazione', ''), reverse=True)
 
             nuovo_storico_json = json.dumps(storico_esistente, default=json_serial)
             nuovo_stato = dati_da_scrivere['stato']
+            db_last_modified_ts = timestamp.isoformat()
 
             cursor.execute(
-                "UPDATE attivita_programmate SET Storico = ?, Stato = ? WHERE PdL = ?",
-                (nuovo_storico_json, nuovo_stato, pdl)
+                "UPDATE attivita_programmate SET Storico = ?, Stato = ?, db_last_modified = ? WHERE PdL = ?",
+                (nuovo_storico_json, nuovo_stato, db_last_modified_ts, pdl)
             )
 
-        # 4. Invia notifica email
         from modules.email_sender import invia_email_con_outlook_async
         titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
         report_html = dati_da_scrivere['report'].replace('\n', '<br>')
@@ -444,21 +435,21 @@ def carica_dati_attivita_programmate():
 
 def consolida_report_giornalieri():
     """
-    Consolida i report più recenti dal database SQLite al file Excel principale.
-    Legge lo storico di ogni attività dal DB, estrae l'ultimo report e aggiorna
-    il file ATTIVITA_PROGRAMMATE.xlsm in modo sicuro.
+    Consolida in modo intelligente i report dal DB a Excel, aggiornando
+    solo i dati modificati basandosi su un timestamp nascosto in Excel.
     """
     import sqlite3
     import win32com.client as win32
     import pythoncom
+    from dateutil import parser as date_parser
 
     path_principale = get_attivita_programmate_path()
     aggiornamenti_effettuati = 0
 
-    # Colonne di destinazione in Excel
     colonna_stato_target = "STATO\nPdL"
     colonna_report_target = "STATO\nATTIVITA'"
     colonna_personale_target = "PERSONALE\nIMPIEGATO"
+    colonna_timestamp_nascosta = "DB_LAST_CONSOLIDATED"
 
     status_mapping = {
         'TERMINATA': 'TERMINATA', 'SOSPESA': 'INTERROTTO', 'IN CORSO': 'EMESSO',
@@ -468,48 +459,40 @@ def consolida_report_giornalieri():
     report_map = {}
     conn = None
     try:
-        # 1. Leggi i dati dal database SQLite
         conn = sqlite3.connect(config.DB_NAME)
         cursor = conn.cursor()
-        cursor.execute("SELECT PdL, Storico FROM attivita_programmate WHERE Storico IS NOT NULL AND Storico != '[]'")
+        cursor.execute("SELECT PdL, Storico, db_last_modified FROM attivita_programmate WHERE db_last_modified IS NOT NULL")
         activities = cursor.fetchall()
 
         if not activities:
-            return True, "Nessun report da consolidare nel database."
+            return True, "Nessun report nuovo da consolidare nel database."
 
-        # 2. Pre-elabora i dati per l'aggiornamento, trovando solo il report più recente
-        for pdl, storico_json in activities:
+        for pdl, storico_json, db_mod_time_str in activities:
             try:
                 storico = json.loads(storico_json)
                 if not storico: continue
-
                 ultimo_report = storico[0]
-
                 stato_originale = ultimo_report.get('Stato', '')
                 report_text = ultimo_report.get('Report', '')
                 tecnico_originale = ultimo_report.get('Tecnico', '')
-
                 stato_mappato = status_mapping.get(stato_originale, stato_originale)
                 tecnico_formattato = tecnico_originale.split()[-1].upper() if ' ' in str(tecnico_originale) else str(tecnico_originale).upper()
-
                 report_map[pdl] = {
                     'stato': stato_mappato,
                     'report': report_text,
-                    'tecnico': tecnico_formattato
+                    'tecnico': tecnico_formattato,
+                    'db_last_modified': date_parser.isoparse(db_mod_time_str)
                 }
-            except (json.JSONDecodeError, IndexError):
+            except (json.JSONDecodeError, IndexError, date_parser.ParserError):
                 continue
-
     except sqlite3.Error as e:
         return False, f"Errore durante la lettura dal database: {e}"
     finally:
-        if conn:
-            conn.close()
+        if conn: conn.close()
 
     if not report_map:
         return True, "Nessun report valido trovato nel database da consolidare."
 
-    # 3. Aggiorna il file Excel principale
     excel = None
     try:
         pythoncom.CoInitialize()
@@ -525,40 +508,51 @@ def consolida_report_giornalieri():
         for sheet_name in sheets_to_read:
             ws = wb.Worksheets(sheet_name)
             header_row = 3
-            pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx = None, None, None, None
+            header_map = {str(ws.Cells(header_row, i).Value).strip(): i for i in range(1, ws.UsedRange.Columns.Count + 1) if ws.Cells(header_row, i).Value}
 
-            for i in range(1, ws.UsedRange.Columns.Count + 1):
-                header_val = ws.Cells(header_row, i).Value
-                if header_val is None: continue
-                header_val = str(header_val).strip()
-                if header_val == 'PdL': pdl_col_idx = i
-                elif header_val == colonna_stato_target: stato_col_idx = i
-                elif header_val == colonna_report_target: report_col_idx = i
-                elif header_val == colonna_personale_target: personale_col_idx = i
+            pdl_col_idx = header_map.get('PdL')
+            stato_col_idx = header_map.get(colonna_stato_target)
+            report_col_idx = header_map.get(colonna_report_target)
+            personale_col_idx = header_map.get(colonna_personale_target)
+
+            ts_col_idx = header_map.get(colonna_timestamp_nascosta)
+            if not ts_col_idx:
+                ts_col_idx = ws.UsedRange.Columns.Count + 1
+                ws.Cells(header_row, ts_col_idx).Value = colonna_timestamp_nascosta
+                ws.Columns(ts_col_idx).Hidden = True
 
             if not all([pdl_col_idx, stato_col_idx, report_col_idx, personale_col_idx]): continue
 
-            for row_idx in range(header_row + 1, ws.UsedRange.Rows.Count + header_row):
+            for row_idx in range(header_row + 1, ws.UsedRange.Rows.Count + 1):
                 pdl_value_cell = ws.Cells(row_idx, pdl_col_idx).Value
                 if pdl_value_cell is None: continue
                 pdl_value = str(pdl_value_cell).strip()
 
                 if pdl_value in report_map:
-                    report_data = report_map.pop(pdl_value) # Rimuovi per efficienza
-                    ws.Cells(row_idx, stato_col_idx).Value = report_data['stato']
-                    ws.Cells(row_idx, report_col_idx).Value = report_data['report']
-                    ws.Cells(row_idx, personale_col_idx).Value = report_data['tecnico']
-                    aggiornamenti_effettuati += 1
+                    report_data = report_map[pdl_value]
+                    excel_ts_val = ws.Cells(row_idx, ts_col_idx).Value
+                    excel_ts = None
+                    if excel_ts_val:
+                        try:
+                            excel_ts = date_parser.parse(str(excel_ts_val)).replace(tzinfo=None)
+                        except (date_parser.ParserError, TypeError): pass
 
-            if not report_map: break
+                    db_mod_time = report_data['db_last_modified'].replace(tzinfo=None)
+
+                    if excel_ts is None or db_mod_time > excel_ts:
+                        ws.Cells(row_idx, stato_col_idx).Value = report_data['stato']
+                        ws.Cells(row_idx, report_col_idx).Value = report_data['report']
+                        ws.Cells(row_idx, personale_col_idx).Value = report_data['tecnico']
+                        ws.Cells(row_idx, ts_col_idx).Value = report_data['db_last_modified'].isoformat()
+                        aggiornamenti_effettuati += 1
 
         wb.Save()
         wb.Close(SaveChanges=False)
         st.cache_data.clear()
-        return True, f"Consolidamento completato. {aggiornamenti_effettuati} attività aggiornate in Excel."
+        return True, f"Consolidamento intelligente completato. {aggiornamenti_effettuati} attività aggiornate in Excel."
 
     except Exception as e:
-        return False, f"Errore durante l'automazione di Excel: {e}"
+        return False, f"Errore durante l'automazione di Excel per il consolidamento: {e}"
     finally:
         if excel:
             excel.Quit()
