@@ -8,7 +8,6 @@ import threading
 import openpyxl
 
 import config
-from modules.email_sender import invia_email_con_outlook_async
 from config import get_attivita_programmate_path, get_storico_db_path, get_gestionale_path
 
 @st.cache_data
@@ -23,107 +22,91 @@ def carica_knowledge_core():
         st.error(f"Errore critico: Il file '{config.PATH_KNOWLEDGE_CORE}' non è un JSON valido.")
         return None
 
-#@st.cache_data
 def carica_gestionale():
-    with config.EXCEL_LOCK:
-        try:
-            xls = pd.ExcelFile(config.PATH_GESTIONALE)
-            data = {
-                'contatti': pd.read_excel(xls, sheet_name='Contatti'),
-                'turni': pd.read_excel(xls, sheet_name='TurniDisponibili'),
-                'prenotazioni': pd.read_excel(xls, sheet_name='Prenotazioni'),
-                'sostituzioni': pd.read_excel(xls, sheet_name='SostituzioniPendenti')
-            }
+    """
+    Carica tutti i dati gestionali direttamente dal database SQLite.
+    """
+    import sqlite3
+    DB_NAME = "schedario.db"
 
-            # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
-            if 'Tipo' not in data['turni'].columns:
-                data['turni']['Tipo'] = 'Assistenza'
-            data['turni']['Tipo'].fillna('Assistenza', inplace=True)
+    if not os.path.exists(DB_NAME):
+        st.error(f"Database '{DB_NAME}' non trovato. Eseguire lo script di avvio.")
+        return None
 
-            required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_NAME)
 
-            if 'Notifiche' in xls.sheet_names:
-                df = pd.read_excel(xls, sheet_name='Notifiche')
-                # Sanitize column names to remove leading/trailing whitespace
-                df.columns = df.columns.str.strip()
+        tabelle = [
+            "contatti", "turni", "prenotazioni", "sostituzioni",
+            "notifiche", "bacheca", "richieste_materiali", "richieste_assenze", "access_logs"
+        ]
 
-                # Check for missing columns and add them if necessary
-                for col in required_notification_cols:
-                    if col not in df.columns:
-                        df[col] = pd.NA
-                data['notifiche'] = df
-            else:
-                data['notifiche'] = pd.DataFrame(columns=required_notification_cols)
+        data = {}
+        for tabella in tabelle:
+            try:
+                # Carica ogni tabella in un DataFrame
+                data[tabella] = pd.read_sql_query(f"SELECT * FROM {tabella}", conn)
+            except pd.io.sql.DatabaseError as e:
+                # Se una tabella non esiste o è vuota, crea un DataFrame vuoto
+                # Questo può accadere se lo schema è aggiornato ma il DB no
+                print(f"Avviso: tabella '{tabella}' non trovata o vuota nel DB. Errore: {e}")
+                # Per sicurezza, proviamo a leggere le colonne dallo schema
+                cursor = conn.cursor()
+                cursor.execute(f"PRAGMA table_info({tabella});")
+                columns = [info[1] for info in cursor.fetchall()]
+                data[tabella] = pd.DataFrame(columns=columns)
 
-            # Aggiunto per la bacheca turni
-            required_bacheca_cols = ['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']
-            if 'TurniInBacheca' in xls.sheet_names:
-                df_bacheca = pd.read_excel(xls, sheet_name='TurniInBacheca')
-                df_bacheca.columns = df_bacheca.columns.str.strip()
-                for col in required_bacheca_cols:
-                    if col not in df_bacheca.columns:
-                        df_bacheca[col] = pd.NA
-                data['bacheca'] = df_bacheca
-            else:
-                data['bacheca'] = pd.DataFrame(columns=required_bacheca_cols)
+        # Gestione retrocompatibilità per la colonna 'Tipo' (se necessario)
+        if 'turni' in data and 'Tipo' not in data['turni'].columns:
+            data['turni']['Tipo'] = 'Assistenza'
+        if 'turni' in data:
+             data['turni']['Tipo'] = data['turni']['Tipo'].fillna('Assistenza')
 
-            # Aggiunto per le richieste di materiali
-            required_materiali_cols = ['ID_Richiesta', 'Richiedente', 'Timestamp', 'Stato', 'Dettagli']
-            if 'RichiesteMateriali' in xls.sheet_names:
-                df_materiali = pd.read_excel(xls, sheet_name='RichiesteMateriali')
-                df_materiali.columns = df_materiali.columns.str.strip()
-                for col in required_materiali_cols:
-                    if col not in df_materiali.columns:
-                        df_materiali[col] = pd.NA
-                data['richieste_materiali'] = df_materiali
-            else:
-                data['richieste_materiali'] = pd.DataFrame(columns=required_materiali_cols)
+        return data
 
-            # Aggiunto per le richieste di assenze
-            required_assenze_cols = ['ID_Richiesta', 'Richiedente', 'Timestamp', 'Tipo_Assenza', 'Data_Inizio', 'Data_Fine', 'Note', 'Stato']
-            if 'RichiesteAssenze' in xls.sheet_names:
-                df_assenze = pd.read_excel(xls, sheet_name='RichiesteAssenze')
-                df_assenze.columns = df_assenze.columns.str.strip()
-                for col in required_assenze_cols:
-                    if col not in df_assenze.columns:
-                        df_assenze[col] = pd.NA
-                data['richieste_assenze'] = df_assenze
-            else:
-                data['richieste_assenze'] = pd.DataFrame(columns=required_assenze_cols)
+    except sqlite3.Error as e:
+        st.error(f"Errore critico durante la lettura dal database gestionale: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
 
-
-            return data
-        except Exception as e:
-            st.error(f"Errore critico nel caricamento del file Gestionale_Tecnici.xlsx: {e}")
-            return None
-
-def _save_to_excel_backend(data):
-    """Questa funzione è sicura per essere eseguita in un thread separato."""
-    with config.EXCEL_LOCK:
-        try:
-            with pd.ExcelWriter(config.PATH_GESTIONALE, engine='openpyxl') as writer:
-                data['contatti'].to_excel(writer, sheet_name='Contatti', index=False)
-                data['turni'].to_excel(writer, sheet_name='TurniDisponibili', index=False)
-                data['prenotazioni'].to_excel(writer, sheet_name='Prenotazioni', index=False)
-                data['sostituzioni'].to_excel(writer, sheet_name='SostituzioniPendenti', index=False)
-                if 'notifiche' in data:
-                    data['notifiche'].to_excel(writer, sheet_name='Notifiche', index=False)
-                if 'bacheca' in data:
-                    data['bacheca'].to_excel(writer, sheet_name='TurniInBacheca', index=False)
-            if 'richieste_materiali' in data:
-                data['richieste_materiali'].to_excel(writer, sheet_name='RichiesteMateriali', index=False)
-            if 'richieste_assenze' in data:
-                data['richieste_assenze'].to_excel(writer, sheet_name='RichiesteAssenze', index=False)
-            return True
-        except Exception as e:
-            print(f"ERRORE CRITICO NEL THREAD DI SALVATAGGIO: {e}")
-            return False
+def _save_to_db_backend(data):
+    """
+    Funzione di backend per salvare i dati nel database SQLite.
+    Questa funzione viene eseguita in un thread separato.
+    """
+    import sqlite3
+    DB_NAME = "schedario.db"
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        # Usiamo un lock per sicurezza, anche se SQLite gestisce le concorrenze a livello di file
+        with config.EXCEL_LOCK:
+            for table_name, df in data.items():
+                if not isinstance(df, pd.DataFrame):
+                    continue
+                # Sovrascrive completamente la tabella con i nuovi dati
+                df.to_sql(table_name, conn, if_exists='replace', index=False)
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"ERRORE CRITICO NEL THREAD DI SALVATAGGIO DB: {e}")
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        if conn:
+            conn.close()
 
 def salva_gestionale_async(data):
-    """Funzione da chiamare dall'app Streamlit per un salvataggio non bloccante."""
-    st.cache_data.clear()
-    data_copy = {k: v.copy() for k, v in data.items()}
-    thread = threading.Thread(target=_save_to_excel_backend, args=(data_copy,))
+    """
+    Salva i dati gestionali nel database SQLite in modo asincrono.
+    """
+    st.cache_data.clear() # Pulisce la cache per forzare il ricaricamento
+    data_copy = {k: v.copy() for k, v in data.items() if isinstance(v, pd.DataFrame)}
+    thread = threading.Thread(target=_save_to_db_backend, args=(data_copy,))
     thread.start()
     return True # Ritorna immediatamente
 
@@ -261,6 +244,7 @@ def scrivi_o_aggiorna_risposta(client, dati_da_scrivere, nome_completo, data_rif
         st.warning(f"Un errore non gestito è occorso durante la scrittura sul file di transito: {e}")
 
     # --- 3. INVIO EMAIL DI NOTIFICA ---
+    from modules.email_sender import invia_email_con_outlook_async
     titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
     report_html = dati_da_scrivere['report'].replace('\n', '<br>')
     html_body = f"""
@@ -415,85 +399,52 @@ def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
 
 @st.cache_data(ttl=600)
 def carica_dati_attivita_programmate():
-    excel_path = get_attivita_programmate_path()
+    """
+    Carica i dati delle attività programmate direttamente dal database SQLite.
+    Questa funzione è molto più veloce rispetto alla lettura del file Excel.
+    """
+    import sqlite3
 
-    if not os.path.exists(excel_path):
-        st.error(f"File attività programmate non trovato al percorso: {excel_path}")
+    DB_NAME = "schedario.db"
+    TABLE_NAME = "attivita_programmate"
+
+    if not os.path.exists(DB_NAME):
+        st.error(f"Database '{DB_NAME}' non trovato. Eseguire lo script di avvio per crearlo e sincronizzarlo.")
         return pd.DataFrame()
 
-    sheets_to_read = {
-        'A1': {'tcl': 'Francesco Naselli', 'area': 'Area 1'},
-        'A2': {'tcl': 'Francesco Naselli', 'area': 'Area 2'},
-        'A3': {'tcl': 'Ferdinando Caldarella', 'area': 'Area 3'},
-        'CTE': {'tcl': 'Ferdinando Caldarella', 'area': 'CTE'},
-        'BLENDING': {'tcl': 'Ivan Messina', 'area': 'BLENDING'},
-    }
-    
-    all_data = []
-    giorni_settimana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-    
-    # La mappatura dello stato rimane, ma ora verrà usata come unica fonte.
-    status_map = {
-        'DA EMETTERE': 'Pianificato', 'CHIUSO': 'Completato', 'ANNULLATO': 'Annullato',
-        'INTERROTTO': 'Sospeso', 'RICHIESTO': 'Da processare', 'EMESSO': 'Processato',
-        'IN CORSO': 'Aperto', 'DA CHIUDERE': 'Terminata',
-        # Aggiunte per coerenza con gli stati inviati dall'UI
-        'TERMINATA': 'Terminata',
-        'SOSPESA': 'Sospeso',
-        'NON SVOLTA': 'Non Svolta'
-    }
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        # Leggi tutti i dati dalla tabella e caricali in un DataFrame pandas
+        df = pd.read_sql_query(f"SELECT * FROM {TABLE_NAME}", conn)
 
-    # Carica l'intero storico in una volta per le ricerche successive
-    df_storico_full = carica_archivio_completo()
+        # La colonna 'Storico' è memorizzata come stringa JSON.
+        # Dobbiamo riconvertirla in un oggetto Python (lista di dizionari).
+        def parse_storico_json(json_string):
+            try:
+                # Se la stringa non è vuota o None, la parsifichiamo
+                if json_string:
+                    return json.loads(json_string)
+                # Altrimenti, restituiamo una lista vuota, come si aspetta l'UI
+                return []
+            except (json.JSONDecodeError, TypeError):
+                # In caso di errore (es. stringa non valida), restituisci una lista vuota
+                return []
 
-    for sheet_name, metadata in sheets_to_read.items():
-        try:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            df.columns = [str(col).strip() for col in df.columns]
+        if 'Storico' in df.columns:
+            df['Storico'] = df['Storico'].apply(parse_storico_json)
+        else:
+            # Se la colonna non dovesse esistere, la creiamo vuota per sicurezza
+            df['Storico'] = [[] for _ in range(len(df))]
 
-            required_cols = ['PdL', 'IMP.', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'LUN', 'MAR', 'MER', 'GIO', 'VEN']
-            if not all(col in df.columns for col in required_cols):
-                continue
+        return df
 
-            df = df.dropna(subset=['PdL'])
-            if df.empty:
-                continue
-
-            df_filtered = df[required_cols].copy()
-            df_filtered.columns = ['PdL', 'Impianto', 'Descrizione', 'Stato_OdL', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì']
-            
-            df_filtered['PdL'] = df_filtered['PdL'].astype(str)
-            df_filtered['TCL'] = metadata['tcl']
-            df_filtered['Area'] = metadata['area']
-
-            giorni_programmati = df_filtered[giorni_settimana].apply(
-                lambda row: ', '.join([giorni_settimana[i] for i, val in enumerate(row) if str(val).strip().upper() == 'X']),
-                axis=1
-            )
-            df_filtered['GiorniProgrammati'] = giorni_programmati.replace('', 'Non Programmato')
-
-            # Logica dello stato semplificata: legge direttamente dalla colonna STATO\nPdL
-            df_filtered['Stato'] = df_filtered['Stato_OdL'].apply(
-                lambda x: status_map.get(str(x).strip().upper(), 'Non Definito') if pd.notna(x) else 'Pianificato'
-            )
-            
-            # La ricerca dello storico rimane invariata, usando la nuova `carica_archivio_completo`
-            df_filtered['Storico'] = df_filtered['PdL'].apply(
-                lambda p: df_storico_full[df_storico_full['PdL'] == p].sort_values(by='Data_Riferimento_dt', ascending=False).to_dict('records')
-                if p in df_storico_full['PdL'].values else []
-            )
-
-            all_data.append(df_filtered)
-        except Exception as e:
-            st.warning(f"Errore durante l'elaborazione del foglio '{sheet_name}': {e}")
-            continue
-
-    if not all_data:
-        st.warning("Nessun dato valido trovato in ATTIVITA_PROGRAMMATE.xlsx.")
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        st.error(f"Errore durante la lettura dal database: {e}")
         return pd.DataFrame()
-
-    final_df = pd.concat(all_data, ignore_index=True)
-    return final_df
+    finally:
+        if conn:
+            conn.close()
 
 # --- NUOVA LOGICA DI SINCRONIZZAZIONE MANUALE ---
 

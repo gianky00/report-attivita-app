@@ -1269,8 +1269,31 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
 
 def render_update_reports_tab(client_google):
-    st.header("Modifica Report in Transito")
-    st.info("Usa questa sezione per visualizzare e modificare i report inviati di recente, prima che vengano consolidati nel database principale.")
+    st.header("Gestione Dati")
+    st.info("Usa questa sezione per avviare manualmente la sincronizzazione dei dati o per modificare i report in transito.")
+
+    # --- Sezione Sincronizzazione Manuale ---
+    st.subheader("Sincronizzazione Manuale da Excel")
+    st.warning("**Attenzione:** La sincronizzazione sovrascrive i dati nel database con quelli del file Excel. Usare solo se sono state fatte modifiche offline sul file `attivita_programmate.xlsm`.")
+
+    if st.button("🚀 Sincronizza Dati da Excel", help="Copia i dati aggiornati dal file Excel al database dell'applicazione."):
+        # Importa la funzione qui per evitare dipendenze circolari o inutili al caricamento
+        from sincronizzatore import sincronizza_dati
+        with st.spinner("Sincronizzazione in corso... Questo potrebbe richiedere alcuni istanti."):
+            # Modificheremo sincronizzatore.py per restituire un risultato
+            success, message = sincronizza_dati()
+            if success:
+                st.success(f"Sincronizzazione completata! {message}")
+                # Pulisce la cache per forzare il ricaricamento dei dati dal DB
+                st.cache_data.clear()
+            else:
+                st.error(f"Errore durante la sincronizzazione: {message}")
+
+    st.divider()
+
+
+    # --- Sezione Modifica Report in Transito ---
+    st.subheader("Modifica Report in Transito")
 
     if 'report_editor_key' not in st.session_state:
         st.session_state.report_editor_key = str(uuid.uuid4())
@@ -1337,15 +1360,18 @@ def render_access_logs_tab(gestionale_data):
     st.header("Cronologia Accessi al Sistema")
     st.info("Questa sezione mostra tutti i tentativi di accesso registrati, dal più recente al più vecchio.")
 
-    logs = gestionale_data.get('access_logs', [])
-    if not logs:
+    logs_df = gestionale_data.get('access_logs')
+
+    # La nuova funzione carica un DataFrame, quindi il controllo va fatto con .empty
+    if logs_df is None or logs_df.empty:
         st.warning("Nessun tentativo di accesso registrato.")
         return
 
-    # Converti i log in un DataFrame per una facile manipolazione
-    logs_df = pd.DataFrame(logs)
-    logs_df['timestamp'] = pd.to_datetime(logs_df['timestamp'])
-    logs_df = logs_df.sort_values(by='timestamp', ascending=False)
+    # Non è più necessario convertire in DataFrame, lo è già.
+    # Assicuriamoci solo che la colonna timestamp sia nel formato corretto
+    if 'timestamp' in logs_df.columns:
+        logs_df['timestamp'] = pd.to_datetime(logs_df['timestamp'])
+        logs_df = logs_df.sort_values(by='timestamp', ascending=False)
 
     # --- Filtri ---
     st.subheader("Filtra Cronologia")
@@ -2420,7 +2446,7 @@ def main_app(nome_utente_autenticato, ruolo):
 
                     # --- Dashboard Caposquadra ---
                     with main_admin_tabs[0]:
-                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Aggiorna Report"])
+                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati"])
 
                         with caposquadra_tabs[0]: # Performance Team
                             archivio_df_perf = carica_archivio_completo()
@@ -2492,7 +2518,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                             st.rerun()
                                         else: st.error("Errore nel salvataggio del nuovo turno.")
 
-                        with caposquadra_tabs[2]: # Aggiorna Report
+                        with caposquadra_tabs[2]: # Gestione Dati
                             render_update_reports_tab(autorizza_google())
 
                     # --- Dashboard Tecnica ---

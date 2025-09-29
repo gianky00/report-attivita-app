@@ -97,23 +97,26 @@ def authenticate_user(username, password, df_contatti):
 
 def log_access_attempt(gestionale_data, username, status):
     """
-    Registra un tentativo di accesso nella cronologia.
+    Registra un tentativo di accesso nella cronologia (DataFrame-based).
     """
     import datetime
+    import pandas as pd
 
-    # Assicura che la lista dei log esista
-    if 'access_logs' not in gestionale_data or not isinstance(gestionale_data.get('access_logs'), list):
-        gestionale_data['access_logs'] = []
+    # Assicura che il DataFrame dei log esista
+    if 'access_logs' not in gestionale_data or not isinstance(gestionale_data.get('access_logs'), pd.DataFrame):
+        logs_df = pd.DataFrame(columns=["timestamp", "username", "status"])
+    else:
+        logs_df = gestionale_data['access_logs']
 
-    # Crea il nuovo record di log
-    new_log_entry = {
+    # Crea il nuovo record di log come un DataFrame
+    new_log_entry_df = pd.DataFrame([{
         "timestamp": datetime.datetime.now().isoformat(),
         "username": username,
         "status": status,
-    }
+    }])
 
-    # Aggiungi il nuovo log alla lista
-    # Usiamo .get() per sicurezza, anche se l'abbiamo già inizializzata
-    logs = gestionale_data.get('access_logs', [])
-    logs.append(new_log_entry)
-    gestionale_data['access_logs'] = logs
+    # Concatena il nuovo log al DataFrame esistente, gestendo il caso di DataFrame vuoto
+    if logs_df.empty:
+        gestionale_data['access_logs'] = new_log_entry_df
+    else:
+        gestionale_data['access_logs'] = pd.concat([logs_df, new_log_entry_df], ignore_index=True)
