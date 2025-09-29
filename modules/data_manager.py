@@ -200,7 +200,7 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
             'Data_Riferimento_dt': data_riferimento.isoformat()
         }
 
-        conn = sqlite3.connect(config.DB_NAME)
+        conn = sqlite3.connect("schedario.db")
         cursor = conn.cursor()
 
         with conn:
