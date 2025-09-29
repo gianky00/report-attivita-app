@@ -38,7 +38,7 @@ def carica_gestionale():
             # Handle 'Tipo' column in 'turni' DataFrame for backward compatibility
             if 'Tipo' not in data['turni'].columns:
                 data['turni']['Tipo'] = 'Assistenza'
-            data['turni']['Tipo'].fillna('Assistenza', inplace=True)
+            data['turni']['Tipo'] = data['turni']['Tipo'].fillna('Assistenza')
 
             required_notification_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
 
@@ -173,7 +173,7 @@ def carica_archivio_completo():
     }, inplace=True)
 
     # Riempi i report vuoti con un testo standard
-    df_archivio['Report'].fillna("Nessun report disponibile.", inplace=True)
+    df_archivio['Report'] = df_archivio['Report'].fillna("Nessun report disponibile.")
 
     # Aggiungi colonne mancanti per compatibilità
     df_archivio['Data_Compilazione'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')

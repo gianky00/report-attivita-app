@@ -273,8 +273,9 @@ def visualizza_storico_organizzato(storico_list, pdl):
     if storico_list:
         with st.expander(f"Mostra cronologia interventi per PdL {pdl}", expanded=True):
             for intervento in storico_list:
-                intervento['data_dt'] = pd.to_datetime(intervento.get('Data_Riferimento'), errors='coerce')
-            
+                # Aggiunto dayfirst=True per risolvere l'ambiguità nel parsing delle date
+                intervento['data_dt'] = pd.to_datetime(intervento.get('Data_Riferimento'), errors='coerce', dayfirst=True)
+
             storico_filtrato = [i for i in storico_list if pd.notna(i['data_dt'])]
             if not storico_filtrato:
                 st.info("Nessun intervento con data valida trovato.")
