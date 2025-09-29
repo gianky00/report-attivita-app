@@ -138,14 +138,25 @@ def crea_tabella():
         for nome_indice, statement in indici.items():
             cursor.execute(statement)
 
-        # --- SCHEMA MIGRATION ---
-        cursor.execute("PRAGMA table_info(contatti)")
-        colonne_esistenti = [info[1] for info in cursor.fetchall()]
+        # --- TABELLA METADATI DI SINCRONIZZAZIONE ---
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sync_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+        """)
 
-        if "Matricola" not in colonne_esistenti:
-            print("Aggiornamento schema: aggiunta colonna 'Matricola' a 'contatti'...")
-            cursor.execute("ALTER TABLE contatti ADD COLUMN Matricola TEXT")
-            print("Schema aggiornato.")
+        # --- SCHEMA MIGRATION ---
+        def add_column_if_not_exists(table, column, col_type):
+            cursor.execute(f"PRAGMA table_info({table})")
+            existing_columns = [info[1] for info in cursor.fetchall()]
+            if column not in existing_columns:
+                print(f"Aggiornamento schema: aggiunta colonna '{column}' a '{table}'...")
+                cursor.execute(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}')
+                print("Schema aggiornato.")
+
+        add_column_if_not_exists("contatti", "Matricola", "TEXT")
+        add_column_if_not_exists(TABLE_NAME, "db_last_modified", "TEXT")
 
         conn.commit()
         print(f"Database '{DB_NAME}' e tabelle ottimizzate pronti per l'uso.")

@@ -73,45 +73,41 @@ def get_interventions_for_technician(technician_name: str, start_date, end_date)
 def get_technician_performance_data(start_date, end_date) -> pd.DataFrame:
     """
     Calcola le metriche di performance per i tecnici interrogando direttamente il DB.
+    Utilizza json_each per espandere lo storico JSON e aggregare i risultati.
     """
     conn = get_db_connection()
     try:
-        # Questa query complessa calcola le metriche direttamente in SQL
-        # per la massima efficienza.
         query = """
-        WITH RECURSIVE
-          json_each_ext(json_data) AS (
-            SELECT Storico FROM attivita_programmate
-            UNION ALL
-            SELECT json_extract(json_data, '$[0]') FROM json_each_ext WHERE json_array_length(json_data) > 0
-          )
         SELECT
-          Tecnico,
-          COUNT(*) AS "Totale Interventi",
-          CAST(SUM(CASE WHEN Stato = 'TERMINATA' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS REAL) AS "Tasso Completamento (%)",
-          AVG(julianday(Data_Compilazione) - julianday(Data_Riferimento)) AS "Ritardo Medio Compilazione (gg)",
-          SUM(CASE WHEN LENGTH(Report) < 20 THEN 1 ELSE 0 END) AS "Report Sbrigativi"
+            Tecnico,
+            COUNT(*) AS "Totale Interventi",
+            CAST(SUM(CASE WHEN Stato = 'TERMINATA' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS REAL) AS "Tasso Completamento (%)",
+            AVG(julianday(Data_Compilazione) - julianday(Data_Riferimento_dt)) AS "Ritardo Medio Compilazione (gg)",
+            SUM(CASE WHEN LENGTH(Report) < 20 THEN 1 ELSE 0 END) AS "Report Sbrigativi"
         FROM (
-          SELECT
-            json_extract(value, '$.Tecnico') AS Tecnico,
-            json_extract(value, '$.Stato') AS Stato,
-            json_extract(value, '$.Report') AS Report,
-            date(json_extract(value, '$.Data_Riferimento')) AS Data_Riferimento,
-            date(json_extract(value, '$.Data_Compilazione')) AS Data_Compilazione
-          FROM attivita_programmate, json_each(attivita_programmate.Storico)
-          WHERE date(json_extract(value, '$.Data_Riferimento')) BETWEEN date(?) AND date(?)
+            SELECT
+                json_extract(value, '$.Tecnico') AS Tecnico,
+                json_extract(value, '$.Stato') AS Stato,
+                json_extract(value, '$.Report') AS Report,
+                json_extract(value, '$.Data_Riferimento_dt') AS Data_Riferimento_dt,
+                json_extract(value, '$.Data_Compilazione') AS Data_Compilazione
+            FROM
+                attivita_programmate,
+                json_each(attivita_programmate.Storico)
         )
-        WHERE Tecnico IS NOT NULL
-        GROUP BY Tecnico
-        ORDER BY "Totale Interventi" DESC;
+        WHERE
+            Tecnico IS NOT NULL AND
+            date(Data_Riferimento_dt) BETWEEN date(?) AND date(?)
+        GROUP BY
+            Tecnico
+        ORDER BY
+            "Totale Interventi" DESC;
         """
-        # Formatta le date per la query SQL
         start_date_str = start_date.strftime('%Y-%m-%d')
         end_date_str = end_date.strftime('%Y-%m-%d')
 
         df = pd.read_sql_query(query, conn, params=(start_date_str, end_date_str))
 
-        # Formattazione finale per la visualizzazione
         if not df.empty:
             df['Tasso Completamento (%)'] = df['Tasso Completamento (%)'].map('{:.1f}'.format)
             df['Ritardo Medio Compilazione (gg)'] = df['Ritardo Medio Compilazione (gg)'].map('{:.1f}'.format)
@@ -120,7 +116,6 @@ def get_technician_performance_data(start_date, end_date) -> pd.DataFrame:
 
     except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
         print(f"Errore nel calcolo delle performance dei tecnici: {e}")
-        # In caso di errore, restituisci un DataFrame vuoto con le colonne attese
         return pd.DataFrame(columns=['Totale Interventi', 'Tasso Completamento (%)', 'Ritardo Medio Compilazione (gg)', 'Report Sbrigativi']).set_index('Tecnico')
     finally:
         if conn:
