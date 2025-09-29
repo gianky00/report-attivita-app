@@ -1,8 +1,8 @@
 # File di database locali
-schedario.db
-*.db
-*.sqlite
-*.sqlite3
+# schedario.db è intenzionalmente tracciato per essere disponibile nel repo.
+# *.db
+# *.sqlite
+# *.sqlite3
 
 # File Excel generati o di test
 ATTIVITA_PROGRAMMATE.xlsm
