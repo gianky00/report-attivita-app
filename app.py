@@ -2087,10 +2087,8 @@ def main_app(matricola_utente, ruolo):
             st.header("Pianificazione e Controllo")
             sub_tabs_pianificazione = st.tabs(["Controllo", "Pianificazione"])
             with sub_tabs_pianificazione[0]:
-                # "Controllo" (precedentemente "Situazione Impianti")
                 render_situazione_impianti_tab()
             with sub_tabs_pianificazione[1]:
-                # "Pianificazione" (precedentemente "Programmazione Attività")
                 render_programmazione_tab()
 
         # Scheda 2: Database (precedentemente "Ricerca nell'Archivio")

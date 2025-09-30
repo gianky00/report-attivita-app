@@ -299,7 +299,14 @@ def crea_tabelle_se_non_esistono():
             print("Tabella 'attivita_programmate' non trovata. Creazione in corso...")
             cursor.execute(f"CREATE TABLE attivita_programmate {attivita_schema}")
             print("Tabella 'attivita_programmate' creata.")
-
+        else:
+            # Logica di migrazione per aggiungere la colonna se non esiste
+            cursor.execute("PRAGMA table_info(attivita_programmate)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'db_last_modified' not in columns:
+                print("Aggiunta della colonna 'db_last_modified' alla tabella esistente...")
+                cursor.execute("ALTER TABLE attivita_programmate ADD COLUMN db_last_modified TEXT;")
+                print("Colonna 'db_last_modified' aggiunta.")
 
         conn.commit()
         print("Verifica e creazione tabelle completata.")
