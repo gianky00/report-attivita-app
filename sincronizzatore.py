@@ -34,7 +34,7 @@ HEADER_MAP = {
     'ESE': 'ESE', 'SAIT': 'SAIT', 'PONTEROSSO': 'PONTEROSSO',
     'STATO\nATTIVITA\'': 'STATO_ATTIVITA', 'DATA\nCONTROLLO': 'DATA_CONTROLLO',
     'PERSONALE\nIMPIEGATO': 'PERSONALE_IMPIEGATO', 'PO': 'PO', 'AVVISO': 'AVVISO',
-    TIMESTAMP_COLUMN: TIMESTAMP_COLUMN,
+    'DataUltimaModifica': TIMESTAMP_COLUMN,
     SOURCE_SHEET_COLUMN: SOURCE_SHEET_COLUMN
 }
 REVERSE_HEADER_MAP = {v: k for k, v in HEADER_MAP.items()}
@@ -82,7 +82,8 @@ def load_data_from_excel():
     master_df.drop_duplicates(subset=[PRIMARY_KEY], keep='first', inplace=True)
 
     if TIMESTAMP_COLUMN not in master_df.columns:
-        master_df[TIMESTAMP_COLUMN] = pd.NaT
+        logging.info(f"Colonna timestamp '{TIMESTAMP_COLUMN}' non trovata in Excel. Verrà creata in memoria con il valore di default.")
+        master_df[TIMESTAMP_COLUMN] = "2025-09-30 20:00:00"
     master_df[TIMESTAMP_COLUMN] = pd.to_datetime(master_df[TIMESTAMP_COLUMN], errors='coerce')
 
     master_df[PRIMARY_KEY] = master_df[PRIMARY_KEY].astype(str)
