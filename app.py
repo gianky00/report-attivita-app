@@ -1338,7 +1338,7 @@ def render_situazione_impianti_tab():
     col1, col2 = st.columns(2)
 
     aree_disponibili = sorted(df['AREA'].dropna().unique()) if 'AREA' in df.columns else []
-    stati_disponibili = sorted(df['STATO_ATTIVITA'].dropna().unique()) if 'STATO_ATTIVITA' in df.columns else []
+    stati_disponibili = sorted(df['STATO_PdL'].dropna().unique()) if 'STATO_PdL' in df.columns else []
 
     with col1:
         default_aree = aree_disponibili
@@ -1346,14 +1346,14 @@ def render_situazione_impianti_tab():
 
     with col2:
         default_stati = stati_disponibili
-        stati_selezionati = st.multiselect("Filtra per Stato", options=stati_disponibili, default=default_stati)
+        stati_selezionati = st.multiselect("Filtra per Stato", options=stati_disponibili, default=default_stati, key="status_filter_situazione")
 
     # Applica filtri
     filtered_df = df.copy()
     if aree_selezionate:
         filtered_df = filtered_df[filtered_df['AREA'].isin(aree_selezionate)]
     if stati_selezionati:
-        filtered_df = filtered_df[filtered_df['STATO_ATTIVITA'].isin(stati_selezionati)]
+        filtered_df = filtered_df[filtered_df['STATO_PdL'].isin(stati_selezionati)]
 
 
     st.divider()
@@ -1365,7 +1365,8 @@ def render_situazione_impianti_tab():
     # --- Metriche ---
     st.subheader("Metriche di Riepilogo")
     total_activities = len(filtered_df)
-    completed_activities = len(filtered_df[filtered_df['STATO_ATTIVITA'] == 'TERMINATA'])
+    # Assumiamo che 'COMPLETATO' o termini simili siano gli stati finali positivi in STATO_PdL
+    completed_activities = len(filtered_df[filtered_df['STATO_PdL'].str.contains("COMPLETATO|TERMINATA", na=False, case=False)])
     pending_activities = total_activities - completed_activities
 
     c1, c2, c3 = st.columns(3)
@@ -1379,8 +1380,8 @@ def render_situazione_impianti_tab():
 
     with col1:
         st.markdown("#### Stato Attività")
-        if 'STATO_ATTIVITA' in filtered_df.columns:
-            status_counts = filtered_df['STATO_ATTIVITA'].value_counts()
+        if 'STATO_PdL' in filtered_df.columns:
+            status_counts = filtered_df['STATO_PdL'].value_counts()
             if not status_counts.empty:
                 fig, ax = plt.subplots()
                 ax.pie(status_counts, labels=status_counts.index, autopct='%1.1f%%', startangle=90)
@@ -1389,7 +1390,7 @@ def render_situazione_impianti_tab():
             else:
                 st.info("Nessun dato per il grafico dello stato.")
         else:
-            st.info("Colonna 'STATO_ATTIVITA' non trovata.")
+            st.info("Colonna 'STATO_PdL' non trovata.")
 
     with col2:
         st.markdown("#### Attività per Area")
@@ -2269,8 +2270,26 @@ def main_app(matricola_utente, ruolo):
                 if df_richieste_materiali.empty:
                     st.info("Nessuna richiesta di materiali inviata.")
                 else:
-                    df_richieste_materiali['Timestamp'] = pd.to_datetime(df_richieste_materiali['Timestamp'])
-                    st.dataframe(df_richieste_materiali.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+                    # Arricchisci lo storico con il nome del richiedente
+                    df_contatti = gestionale_data.get('contatti', pd.DataFrame())
+                    df_richieste_con_nome = pd.merge(
+                        df_richieste_materiali,
+                        df_contatti[['Matricola', 'Nome Cognome']],
+                        left_on='Richiedente_Matricola',
+                        right_on='Matricola',
+                        how='left'
+                    )
+                    # Gestisci i casi in cui il nome non viene trovato
+                    df_richieste_con_nome['Nome Cognome'].fillna('Sconosciuto', inplace=True)
+
+                    df_richieste_con_nome['Timestamp'] = pd.to_datetime(df_richieste_con_nome['Timestamp'])
+
+                    # Seleziona e riordina le colonne per la visualizzazione
+                    display_cols = ['Timestamp', 'Nome Cognome', 'Dettagli', 'Stato']
+                    # Assicurati che tutte le colonne esistano prima di provare a visualizzarle
+                    final_cols = [col for col in display_cols if col in df_richieste_con_nome.columns]
+
+                    st.dataframe(df_richieste_con_nome[final_cols].sort_values(by="Timestamp", ascending=False), use_container_width=True)
 
 
             # Sottomenù Assenze
