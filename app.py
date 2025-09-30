@@ -1623,183 +1623,127 @@ def render_access_logs_tab(gestionale_data):
 
 
 def render_guida_tab(ruolo):
-    st.title("❓ Guida del Gestionale")
-    st.write("Benvenuto nella guida utente! Qui troverai le istruzioni per usare al meglio l'applicazione.")
-    st.info("Usa i menù a tendina qui sotto per esplorare le diverse sezioni e funzionalità dell'app. La tua sessione ora rimane attiva anche se aggiorni la pagina!")
+    st.title("❓ Guida all'Uso del Gestionale")
+    st.write("Benvenuto! Questa guida ti aiuterà a usare al meglio tutte le funzionalità dell'applicazione. Se hai dubbi, questo è il posto giusto per trovare risposte.")
+    st.info("Usa i menù a tendina qui sotto per esplorare le diverse sezioni. La tua sessione di lavoro rimane attiva anche se aggiorni la pagina!")
 
-    # Sezione Attività Assegnate
-    with st.expander("📝 Attività Assegnate", expanded=True):
+    # Sezione 1: Il Lavoro Quotidiano
+    with st.expander("📝 IL TUO LAVORO QUOTIDIANO: Attività e Report", expanded=True):
         st.markdown("""
-        Questa è la sezione principale per la gestione delle tue attività quotidiane. È suddivisa in due sotto-schede:
+        Questa è la sezione principale per la gestione delle tue attività. È il tuo punto di partenza ogni giorno.
 
-        - **Attività di Oggi**: Mostra l'elenco delle attività che ti sono state assegnate per la giornata corrente.
-        - **Attività Giorno Precedente**: Permette di recuperare e compilare eventuali attività non completate del giorno lavorativo precedente.
+        #### Sottosezioni Principali:
+        - **Attività di Oggi**: Qui trovi l'elenco delle attività programmate per te nella giornata corrente.
+        - **Recupero Attività**: Mostra le attività dei 7 giorni precedenti che non hai ancora rendicontato. È un promemoria per non lasciare indietro nulla.
 
-        #### Come compilare un report
-        Per ogni attività in entrambe le schede, il processo è identico:
-        - Vedrai il codice **PdL** e una breve descrizione.
-        - Se lavori in **Team**, vedrai i nomi dei tuoi colleghi, il loro ruolo e gli orari di lavoro per quell'attività.
-        - Puoi scegliere tra due modalità di compilazione:
-            - **✍️ Compila Report Guidato (IA)**: Una procedura a domande che ti aiuta a scrivere un report completo e standardizzato.
-            - **📝 Compila Report Manuale**: Un campo di testo libero dove puoi scrivere il report come preferisci.
-        - **Importante per gli Aiutanti**: Se fai parte di un team con più persone, solo un **Tecnico** può compilare il report. Potrai vedere l'attività e il report una volta compilato, ma non potrai inviarlo. Se lavori da solo, puoi compilare il report normalmente.
+        #### Come Compilare un Report:
+        Per ogni attività, vedrai il **codice PdL**, la **descrizione** e lo **storico** degli interventi passati. Per rendicontare, hai due opzioni:
+        1.  **✍️ Report Guidato (IA)**: Il sistema ti fa delle domande per aiutarti a scrivere un report completo e standardizzato. È l'opzione consigliata.
+        2.  **📝 Report Manuale**: Un campo di testo libero dove puoi scrivere il report come preferisci.
 
-        #### Vedere lo Storico
-        Sotto ogni attività, puoi espandere la sezione `"Mostra cronologia interventi"` per vedere tutti i report passati relativi a quel PdL. Questo è utile per capire i problemi ricorrenti.
+        > **Nota per i Team**: Se un'attività è assegnata a un team, solo i membri con ruolo **Tecnico** possono compilare e inviare il report. Gli **Aiutanti** possono consultare l'attività ma non compilarla.
 
-        #### Compilare una Relazione di Reperibilità
-        Se sei un **Tecnico** o **Amministratore**, vedrai una terza sotto-scheda chiamata **"Compila Relazione"**. Questa sezione serve per scrivere relazioni dettagliate, ad esempio per i turni di reperibilità.
-        - **Data e Ora**: Inserisci la data (obbligatoria) e gli orari di inizio/fine del tuo intervento. Se non ricordi l'orario, puoi lasciare i campi vuoti.
-        - **Partner**: Se hai lavorato con un collega, puoi selezionarlo dall'elenco a tendina.
-        - **Corpo della Relazione**: Scrivi qui il testo del tuo report.
-        - **Correzione con IA**: Una volta scritto il testo, puoi cliccare su **"Correggi con IA"**. Il sistema analizzerà il tuo testo e ti proporrà una versione migliorata, più professionale e senza errori, basandosi sullo stile di centinaia di altre relazioni.
-        - **Usa Testo Corretto**: Dopo la correzione, apparirà il testo suggerito dall'IA e un pulsante **"Usa Testo Corretto"**. Cliccalo per copiare la versione dell'IA nel campo di testo principale.
-        - **Invia Relazione**: Quando sei soddisfatto, clicca su **"Invia Relazione"** per mandare il report finale via email.
+        #### Compilare una Relazione (es. Reperibilità):
+        Se sei **Tecnico** o **Amministratore**, hai una terza sottosezione per scrivere relazioni più complesse, come quelle di reperibilità.
+        - **Compila i campi**: Inserisci data, orari e l'eventuale collega con cui hai lavorato.
+        - **Scrivi la relazione**: Descrivi l'intervento nel dettaglio.
+        - **Usa l'IA per migliorare**: Clicca su **"Correggi con IA"** per ricevere una versione del testo migliorata, più chiara e professionale. Puoi scegliere di usare il testo suggerito o mantenere il tuo.
         """)
 
-    with st.expander("📊 Pianificazione e Controllo"):
-        st.subheader("Monitorare e Pianificare le Attività")
+    # Sezione 2: Pianificazione e Visione d'Insieme
+    with st.expander("📊 PIANIFICAZIONE E CONTROLLO: Visione d'Insieme", expanded=False):
         st.markdown("""
-        Questa sezione è il tuo centro di comando per la visione d'insieme delle attività. È divisa in due sottomenù:
+        Questa sezione ti offre una visione più ampia su tutte le attività, non solo le tue. È divisa in due aree:
 
         #### 1. Controllo
-        - **Obiettivo**: Fornire una **visione aggregata** dello stato di avanzamento di tutte le attività.
-        - **Come funziona**: Unisce i dati della pianificazione con i report compilati, dando sempre la priorità allo stato più aggiornato. Puoi vedere grafici e metriche generali.
-        - **Uso**: Ideale per capire rapidamente quali aree o TCL hanno più attività in sospeso, completate o in corso.
-        - **Filtri**: Puoi filtrare i dati per **TCL**, **Area** e **Stato** per analisi più mirate. Clicca su **"Applica Filtri"** per aggiornare la vista.
+        - **Obiettivo**: Avere un quadro generale dello stato di avanzamento di **tutte le attività** programmate.
+        - **Cosa Mostra**: Grafici e metriche che riassumono le attività per area e stato (es. terminate, in corso). È utile per capire a colpo d'occhio come sta procedendo il lavoro.
+        - **Come si usa**: Filtra per **Area** per concentrarti su zone specifiche. Gli stati "Scaduto" e "Da Chiudere" sono raggruppati in "Terminata" per semplicità.
 
         #### 2. Pianificazione
-        - **Obiettivo**: Consultare il **dettaglio delle singole attività** programmate per la settimana.
-        - **Come funziona**: Mostra una lista di "card", una per ogni attività, con tutti i dettagli operativi (PdL, impianto, descrizione).
-        - **Caratteristiche**:
-            - **Storico Integrato**: Puoi espandere lo storico degli interventi direttamente dalla card dell'attività.
-            - **Grafico Carico di Lavoro**: Un grafico a barre ti mostra il carico di lavoro giornaliero suddiviso per area.
-            - **Filtri Dettagliati**: Puoi cercare attività specifiche per **PdL**, **Area**, **TCL** o **Giorno** della settimana.
+        - **Obiettivo**: Consultare il **dettaglio di ogni singola attività** programmata, anche quelle non assegnate a te.
+        - **Cosa Mostra**: Una lista di "card", una per ogni attività, con tutti i dettagli (PdL, descrizione, giorni programmati) e lo storico degli interventi passati.
+        - **Come si usa**: Usa i filtri per cercare per **PdL, Area o Giorno** della settimana. Il grafico del carico di lavoro ti mostra quante attività sono previste ogni giorno per ciascuna area.
         """)
 
-    # Sezione Turni (unificata)
-    with st.expander("📅 Gestione Turni (Assistenza, Straordinari, Reperibilità)"):
-        st.subheader("Prenotare un Turno di Assistenza o Straordinario")
+    # Sezione 3: Database
+    with st.expander("🗂️ DATABASE: Ricerca Storica", expanded=False):
+        st.subheader("Come Trovare Interventi Passati")
         st.markdown("""
-        Nella sotto-sezione `📅 Turni`, puoi vedere tutti i turni di assistenza o straordinario a cui puoi partecipare.
-        1.  Trova un turno con posti liberi (indicato da ✅).
-        2.  Seleziona il ruolo che vuoi occupare ("Tecnico" o "Aiutante").
-        3.  Clicca su **"Conferma Prenotazione"**.
+        La sezione **Database** è il tuo archivio storico completo. Usala per trovare qualsiasi intervento che sia stato registrato nel sistema.
+
+        Puoi cercare usando una combinazione di filtri:
+        - **PdL**: Cerca un Punto di Lavoro specifico.
+        - **Descrizione**: Cerca parole chiave nella descrizione dell'attività (es. "controllo", "pompa").
+        - **Impianto**: Filtra per uno o più impianti specifici.
+        - **Tecnico/i**: Seleziona uno o più tecnici per vedere solo i loro interventi.
+        - **Filtro per Data**:
+            - **Da / A**: Imposta un intervallo di date preciso per la tua ricerca.
+            - **Ultimi 15 gg**: Clicca questo comodo pulsante per vedere tutti gli interventi degli ultimi 15 giorni.
+
+        > **Importante**: Per impostazione predefinita, la ricerca mostra solo gli **interventi eseguiti**, cioè quelli per cui è stato compilato un report. Se vuoi vedere anche le **attività pianificate** che non hanno ancora un report, deseleziona la casella "Mostra solo interventi eseguiti".
         """)
 
-        st.subheader("Gestire un Turno di Reperibilità")
+    # Sezione 4: Gestione Turni
+    with st.expander("📅 GESTIONE TURNI: Assistenza, Straordinari e Reperibilità", expanded=False):
         st.markdown("""
-        Nella sotto-sezione `🗓️ Turni Reperibilità`, puoi visualizzare il calendario settimanale.
-        - Se sei di turno in un determinato giorno, vedrai apparire il pulsante **"Gestisci"**.
-        - Dato che i turni di reperibilità sono assegnati d'ufficio, l'unica azione disponibile è **"📢 Pubblica in Bacheca"**.
-        - Cliccando questo pulsante, il tuo posto nel turno di reperibilità viene messo a disposizione di tutti i colleghi, che potranno prenderlo dalla sezione `📢 Bacheca`.
+        Qui puoi gestire la tua partecipazione ai vari tipi di turno.
+
+        #### Turni di Assistenza e Straordinario
+        - **Prenotazione**: Trova un turno con posti liberi (indicato da ✅), scegli il tuo ruolo (Tecnico o Aiutante) e clicca "Conferma Prenotazione".
+        - **Cedere un turno**: Se non puoi più partecipare, hai 3 opzioni:
+            1.  **Cancella Prenotazione**: La tua prenotazione viene rimossa e il posto torna libero per tutti.
+            2.  **📢 Pubblica in Bacheca**: Rendi il tuo posto disponibile a tutti i colleghi. Il primo che lo accetta prenderà il tuo turno automaticamente.
+            3.  **🔄 Chiedi Sostituzione**: Chiedi a un collega specifico di sostituirti.
+
+        #### Turni di Reperibilità
+        - **Visualizzazione**: Il calendario ti mostra i tuoi turni di reperibilità assegnati.
+        - **Cedere un turno**: Se sei di turno e non puoi coprirlo, clicca su **"Gestisci"** e poi **"Pubblica in Bacheca"** per renderlo disponibile ad altri.
+
+        #### La Bacheca
+        Nella sezione **📢 Bacheca** trovi tutti i turni (di qualsiasi tipo) che i colleghi hanno messo a disposizione. Il primo che clicca su "Prendi questo turno" lo ottiene.
         """)
 
-        st.subheader("Cedere un Turno (Assistenza/Straordinario): Le 3 Opzioni")
-        st.markdown("Se sei già prenotato per un turno e non puoi più partecipare, hai 3 opzioni:")
+    # Sezione 5: Richieste
+    with st.expander("📋 RICHIESTE: Materiali e Assenze", expanded=False):
         st.markdown("""
-        1.  **Cancella Prenotazione**: L'opzione più semplice. La tua prenotazione viene rimossa e il posto torna disponibile per tutti. Usala se non hai bisogno di essere sostituito.
-        2.  **📢 Pubblica in Bacheca**: Questa è l'opzione migliore se vuoi che qualcun altro prenda il tuo posto. Il tuo turno viene messo in una "bacheca" pubblica visibile a tutti. Il primo collega idoneo che lo accetta prenderà automaticamente il tuo posto e tu riceverai una notifica di conferma.
-        3.  **🔄 Chiedi Sostituzione**: Usala se vuoi chiedere a un collega specifico di sostituirti. Seleziona il nome del collega e invia la richiesta. Riceverai una notifica se accetta o rifiuta.
+        Usa questa sezione per inviare richieste formali.
+        - **Richiesta Materiali**: Compila il modulo per richiedere materiali di consumo o attrezzature. Le richieste sono visibili a tutti per trasparenza.
+        - **Richiesta Assenze**: Invia richieste di ferie o permessi. Solo gli amministratori possono vedere lo storico di queste richieste.
         """)
 
-        st.subheader("La Bacheca dei Turni (📢 Bacheca)")
-        st.markdown("""
-        Questa sotto-sezione è una bacheca pubblica dove trovi i turni che i tuoi colleghi (sia di assistenza/straordinario che di reperibilità) hanno messo a disposizione.
-        - Se vedi un turno che ti interessa e hai il ruolo richiesto, puoi cliccare su **"Prendi questo turno"**.
-        - La regola è: **"primo che arriva, primo servito"**. Se sarai il più veloce, il turno sarà tuo!
-        - Il sistema aggiornerà automaticamente il calendario e invierà le notifiche di conferma.
-        """)
-
-    # Sezione Notifiche
-    with st.expander("🔔 Notifiche"):
-        st.subheader("Come Funzionano")
-        st.markdown("""
-        L'icona della campanella in alto a destra ti mostra se hai nuove notifiche. Un numero rosso indica i messaggi non letti.
-        - Clicca sulla campanella per aprire il centro notifiche.
-        - Riceverai notifiche per:
-            - Nuovi turni disponibili.
-            - Richieste di sostituzione ricevute.
-            - Risposte alle tue richieste di sostituzione.
-            - Conferme quando un tuo turno in bacheca viene preso da un collega.
-        - Clicca sul pulsante **"letto"** per marcare una notifica come letta e farla sparire dal conteggio.
-        """)
-
-    with st.expander("🔐 Sicurezza Account e 2FA (Nuovo!)"):
+    # Sezione 6: Sicurezza
+    with st.expander("🔐 SICUREZZA: Gestione Account e 2FA", expanded=False):
         st.subheader("Impostare la Verifica in Due Passaggi (2FA)")
         st.markdown("""
-        Per aumentare la sicurezza del tuo account, al primo accesso ti verrà chiesto di configurare la verifica in due passaggi.
-        1.  **Installa un'app di Autenticazione**: Scarica sul tuo cellulare un'app come Google Authenticator, Microsoft Authenticator, o un'altra di tua scelta.
-        2.  **Configura l'Account**:
-            - **Da PC**: Apri l'app e scegli di scansionare il **QR Code** mostrato sullo schermo.
-            - **Da Cellulare**: Clicca su **"Copia Codice"** e, nella tua app di autenticazione, scegli di inserire una "chiave di configurazione" manualmente.
-        3.  **Verifica**: Inserisci il codice a 6 cifre generato dall'app per completare la configurazione.
+        Per la sicurezza del tuo account, al primo accesso ti verrà chiesto di configurare la verifica in due passaggi (2FA).
+        1.  **Installa un'app di Autenticazione** sul tuo cellulare (es. Google Authenticator, Microsoft Authenticator).
+        2.  **Scansiona il QR Code** che appare sullo schermo con la tua app.
+        3.  **Inserisci il codice** a 6 cifre generato dall'app per completare la configurazione.
 
-        D'ora in poi, dopo aver inserito la password, dovrai inserire il codice temporaneo dalla tua app per accedere.
+        D'ora in poi, per accedere dovrai inserire la tua password e il codice temporaneo dalla tua app.
         """)
         st.subheader("Cosa fare se cambi cellulare?")
-        st.warning("Se cambi cellulare o perdi accesso alla tua app di autenticazione, **contatta un amministratore**. Potrà resettare la tua configurazione 2FA e permetterti di registrarla sul nuovo dispositivo al tuo accesso successivo.")
+        st.warning("Se cambi cellulare o perdi accesso alla tua app, **contatta un amministratore**. Potrà resettare la tua configurazione 2FA e permetterti di registrarla sul nuovo dispositivo.")
 
-    # Sezione Admin (visibile solo agli admin)
+    # Sezione 7: Admin
     if ruolo == "Amministratore":
-        with st.expander("🔑 Funzionalità Amministratore"):
-            st.subheader("Dashboard Admin Riorganizzata")
+        with st.expander("👑 FUNZIONALITÀ AMMINISTRATORE", expanded=False):
+            st.subheader("Pannello di Controllo per Amministratori")
             st.markdown("""
-            La `Dashboard Admin` è stata suddivisa in due aree principali per separare le funzionalità operative da quelle puramente tecniche:
-            """)
+            Questa sezione, visibile solo a te, contiene strumenti avanzati per la gestione del team e del sistema.
 
-            st.markdown("#### 1. Dashboard Caposquadra")
-            st.markdown("""
-            Questa sezione contiene gli strumenti per la gestione quotidiana del team e delle attività:
-            - **Performance Team**: Analizza le metriche di performance dei tecnici.
-            - **Crea Nuovo Turno**: Permette di creare nuovi turni di assistenza o straordinario.
-            - **Aggiorna Report**: Sincronizza manualmente i report da Google Sheets, li visualizza e permette di modificarli e salvarli.
-            """)
+            #### Dashboard Caposquadra (Gestione Operativa)
+            - **Performance Team**: Analizza le metriche di performance dei tecnici in un dato intervallo di tempo. Seleziona un periodo e clicca "Calcola Performance". Se non ci sono dati, il sistema ti avviserà con un messaggio.
+            - **Crea Nuovo Turno**: Crea nuovi turni di assistenza o straordinario.
+            - **Gestione Dati**: Sincronizza i dati tra il file Excel di pianificazione e il database dell'app.
+            - **Validazione Report**: Revisiona, modifica e approva i report inviati dai tecnici.
 
-            st.markdown("#### 2. Dashboard Tecnica")
-            st.markdown("""
-            Questa sezione contiene gli strumenti per la gestione tecnica e la configurazione del sistema:
-            - **Gestione Account**: Per modificare utenti, resettare password e gestire i ruoli.
+            #### Dashboard Tecnica (Configurazione di Sistema)
+            - **Gestione Account**: Crea nuovi utenti, modifica ruoli e resetta password o 2FA.
             - **Cronologia Accessi**: Monitora tutti i tentativi di accesso al sistema.
-            - **Gestione IA**: Contiene le sotto-sezioni per la revisione delle conoscenze e l'aggiornamento della memoria dell'IA.
+            - **Gestione IA**: Addestra e migliora il modello di IA che assiste nella stesura dei report.
             """)
-
-    # Sezione Archivio
-    # Sezione Richieste (Nuova)
-    with st.expander("📋 Richieste"):
-        st.subheader("Come Inviare Richieste")
-        st.markdown("""
-        Questa nuova sezione è dedicata all'invio di richieste di vario tipo. È divisa in due sottomenù:
-
-        #### 1. Richiesta Materiali
-        - Usa questa sezione per richiedere materiali di consumo o attrezzature necessarie per il tuo lavoro.
-        - **Come funziona**:
-            - Vai al sottomenù **Materiali**.
-            - Scrivi un elenco dettagliato di ciò che ti serve nel campo di testo.
-            - Clicca su **"Invia Richiesta Materiali"**.
-        - **Storico**: Tutte le richieste inviate sono visibili a tutti nello storico in fondo alla pagina, per trasparenza e per evitare richieste duplicate.
-
-        #### 2. Richiesta Assenze (Ferie/Permessi)
-        - Usa questa sezione per inviare richieste di ferie o permessi (es. Legge 104).
-        - **Come funziona**:
-            - Vai al sottomenù **Assenze**.
-            - Seleziona il **tipo di assenza**.
-            - Imposta le **date di inizio e fine** del periodo di assenza.
-            - Aggiungi eventuali **note** (opzionale).
-            - Clicca su **"Invia Richiesta Assenza"**.
-        - **Privacy e Visibilità**:
-            - Tutti gli utenti possono inviare richieste.
-            - **Solo gli Amministratori** possono vedere lo storico completo di tutte le richieste di assenza inviate. Per gli altri utenti, questa sezione rimane privata.
-        """)
-
-    with st.expander("🗂️ Ricerca nell'Archivio"):
-        st.subheader("Trovare Vecchi Report")
-        st.markdown("Usa questa sezione per cercare tra tutti i report compilati in passato. Puoi filtrare per:")
-        st.markdown("""
-        - **PdL**: Per vedere tutti gli interventi su un punto specifico.
-        - **Descrizione**: Per cercare parole chiave nell'attività.
-        - **Tecnico**: Per vedere tutti i report compilati da uno o più colleghi.
-        """)
 
 
 # --- GESTIONE SESSIONE ---
