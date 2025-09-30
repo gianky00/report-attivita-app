@@ -132,17 +132,19 @@ def carica_archivio_completo():
     all_data = []
 
     sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-    # Correggo la colonna del report con quella giusta: 'STATO\nATTIVITA''
-    cols_to_extract = ['PdL', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', "STATO\nATTIVITA'"]
+    # Aggiungo la colonna IMP per il filtro
+    cols_to_extract = ['PdL', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', "STATO\nATTIVITA'", "IMP"]
 
     for sheet_name in sheets_to_read:
         try:
             df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
             df.columns = [str(col).strip() for col in df.columns]
 
-            # Assicurati che la colonna del report esista, altrimenti creala vuota
+            # Assicurati che le colonne esistano, altrimenti creale vuote per evitare errori
             if "STATO\nATTIVITA'" not in df.columns:
                 df["STATO\nATTIVITA'"] = ""
+            if "IMP" not in df.columns:
+                df["IMP"] = ""
 
             if all(col in df.columns for col in cols_to_extract):
                 df_sheet = df[cols_to_extract].copy()

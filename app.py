@@ -1393,7 +1393,29 @@ def render_situazione_impianti_tab():
         # Esempio: status_pivot = status_pivot[['IN CORSO', 'SOSPESA', 'TERMINATA']]
 
         if not status_pivot.empty:
-            st.bar_chart(status_pivot)
+            # Prepara i dati per Vega-Lite (formato lungo)
+            chart_data = status_pivot.reset_index().melt(
+                id_vars='AREA',
+                var_name='STATO_PdL',
+                value_name='Numero di Attività'
+            )
+
+            # Specifica Vega-Lite per un grafico a barre impilate senza zoom
+            vega_spec = {
+                "width": "container",
+                "mark": "bar",
+                "encoding": {
+                    "x": {"field": "AREA", "type": "nominal", "axis": {"title": "Area"}},
+                    "y": {"field": "Numero di Attività", "type": "quantitative", "axis": {"title": "Numero di Attività"}},
+                    "color": {"field": "STATO_PdL", "type": "nominal", "title": "Stato"},
+                    "tooltip": [
+                        {"field": "AREA", "type": "nominal"},
+                        {"field": "STATO_PdL", "type": "nominal"},
+                        {"field": "Numero di Attività", "type": "quantitative"}
+                    ]
+                }
+            }
+            st.vega_lite_chart(chart_data, vega_spec, use_container_width=True)
         else:
             st.info("Nessun dato per il grafico.")
     else:
@@ -1477,7 +1499,29 @@ def render_programmazione_tab():
         # Assicura l'ordine corretto dei giorni da LUN a VEN
         pivot_df = pivot_df.reindex(giorni_settimana).fillna(0)
 
-        st.bar_chart(pivot_df)
+        # Prepara i dati per Vega-Lite
+        chart_data = pivot_df.reset_index().melt(
+            id_vars='Giorno',
+            var_name='Area',
+            value_name='Numero di Attività'
+        )
+
+        # Specifica Vega-Lite
+        vega_spec = {
+            "width": "container",
+            "mark": "bar",
+            "encoding": {
+                "x": {"field": "Giorno", "type": "ordinal", "sort": giorni_settimana, "axis": {"title": "Giorno della Settimana"}},
+                "y": {"field": "Numero di Attività", "type": "quantitative", "axis": {"title": "Numero di Attività"}},
+                "color": {"field": "Area", "type": "nominal", "title": "Area"},
+                "tooltip": [
+                    {"field": "Giorno", "type": "nominal"},
+                    {"field": "Area", "type": "nominal"},
+                    {"field": "Numero di Attività", "type": "quantitative"}
+                ]
+            }
+        }
+        st.vega_lite_chart(chart_data, vega_spec, use_container_width=True)
 
     st.divider()
 
@@ -1908,11 +1952,12 @@ def main_app(matricola_utente, ruolo):
                         if stato_attuale in stati_finali:
                             continue
 
-                        gia_rendicontato = any(
-                            pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() == giorno_controllo
-                            for interv in task.get('storico', [])
+                        # Logica Falsi Positivi Avanzata: controlla se esiste un intervento successivo o uguale
+                        gia_rendicontato_dopo = any(
+                            pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= giorno_controllo
+                            for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
                         )
-                        if gia_rendicontato:
+                        if gia_rendicontato_dopo:
                             continue
 
                         task['data_attivita'] = giorno_controllo
@@ -1938,11 +1983,12 @@ def main_app(matricola_utente, ruolo):
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
                 lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
 
+                # Applica la logica dei falsi positivi anche per le attività di oggi
                 lista_attivita_filtrata = [
                     task for task in lista_attivita_raw
                     if not any(
-                        pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() == oggi
-                        for interv in task.get('storico', [])
+                        pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= oggi
+                        for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
                     )
                 ]
                 disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
