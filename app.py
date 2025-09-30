@@ -715,7 +715,7 @@ def render_turni_list(df_turni, gestionale, matricola_utente, ruolo, key_suffix)
 
                     col_yes, col_no, col_spacer = st.columns([1, 1, 2])
                     with col_yes:
-                    if st.button("✅ Sì", key=f"confirm_yes_{turno['ID_Turno']}", width='stretch'):
+                        if st.button("✅ Sì", key=f"confirm_yes_{turno['ID_Turno']}", width='stretch'):
                             success = False
                             if action_type == 'cancel':
                                 if cancella_prenotazione_logic(gestionale, matricola_utente, turno['ID_Turno']):
@@ -730,7 +730,7 @@ def render_turni_list(df_turni, gestionale, matricola_utente, ruolo, key_suffix)
                             st.session_state.confirm_action = None
                             st.rerun()
                     with col_no:
-                    if st.button("❌ No", key=f"confirm_no_{turno['ID_Turno']}", width='stretch'):
+                        if st.button("❌ No", key=f"confirm_no_{turno['ID_Turno']}", width='stretch'):
                             st.session_state.confirm_action = None
                             st.rerun()
                 else:
