@@ -7,12 +7,18 @@ import os
 # --- LOGICA DI AUDITING ---
 LOG_FILE_PATH = 'Storico_Modifiche_Turni.xlsx'
 
+def _safe_concat(df, new_row_dict):
+    """Safely concatenates a new row to a DataFrame, handling empty DFs."""
+    new_row_df = pd.DataFrame([new_row_dict])
+    if df.empty:
+        return new_row_df
+    return pd.concat([df, new_row_df], ignore_index=True)
+
 def log_shift_change(turno_id, azione, utente_originale=None, utente_subentrante=None, eseguito_da=None):
     """
     Registra una modifica a un turno in un file Excel per l'auditing.
     """
     try:
-        # Carica il file di log se esiste, altrimenti crea un nuovo DataFrame
         if os.path.exists(LOG_FILE_PATH):
             log_df = pd.read_excel(LOG_FILE_PATH)
         else:
@@ -20,8 +26,6 @@ def log_shift_change(turno_id, azione, utente_originale=None, utente_subentrante
                 'ID_Modifica', 'Timestamp', 'ID_Turno', 'Azione',
                 'UtenteOriginale', 'UtenteSubentrante', 'EseguitoDa'
             ])
-
-        # Crea la nuova voce di log
         new_log_entry = {
             'ID_Modifica': f"M_{int(datetime.datetime.now().timestamp())}",
             'Timestamp': datetime.datetime.now(),
@@ -31,9 +35,7 @@ def log_shift_change(turno_id, azione, utente_originale=None, utente_subentrante
             'UtenteSubentrante': utente_subentrante,
             'EseguitoDa': eseguito_da
         }
-
-        # Aggiungi la nuova voce e salva il file
-        log_df = pd.concat([log_df, pd.DataFrame([new_log_entry])], ignore_index=True)
+        log_df = _safe_concat(log_df, new_log_entry)
         log_df.to_excel(LOG_FILE_PATH, index=False)
         return True
     except Exception as e:
@@ -46,63 +48,58 @@ def get_oncall_team_for_date(target_date):
     """
     Calcola il team di reperibilità per una data specifica basandosi su una rotazione di 28 giorni.
     """
-    # Sequenza dei team in rotazione
     teams = [
-        ["RICIPUTO", "GUARINO"],      # Settimana 1
-        ["SPINALI", "ALLEGRETTI"],    # Settimana 2
-        ["MILLO", "GUARINO"],         # Settimana 3
-        ["TARASCIO", "PARTESANO"],    # Settimana 4
+        ["RICIPUTO", "GUARINO"],
+        ["SPINALI", "ALLEGRETTI"],
+        ["MILLO", "GUARINO"],
+        ["TARASCIO", "PARTESANO"],
     ]
-
-    # Data di riferimento da cui inizia un ciclo completo di 7 giorni del primo team (Team B)
-    # Venerdì 3 Ottobre 2025 è l'inizio di un blocco di 7 giorni per RICIPUTO-GUARINO.
-    # Inizia il 3, finisce il 9. Il 10 inizia SPINALI.
     reference_date = datetime.date(2025, 10, 3)
-
-    # Calcola i giorni trascorsi dalla data di riferimento
     delta_days = (target_date - reference_date).days
-
-    # Calcola l'indice del team nel ciclo di 28 giorni (4 team * 7 giorni)
-    # Usiamo (delta_days // 7) per trovare in quale blocco di 7 giorni cadiamo.
-    # L'operatore modulo (%) assicura che l'indice rimanga nel range 0-3.
     team_index = (delta_days // 7) % 4
-
     return teams[team_index]
 
 def sync_oncall_shifts(gestionale_data, start_date, end_date):
     """
     Sincronizza i turni di reperibilità, creandoli se non esistono.
-    Usa la logica di rotazione dinamica per determinare i team.
+    Usa la logica di rotazione dinamica e un matching flessibile dei nomi.
     """
     df_turni = gestionale_data['turni']
     df_prenotazioni = gestionale_data['prenotazioni']
     df_contatti = gestionale_data['contatti']
 
-    # Crea una mappa Cognome -> Nome Cognome per una ricerca veloce
-    surname_map = {}
-    for _, row in df_contatti.iterrows():
-        # Assicura che il nome sia una stringa valida e non vuota
-        if isinstance(row['Nome Cognome'], str) and row['Nome Cognome'].strip():
-            full_name = row['Nome Cognome'].strip()
-            surname = full_name.split()[-1].upper()
-            surname_map[surname] = full_name
+    def find_contact_by_surname(surname_to_find):
+        """Cerca il nome completo di un contatto basandosi sul cognome (case-insensitive)."""
+        if df_contatti.empty or not isinstance(surname_to_find, str):
+            return None
+
+        surname_upper = surname_to_find.upper()
+
+        # 1. Cerca una corrispondenza esatta del cognome (più affidabile)
+        for _, row in df_contatti.iterrows():
+            full_name = row.get("Nome Cognome")
+            if isinstance(full_name, str) and full_name.strip():
+                if full_name.strip().upper().split()[-1] == surname_upper:
+                    return full_name.strip()
+
+        # 2. Se non trova, prova con 'contains' come fallback
+        for _, row in df_contatti.iterrows():
+            full_name = row.get("Nome Cognome")
+            if isinstance(full_name, str) and full_name.strip():
+                if surname_upper in full_name.strip().upper():
+                    return full_name.strip()
+        return None
 
     changes_made = False
     current_date = start_date
-
     while current_date <= end_date:
-        # Controlla se un turno di reperibilità per questo giorno esiste già
-        # Converte la colonna 'Data' in solo data per il confronto
         if not df_turni[(df_turni['Tipo'] == 'Reperibilità') & (pd.to_datetime(df_turni['Data']).dt.date == current_date)].empty:
             current_date += datetime.timedelta(days=1)
             continue
-
         changes_made = True
         team_surnames = get_oncall_team_for_date(current_date)
         date_str = current_date.strftime("%Y-%m-%d")
         shift_id = f"REP_{date_str}"
-
-        # 1. Crea il nuovo turno
         new_shift = {
             'ID_Turno': shift_id,
             'Descrizione': f"Reperibilità {current_date.strftime('%d/%m/%Y')}",
@@ -113,11 +110,9 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
             'PostiAiutante': 0,
             'Tipo': 'Reperibilità'
         }
-        df_turni = pd.concat([df_turni, pd.DataFrame([new_shift])], ignore_index=True)
-
-        # 2. Crea le nuove prenotazioni
+        df_turni = _safe_concat(df_turni, new_shift)
         for surname in team_surnames:
-            full_name = surname_map.get(surname.upper())
+            full_name = find_contact_by_surname(surname)
             if full_name:
                 new_booking = {
                     'ID_Prenotazione': f"P_{shift_id}_{full_name.replace(' ', '')}",
@@ -126,17 +121,13 @@ def sync_oncall_shifts(gestionale_data, start_date, end_date):
                     'RuoloOccupato': 'Tecnico',
                     'Timestamp': datetime.datetime.now()
                 }
-                df_prenotazioni = pd.concat([df_prenotazioni, pd.DataFrame([new_booking])], ignore_index=True)
+                df_prenotazioni = _safe_concat(df_prenotazioni, new_booking)
             else:
                 st.warning(f"Attenzione: Il cognome '{surname}' dal calendario reperibilità non è stato trovato nei contatti.")
-
         current_date += datetime.timedelta(days=1)
-
-    # Aggiorna i DataFrame nel dizionario principale
     if changes_made:
         gestionale_data['turni'] = df_turni
         gestionale_data['prenotazioni'] = df_prenotazioni
-
     return changes_made
 
 
@@ -152,11 +143,11 @@ def prenota_turno_logic(gestionale_data, utente, turno_id, ruolo_scelto):
     success = False
     if ruolo_scelto == 'Tecnico' and tecnici_prenotati < posti_tecnico:
         nuova_riga = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()}
-        gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, pd.DataFrame([nuova_riga])], ignore_index=True)
+        gestionale_data['prenotazioni'] = _safe_concat(df_prenotazioni, nuova_riga)
         st.success("Turno prenotato come Tecnico!"); success = True
     elif ruolo_scelto == 'Aiutante' and aiutanti_prenotati < posti_aiutante:
         nuova_riga = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Aiutante', 'Timestamp': datetime.datetime.now()}
-        gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, pd.DataFrame([nuova_riga])], ignore_index=True)
+        gestionale_data['prenotazioni'] = _safe_concat(df_prenotazioni, nuova_riga)
         st.success("Turno prenotato come Aiutante!"); success = True
     else:
         st.error("Tutti i posti per il ruolo selezionato sono esauriti!"); return False
@@ -184,8 +175,8 @@ def cancella_prenotazione_logic(gestionale_data, utente, turno_id):
     st.error("Prenotazione non trovata."); return False
 
 def richiedi_sostituzione_logic(gestionale_data, richiedente, ricevente, turno_id):
-    nuova_richiesta = pd.DataFrame([{'ID_Richiesta': f"S_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Richiedente': richiedente, 'Ricevente': ricevente, 'Timestamp': datetime.datetime.now()}])
-    gestionale_data['sostituzioni'] = pd.concat([gestionale_data['sostituzioni'], nuova_richiesta], ignore_index=True)
+    nuova_richiesta = {'ID_Richiesta': f"S_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Richiedente': richiedente, 'Ricevente': ricevente, 'Timestamp': datetime.datetime.now()}
+    gestionale_data['sostituzioni'] = _safe_concat(gestionale_data['sostituzioni'], nuova_richiesta)
 
     messaggio = f"Hai una nuova richiesta di sostituzione da {richiedente} per il turno {turno_id}."
     crea_notifica(gestionale_data, ricevente, messaggio)
@@ -252,8 +243,8 @@ def pubblica_turno_in_bacheca_logic(gestionale_data, utente_richiedente, turno_i
 
     df_bacheca = gestionale_data.get('bacheca', pd.DataFrame(columns=['ID_Bacheca', 'ID_Turno', 'Tecnico_Originale', 'Ruolo_Originale', 'Timestamp_Pubblicazione', 'Stato', 'Tecnico_Subentrante', 'Timestamp_Assegnazione']))
     nuovo_id_bacheca = f"B_{int(datetime.datetime.now().timestamp())}"
-    nuova_voce_bacheca = pd.DataFrame([{'ID_Bacheca': nuovo_id_bacheca, 'ID_Turno': turno_id, 'Tecnico_Originale': utente_richiedente, 'Ruolo_Originale': ruolo_originale, 'Timestamp_Pubblicazione': datetime.datetime.now(), 'Stato': 'Disponibile', 'Tecnico_Subentrante': None, 'Timestamp_Assegnazione': None}])
-    gestionale_data['bacheca'] = pd.concat([df_bacheca, nuova_voce_bacheca], ignore_index=True)
+    nuova_voce_bacheca = {'ID_Bacheca': nuovo_id_bacheca, 'ID_Turno': turno_id, 'Tecnico_Originale': utente_richiedente, 'Ruolo_Originale': ruolo_originale, 'Timestamp_Pubblicazione': datetime.datetime.now(), 'Stato': 'Disponibile', 'Tecnico_Subentrante': None, 'Timestamp_Assegnazione': None}
+    gestionale_data['bacheca'] = _safe_concat(df_bacheca, nuova_voce_bacheca)
 
     log_shift_change(
         turno_id=turno_id,
@@ -298,8 +289,8 @@ def prendi_turno_da_bacheca_logic(gestionale_data, utente_subentrante, ruolo_ute
     df_bacheca.loc[idx_bacheca, 'Timestamp_Assegnazione'] = datetime.datetime.now()
 
     df_prenotazioni = gestionale_data['prenotazioni']
-    nuova_prenotazione = pd.DataFrame([{'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente_subentrante, 'RuoloOccupato': ruolo_richiesto, 'Timestamp': datetime.datetime.now()}])
-    gestionale_data['prenotazioni'] = pd.concat([df_prenotazioni, nuova_prenotazione], ignore_index=True)
+    nuova_prenotazione = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Nome Cognome': utente_subentrante, 'RuoloOccupato': ruolo_richiesto, 'Timestamp': datetime.datetime.now()}
+    gestionale_data['prenotazioni'] = _safe_concat(df_prenotazioni, nuova_prenotazione)
 
     log_shift_change(
         turno_id=turno_id,

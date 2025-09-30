@@ -4,121 +4,116 @@ import pandas as pd
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
-TABLE_NAME = "attivita_programmate"
 EXCEL_GESTIONALE = "Gestionale_Tecnici.xlsx"
 
+# Mappa Nomi Foglio Excel -> Nomi Tabella DB e Chiavi Primarie
+SHEET_TABLE_MAP = {
+    "Contatti": ("contatti", "Nome Cognome"),
+    "Turni": ("turni", "ID_Turno"),
+    "Prenotazioni": ("prenotazioni", "ID_Prenotazione"),
+    "Sostituzioni": ("sostituzioni", "ID_Richiesta"),
+    "Notifiche": ("notifiche", "ID_Notifica"),
+    "Bacheca": ("bacheca", "ID_Bacheca"),
+    "Richieste Materiali": ("richieste_materiali", "ID_Richiesta"),
+    "Richieste Assenze": ("richieste_assenze", "ID_Richiesta"),
+    "Access Logs": ("access_logs", None) # Append-only, no PK needed
+}
 
-def sincronizza_contatti_da_excel():
+def sync_excel_to_db():
     """
-    Legge i dati dal file Gestionale_Tecnici.xlsx e li sincronizza
-    con la tabella 'contatti' nel database SQLite, inserendo solo i nuovi utenti.
+    Sincronizza TUTTI i fogli del file Gestionale_Tecnici.xlsx con il database,
+    aggiornando le righe esistenti e inserendone di nuove (upsert).
     """
     if not os.path.exists(EXCEL_GESTIONALE):
-        print(f"File gestionale '{EXCEL_GESTIONALE}' non trovato. Salto la sincronizzazione dei contatti.")
+        print(f"File gestionale '{EXCEL_GESTIONALE}' non trovato. Salto la sincronizzazione.")
         return
 
     conn = None
     try:
-        # Leggi i dati da Excel, assicurandoti che tutte le colonne siano stringhe per evitare errori di tipo
-        df_excel = pd.read_excel(EXCEL_GESTIONALE, sheet_name="Contatti", dtype=str)
-        df_excel.columns = [str(col).strip() for col in df_excel.columns]
-
-        required_cols = ["Nome Cognome", "Ruolo", "Matricola"]
-        if not all(col in df_excel.columns for col in required_cols):
-            print(f"Errore: Il file Excel deve contenere le colonne {required_cols}. Sincronizzazione annullata.")
-            return
-
-        # Pulisce e prepara i dati
-        df_excel['Matricola'] = df_excel['Matricola'].str.strip()
-        df_excel.dropna(subset=['Matricola'], inplace=True)
-        df_excel = df_excel[df_excel['Matricola'] != '']
-
         conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
 
-        utenti_inseriti = 0
-        for _, row_excel in df_excel.iterrows():
-            matricola = row_excel.get('Matricola')
-            if not matricola or matricola.lower() == 'nan':
-                continue
+        with pd.ExcelFile(EXCEL_GESTIONALE) as xls:
+            for sheet_name, (table_name, pk_col) in SHEET_TABLE_MAP.items():
+                if sheet_name not in xls.sheet_names:
+                    print(f"Avviso: Foglio '{sheet_name}' non trovato in {EXCEL_GESTIONALE}. Salto.")
+                    continue
 
-            cursor.execute("SELECT Matricola FROM contatti WHERE Matricola = ?", (matricola,))
-            if cursor.fetchone() is None:
-                # L'utente non esiste, lo inseriamo
-                nome_cognome = row_excel['Nome Cognome']
-                ruolo = row_excel['Ruolo']
+                print(f"--- Inizio sincronizzazione per '{sheet_name}' -> '{table_name}' ---")
 
-                # Inseriamo None per PasswordHash e 2FA_Secret, verranno impostati al primo login
-                user_data = (nome_cognome, ruolo, None, None, matricola)
+                df = pd.read_excel(xls, sheet_name=sheet_name)
+                df.columns = [str(col).strip() for col in df.columns]
 
-                cursor.execute("""
-                    INSERT INTO contatti ("Nome Cognome", Ruolo, PasswordHash, "2FA_Secret", Matricola)
-                    VALUES (?, ?, ?, ?, ?)
-                """, user_data)
-                print(f"Nuovo utente inserito: {nome_cognome} (Matricola: {matricola})")
-                utenti_inseriti += 1
+                # Converte tutte le colonne in stringhe per evitare problemi di tipo con il DB
+                for col in df.columns:
+                    df[col] = df[col].astype(str).where(pd.notna(df[col]), None)
 
-        conn.commit()
-        print(f"Sincronizzazione dei contatti completata. {utenti_inseriti} nuovi utenti aggiunti.")
+                # Gestione speciale per la tabella contatti per il primo login e per retrocompatibilità
+                if table_name == 'contatti':
+                    # Se esiste la vecchia colonna 'Password', la rimuoviamo perché non è sicura
+                    if 'Password' in df.columns:
+                        df = df.drop(columns=['Password'])
+                    # Se non esiste la colonna 'PasswordHash', la aggiungiamo vuota
+                    if 'PasswordHash' not in df.columns:
+                        df['PasswordHash'] = None
 
-    except FileNotFoundError:
-        print(f"File '{EXCEL_GESTIONALE}' non trovato.")
+                df.to_sql(f"{table_name}_temp", conn, if_exists='replace', index=False)
+
+                cursor = conn.cursor()
+                cursor.execute(f"SELECT * FROM {table_name}_temp")
+                rows = cursor.fetchall()
+                cols = [description[0] for description in cursor.description]
+
+                if not pk_col: # Se non c'è chiave primaria, facciamo solo append
+                    df.to_sql(table_name, conn, if_exists='append', index=False)
+                    print(f"Aggiunte {len(df)} righe a '{table_name}'.")
+                else:
+                    upserted_count = 0
+                    for row in rows:
+                        row_dict = dict(zip(cols, row))
+
+                        # Costruzione dinamica della query di upsert
+                        update_clause = ", ".join([f'"{col}" = ?' for col in cols if col != pk_col])
+                        cols_clause = ", ".join([f'"{col}"' for col in cols])
+                        placeholders = ", ".join(['?'] * len(cols))
+
+                        sql = f"""
+                        INSERT INTO {table_name} ({cols_clause})
+                        VALUES ({placeholders})
+                        ON CONFLICT("{pk_col}") DO UPDATE SET
+                        {update_clause};
+                        """
+
+                        values_insert = list(row_dict.values())
+                        values_update = [v for k, v in row_dict.items() if k != pk_col]
+
+                        cursor.execute(sql, values_insert + values_update)
+                        upserted_count += 1
+
+                    print(f"Sincronizzate {upserted_count} righe per la tabella '{table_name}'.")
+
+                cursor.execute(f"DROP TABLE {table_name}_temp")
+                conn.commit()
+                print(f"--- Sincronizzazione per '{table_name}' completata ---")
+
     except Exception as e:
-        print(f"Errore durante la sincronizzazione dei contatti: {e}")
+        print(f"Errore critico durante la sincronizzazione da Excel a DB: {e}")
         if conn:
             conn.rollback()
     finally:
         if conn:
             conn.close()
 
-
-def crea_tabella():
+def crea_tabelle_se_non_esistono():
     """
-    Crea e ottimizza le tabelle del database con la nuova struttura per il sync v2.1.
-    Aggiunge la colonna 'source_sheet' per la gestione multi-foglio.
+    Crea tutte le tabelle necessarie nel database se non esistono già.
+    Questo previene la perdita di dati ma assicura che lo schema sia completo.
     """
     conn = None
     try:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
-
         cursor.execute("PRAGMA foreign_keys = ON;")
 
-        # --- TABELLA ATTIVITA' PROGRAMMATE (Schema v2.1) ---
-        cursor.execute(f"DROP TABLE IF EXISTS {TABLE_NAME}")
-
-        # Aggiunta la colonna 'source_sheet'
-        cursor.execute(f"""
-        CREATE TABLE {TABLE_NAME} (
-            PdL TEXT PRIMARY KEY NOT NULL,
-            source_sheet TEXT NOT NULL,
-            FERM TEXT,
-            MANUT TEXT,
-            PS TEXT,
-            AREA TEXT,
-            IMP TEXT,
-            DESCRIZIONE_ATTIVITA TEXT,
-            LUN TEXT,
-            MAR TEXT,
-            MER TEXT,
-            GIO TEXT,
-            VEN TEXT,
-            STATO_PdL TEXT,
-            ESE TEXT,
-            SAIT TEXT,
-            PONTEROSSO TEXT,
-            STATO_ATTIVITA TEXT,
-            DATA_CONTROLLO TEXT,
-            PERSONALE_IMPIEGATO TEXT,
-            PO TEXT,
-            AVVISO TEXT,
-            Storico TEXT,
-            row_last_modified DATETIME NOT NULL
-        );
-        """)
-        print(f"Tabella '{TABLE_NAME}' creata con il nuovo schema v2.1 (con source_sheet).")
-
-        # --- TABELLE GESTIONALI (invariate) ---
         tabelle_gestionali = {
             "contatti": """("Nome Cognome" TEXT PRIMARY KEY NOT NULL, Ruolo TEXT, PasswordHash TEXT, "Link Attività" TEXT, "2FA_Secret" TEXT, Matricola TEXT)""",
             "turni": """(ID_Turno TEXT PRIMARY KEY NOT NULL, Descrizione TEXT, Data TEXT, OrarioInizio TEXT, OrarioFine TEXT, PostiTecnico INTEGER, PostiAiutante INTEGER, Tipo TEXT)""",
@@ -133,55 +128,24 @@ def crea_tabella():
         }
 
         for nome_tabella, schema in tabelle_gestionali.items():
-            cursor.execute(f"CREATE TABLE IF NOT EXISTS {nome_tabella} {schema}")
-
-        # --- CREAZIONE INDICI PER OTTIMIZZAZIONE QUERY (Schema v2.1) ---
-        indici = {
-            "idx_attivita_sheet": f"CREATE INDEX IF NOT EXISTS idx_attivita_sheet ON {TABLE_NAME}(source_sheet);",
-            "idx_attivita_stato": f"CREATE INDEX IF NOT EXISTS idx_attivita_stato ON {TABLE_NAME}(STATO_ATTIVITA);",
-            "idx_attivita_area": f"CREATE INDEX IF NOT EXISTS idx_attivita_area ON {TABLE_NAME}(AREA);",
-            "idx_turni_tipo_data": "CREATE INDEX IF NOT EXISTS idx_turni_tipo_data ON turni(Tipo, Data);",
-            "idx_prenotazioni_turno_utente": "CREATE INDEX IF NOT EXISTS idx_prenotazioni_turno_utente ON prenotazioni(ID_Turno, \"Nome Cognome\");",
-            "idx_access_logs_timestamp": "CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp ON access_logs(timestamp);",
-            "idx_access_logs_username": "CREATE INDEX IF NOT EXISTS idx_access_logs_username ON access_logs(username);",
-            "idx_validation_sessions_user_status": "CREATE INDEX IF NOT EXISTS idx_validation_sessions_user_status ON validation_sessions(user_name, status);"
-        }
-
-        for nome_indice, statement in indici.items():
-            cursor.execute(statement)
-
-        # --- TABELLA METADATI DI SINCRONIZZAZIONE ---
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sync_metadata (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        );
-        """)
-
-        def add_column_if_not_exists(table, column, col_type):
-            cursor.execute(f"PRAGMA table_info({table})")
-            existing_columns = [info[1] for info in cursor.fetchall()]
-            if column not in existing_columns:
-                print(f"Aggiornamento schema: aggiunta colonna '{column}' a '{table}'...")
-                cursor.execute(f'ALTER TABLE {table} ADD COLUMN {column} {col_type}')
-                print("Schema aggiornato.")
-
-        add_column_if_not_exists("contatti", "Matricola", "TEXT")
+            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{nome_tabella}';")
+            if cursor.fetchone() is None:
+                print(f"Tabella '{nome_tabella}' non trovata. Creazione in corso...")
+                cursor.execute(f"CREATE TABLE {nome_tabella} {schema}")
+                print(f"Tabella '{nome_tabella}' creata.")
 
         conn.commit()
-        print(f"Database '{DB_NAME}' e tabelle ottimizzate pronti per l'uso (Schema v2.1).")
+        print("Verifica e creazione tabelle completata.")
 
     except sqlite3.Error as e:
-        print(f"Errore durante la creazione/ottimizzazione del database: {e}")
+        print(f"Errore durante la creazione/verifica delle tabelle: {e}")
     finally:
         if conn:
             conn.close()
 
 if __name__ == "__main__":
-    # La logica ora è: crea le tabelle se non esistono, poi sincronizza i contatti.
-    # Non rimuove più il DB se esiste, per preservare i dati esistenti.
     print("Avvio dello script di creazione/aggiornamento del database...")
-    crea_tabella()
-    print("\nAvvio della sincronizzazione dei contatti da Excel...")
-    sincronizza_contatti_da_excel()
+    crea_tabelle_se_non_esistono()
+    print("\nAvvio della sincronizzazione completa da Excel a DB...")
+    sync_excel_to_db()
     print("\nOperazione completata.")
