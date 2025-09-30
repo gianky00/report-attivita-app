@@ -2159,64 +2159,61 @@ def main_app(matricola_utente, ruolo):
 
         # Scheda 2: Database (precedentemente "Ricerca nell'Archivio")
         with tabs[2]:
-            st.subheader("Ricerca nel Database") # Titolo aggiornato
-            archivio_df = carica_archivio_completo()
-            if archivio_df.empty:
-                st.warning("L'archivio è vuoto o non caricabile.")
-            else:
-                ITEMS_PER_PAGE = 20
-                if 'num_items_to_show' not in st.session_state:
-                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
-                if 'last_search_filters' not in st.session_state:
-                    st.session_state.last_search_filters = (None, None, None, None)
+            from modules.db_manager import get_archive_filter_options, get_filtered_archived_activities
+            st.subheader("Ricerca nel Database")
 
-                col1, col2, col3, col4 = st.columns(4)
-                with col1: pdl_search = st.text_input("Filtra per PdL", key="pdl_search")
-                with col2: desc_search = st.text_input("Filtra per Descrizione", key="desc_search")
-                with col3:
-                    # Assicurati che la colonna 'IMP' esista prima di creare il filtro
-                    if 'IMP' in archivio_df.columns:
-                        lista_impianti = sorted(list(archivio_df['IMP'].dropna().unique()))
-                        imp_search = st.multiselect("Filtra per Impianto", options=lista_impianti, key="imp_search")
-                    else:
-                        imp_search = []
-                        st.caption("Colonna 'Impianto' non trovata.")
-                with col4:
-                    lista_tecnici = sorted(list(archivio_df['Tecnico'].dropna().unique()))
-                    tec_search = st.multiselect("Filtra per Tecnico/i", options=lista_tecnici, key="tec_search")
+            # Carica le opzioni per i filtri in modo efficiente
+            filter_options = get_archive_filter_options()
 
-                current_filters = (pdl_search, desc_search, tuple(sorted(imp_search)), tuple(sorted(tec_search)))
-                if current_filters != st.session_state.last_search_filters:
-                    st.session_state.num_items_to_show = ITEMS_PER_PAGE
-                st.session_state.last_search_filters = current_filters
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                pdl_search = st.text_input("Filtra per PdL", key="db_pdl_search")
+            with col2:
+                desc_search = st.text_input("Filtra per Descrizione", key="db_desc_search")
+            with col3:
+                imp_search = st.multiselect("Filtra per Impianto", options=filter_options['impianti'], key="db_imp_search")
+            with col4:
+                tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
 
-                risultati_df = archivio_df.copy()
-                if pdl_search: risultati_df = risultati_df[risultati_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
-                if desc_search: risultati_df = risultati_df[risultati_df['Descrizione'].astype(str).str.contains(desc_search, case=False, na=False)]
-                if imp_search: risultati_df = risultati_df[risultati_df['IMP'].isin(imp_search)]
-                if tec_search: risultati_df = risultati_df[risultati_df['Tecnico'].isin(tec_search)]
+            # Esegui la ricerca solo se almeno un filtro è attivo
+            if pdl_search or desc_search or imp_search or tec_search:
+                with st.spinner("Ricerca in corso nel database..."):
+                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search)
                 
-                if not risultati_df.empty:
-                    pdl_unici_df = risultati_df.sort_values(by='Data_Riferimento_dt', ascending=False).drop_duplicates(subset=['PdL'], keep='first')
-                    st.info(f"Trovati {len(risultati_df)} interventi, raggruppati in {len(pdl_unici_df)} PdL unici.")
+                if risultati_df.empty:
+                    st.info("Nessun record trovato per i filtri selezionati.")
+                else:
+                    st.info(f"Trovati {len(risultati_df)} PdL corrispondenti.")
 
-                    items_to_display_df = pdl_unici_df.head(st.session_state.num_items_to_show)
+                    # Usa st.session_state per la paginazione
+                    ITEMS_PER_PAGE = 20
+                    if 'db_search_page' not in st.session_state:
+                        st.session_state.db_search_page = 0
 
-                    for _, riga_pdl in items_to_display_df.iterrows():
-                        pdl_corrente = riga_pdl['PdL']
-                        descrizione_recente = riga_pdl.get('Descrizione', '')
-                        with st.expander(f"**PdL {pdl_corrente}** | *{str(descrizione_recente)[:60]}...*"):
-                            interventi_per_pdl_df = risultati_df[risultati_df['PdL'] == pdl_corrente].sort_values(by='Data_Riferimento_dt', ascending=False)
-                            visualizza_storico_organizzato(interventi_per_pdl_df.to_dict('records'), pdl_corrente)
+                    start_idx = st.session_state.db_search_page * ITEMS_PER_PAGE
+                    end_idx = start_idx + ITEMS_PER_PAGE
 
-                    total_results = len(pdl_unici_df)
-                    if st.session_state.num_items_to_show < total_results:
+                    items_to_display_df = risultati_df.iloc[start_idx:end_idx]
+
+                    for _, row in items_to_display_df.iterrows():
+                        pdl = row['PdL']
+                        impianto = row.get('IMP', 'N/D') # Usa .get per sicurezza
+                        descrizione = row.get('DESCRIZIONE_ATTIVITA', 'N/D')
+                        storico = row.get('Storico', [])
+
+                        expander_title = f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."
+                        with st.expander(expander_title):
+                            visualizza_storico_organizzato(storico, pdl)
+
+                    # Logica di paginazione
+                    total_results = len(risultati_df)
+                    if end_idx < total_results:
                         st.divider()
                         if st.button("Carica Altri Risultati..."):
-                            st.session_state.num_items_to_show += ITEMS_PER_PAGE
+                            st.session_state.db_search_page += 1
                             st.rerun()
-                else:
-                    st.info("Nessun record trovato.")
+            else:
+                st.info("Inserisci almeno un criterio per avviare la ricerca.")
 
         # Scheda 3: Gestione Turni (precedentemente indice 4)
         with tabs[3]:
