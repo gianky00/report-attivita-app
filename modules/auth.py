@@ -57,18 +57,18 @@ def authenticate_user(matricola, password, df_contatti):
         return 'FAILED', None # Utente non trovato
 
     user_row = user_row_series.iloc[0]
-    nome_completo = str(user_row['Nome Cognome']).strip()
+    # Estrai la matricola e il ruolo per coerenza nei dati restituiti
+    matricola_utente = user_row['Matricola']
     ruolo = user_row.get('Ruolo', 'Tecnico')
     password_bytes = str(password).encode('utf-8')
 
     # --- Logica di autenticazione ---
 
     # 1. Caso speciale: primo login o reset password.
-    # Controlliamo se 'PasswordHash' non esiste, è None, o una stringa vuota/whitespace.
     password_hash = user_row.get('PasswordHash')
     if pd.isna(password_hash) or not str(password_hash).strip():
-        # Questo è il primo login. L'utente ha fornito una password che dobbiamo impostare.
-        return 'FIRST_LOGIN_SETUP', (nome_completo, ruolo, password)
+        # L'utente deve impostare una nuova password. Restituisci la matricola.
+        return 'FIRST_LOGIN_SETUP', (matricola_utente, ruolo, password)
 
     # 2. Autenticazione Standard
     try:
@@ -76,16 +76,15 @@ def authenticate_user(matricola, password, df_contatti):
         if bcrypt.checkpw(password_bytes, hashed_password_bytes):
             # La password è valida, procedi alla verifica 2FA
             if '2FA_Secret' in user_row and pd.notna(user_row['2FA_Secret']) and user_row['2FA_Secret']:
-                return '2FA_REQUIRED', nome_completo
+                return '2FA_REQUIRED', matricola_utente
             else:
-                return '2FA_SETUP_REQUIRED', (nome_completo, ruolo)
+                return '2FA_SETUP_REQUIRED', (matricola_utente, ruolo)
         else:
             # La password non corrisponde all'hash
             return 'FAILED', None
     except (ValueError, TypeError):
-        # L'hash memorizzato non è valido (es. vecchio formato o corrotto)
-        # Trattiamo questo caso come un primo login per forzare il reset della password
-        return 'FIRST_LOGIN_SETUP', (nome_completo, ruolo, password)
+        # L'hash memorizzato non è valido. Forza il reset della password.
+        return 'FIRST_LOGIN_SETUP', (matricola_utente, ruolo, password)
 
 def log_access_attempt(gestionale_data, username, status):
     """

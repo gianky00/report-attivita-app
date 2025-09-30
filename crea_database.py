@@ -161,7 +161,7 @@ def sync_excel_to_db():
                         sql = f"""
                         INSERT INTO {table_name} ({cols_clause})
                         VALUES ({placeholders})
-                        ON CONFLICT("{pk_col}") DO UPDATE SET
+                        ON CONFLICT({pk_col}) DO UPDATE SET
                         {update_clause};
                         """
 
@@ -282,6 +282,23 @@ def crea_tabelle_se_non_esistono():
                 print(f"Tabella '{nome_tabella}' non trovata. Creazione in corso...")
                 cursor.execute(f"CREATE TABLE {nome_tabella} {schema}")
                 print(f"Tabella '{nome_tabella}' creata.")
+
+        # Tabella per il sincronizzatore v2
+        attivita_schema = """(
+            "PdL" TEXT PRIMARY KEY NOT NULL,
+            "FERM" TEXT, "MANUT" TEXT, "PS" TEXT, "AREA" TEXT, "IMP" TEXT,
+            "DESCRIZIONE_ATTIVITA" TEXT, "LUN" TEXT, "MAR" TEXT, "MER" TEXT,
+            "GIO" TEXT, "VEN" TEXT, "STATO_PdL" TEXT, "ESE" TEXT, "SAIT" TEXT,
+            "PONTEROSSO" TEXT, "STATO_ATTIVITA" TEXT, "DATA_CONTROLLO" TEXT,
+            "PERSONALE_IMPIEGATO" TEXT, "PO" TEXT, "AVVISO" TEXT,
+            "row_last_modified" TEXT, "source_sheet" TEXT, "Storico" TEXT
+        )"""
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='attivita_programmate';")
+        if cursor.fetchone() is None:
+            print("Tabella 'attivita_programmate' non trovata. Creazione in corso...")
+            cursor.execute(f"CREATE TABLE attivita_programmate {attivita_schema}")
+            print("Tabella 'attivita_programmate' creata.")
+
 
         conn.commit()
         print("Verifica e creazione tabelle completata.")
