@@ -1281,12 +1281,12 @@ def render_reperibilita_tab(gestionale_data, matricola_utente, ruolo_utente):
                     for _, booking in prenotazioni_today.iterrows():
                         technician_matricola = str(booking['Matricola'])
                         technician_name = matricola_to_name.get(technician_matricola, f"Matricola {technician_matricola}")
-                        surname = technician_name.split()[-1].upper()
 
                         user_details = df_contatti[df_contatti['Matricola'] == technician_matricola]
                         is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('PasswordHash'))
 
-                        display_name = f"<i>{surname} (Esterno)</i>" if is_placeholder else surname
+                        # Usa il nome completo invece del solo cognome
+                        display_name = f"<i>{technician_name} (Esterno)</i>" if is_placeholder else technician_name
                         tech_display_list.append(display_name)
 
                         if technician_matricola == str(matricola_utente):
@@ -1835,6 +1835,7 @@ def main_app(matricola_utente, ruolo):
         sync_on_call_shifts_to_db(start_date=start_sync_date, end_date=end_sync_date)
         st.session_state.oncall_synced = True
         st.toast("Calendario reperibilità sincronizzato. Ricaricamento...")
+        st.cache_data.clear() # Svuota la cache per forzare il ricaricamento dei dati
         st.rerun()
 
     if st.session_state.get('editing_turno_id'):
