@@ -2,9 +2,9 @@ import sqlite3
 import os
 import pandas as pd
 import bcrypt
+import config
 
 # --- CONFIGURAZIONE ---
-DB_NAME = "schedario.db"
 EXCEL_GESTIONALE = "Gestionale_Tecnici.xlsx"
 
 # Mappa Nomi Foglio Excel -> Nomi Tabella DB e Chiavi Primarie
@@ -47,7 +47,7 @@ def sync_excel_to_db():
 
     conn = None
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(config.DB_NAME)
 
         # --- FASE 1: Creazione mappa Nome Cognome -> Matricola ---
         print("Creazione della mappa di conversione da Nome a Matricola...")
@@ -192,7 +192,7 @@ def crea_tabelle_se_non_esistono():
     """
     conn = None
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(config.DB_NAME)
         cursor = conn.cursor()
         cursor.execute("PRAGMA foreign_keys = ON;")
 

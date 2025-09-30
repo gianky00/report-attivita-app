@@ -27,17 +27,16 @@ def carica_gestionale():
     Carica tutti i dati gestionali direttamente dal database SQLite in modo thread-safe.
     """
     import sqlite3
-    DB_NAME = "schedario.db"
 
-    if not os.path.exists(DB_NAME):
-        st.error(f"Database '{DB_NAME}' non trovato. Eseguire lo script di avvio.")
+    if not os.path.exists(config.DB_NAME):
+        st.error(f"Database '{config.DB_NAME}' non trovato. Eseguire lo script di avvio.")
         return None
 
     conn = None
     try:
         # Acquisisce il lock per prevenire la lettura durante una scrittura in background
         with config.EXCEL_LOCK:
-            conn = sqlite3.connect(DB_NAME)
+            conn = sqlite3.connect(config.DB_NAME)
 
             tabelle = [
                 "contatti", "turni", "prenotazioni", "sostituzioni",
@@ -79,10 +78,9 @@ def _save_to_db_backend(data):
     """
     import sqlite3
     import pandas as pd
-    DB_NAME = "schedario.db"
     conn = None
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(config.DB_NAME)
         with config.EXCEL_LOCK:
             for table_name, df in data.items():
                 if not isinstance(df, pd.DataFrame):
@@ -193,7 +191,7 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
 
     conn = None
     try:
-        conn = sqlite3.connect("schedario.db")
+        conn = sqlite3.connect(config.DB_NAME)
         cursor = conn.cursor()
 
         # Recupera il nome completo dalla matricola per usarlo nel report e nell'email
@@ -425,16 +423,15 @@ def carica_dati_attivita_programmate():
     """
     import sqlite3
 
-    DB_NAME = "schedario.db"
     TABLE_NAME = "attivita_programmate"
 
-    if not os.path.exists(DB_NAME):
-        st.error(f"Database '{DB_NAME}' non trovato. Eseguire lo script di avvio per crearlo e sincronizzarlo.")
+    if not os.path.exists(config.DB_NAME):
+        st.error(f"Database '{config.DB_NAME}' non trovato. Eseguire lo script di avvio per crearlo e sincronizzarlo.")
         return pd.DataFrame()
 
     conn = None
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = sqlite3.connect(config.DB_NAME)
         # Leggi tutti i dati dalla tabella e caricali in un DataFrame pandas
         df = pd.read_sql_query(f"SELECT * FROM {TABLE_NAME}", conn)
 
