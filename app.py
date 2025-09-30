@@ -273,7 +273,12 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
     
     for i, task in enumerate(attivita_da_fare):
         with st.container(border=True):
-            st.markdown(f"**PdL `{task['pdl']}`** - {task['attivita']}")
+            # Aggiungi la data se presente (per le attività recuperate)
+            date_display = ""
+            if 'data_attivita' in task:
+                date_display = f" del **{task['data_attivita'].strftime('%d/%m/%Y')}**"
+
+            st.markdown(f"**PdL `{task['pdl']}`** - {task['attivita']}{date_display}")
 
             # --- LOGICA TEAM ---
             team = task.get('team', [])
@@ -1388,17 +1393,7 @@ def render_situazione_impianti_tab():
         # Esempio: status_pivot = status_pivot[['IN CORSO', 'SOSPESA', 'TERMINATA']]
 
         if not status_pivot.empty:
-            # Creazione del grafico statico con Matplotlib
-            fig, ax = plt.subplots()
-            status_pivot.plot(kind='bar', stacked=True, ax=ax)
-            ax.set_ylabel("Numero di Attività")
-            ax.set_xlabel("Area")
-            ax.tick_params(axis='x', rotation=45)
-            ax.legend(title='Stato')
-            plt.tight_layout()
-
-            # Mostra il grafico in Streamlit
-            st.pyplot(fig)
+            st.bar_chart(status_pivot)
         else:
             st.info("Nessun dato per il grafico.")
     else:
@@ -1482,17 +1477,7 @@ def render_programmazione_tab():
         # Assicura l'ordine corretto dei giorni da LUN a VEN
         pivot_df = pivot_df.reindex(giorni_settimana).fillna(0)
 
-        # Creazione del grafico statico con Matplotlib
-        fig, ax = plt.subplots()
-        pivot_df.plot(kind='bar', stacked=True, ax=ax)
-        ax.set_ylabel("Numero di Attività")
-        ax.set_xlabel("Giorno della Settimana")
-        ax.tick_params(axis='x', rotation=0) # Mantiene le etichette orizzontali
-        ax.legend(title='Area')
-        plt.tight_layout()
-
-        # Mostra il grafico in Streamlit
-        st.pyplot(fig)
+        st.bar_chart(pivot_df)
 
     st.divider()
 
@@ -1909,61 +1894,61 @@ def main_app(matricola_utente, ruolo):
 
             pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
 
-            # Itera sugli ultimi 7 giorni
             for i in range(1, 8):
                 giorno_controllo = oggi - datetime.timedelta(days=i)
-
-                # Salta weekend se necessario (opzionale, ma buona pratica)
-                # if giorno_controllo.weekday() >= 5:
-                #     continue
-
                 attivita_del_giorno = trova_attivita(matricola_utente, giorno_controllo.day, giorno_controllo.month, giorno_controllo.year, gestionale_data['contatti'])
 
                 if attivita_del_giorno:
                     for task in attivita_del_giorno:
                         pdl = task['pdl']
-
-                        if pdl in pdl_gia_recuperati:
-                            continue
-
-                        if pdl in pdl_compilati_sessione:
+                        if pdl in pdl_gia_recuperati or pdl in pdl_compilati_sessione:
                             continue
 
                         stato_attuale = status_dict.get(pdl, 'Pianificato')
                         if stato_attuale in stati_finali:
                             continue
 
+                        gia_rendicontato = any(
+                            pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() == giorno_controllo
+                            for interv in task.get('storico', [])
+                        )
+                        if gia_rendicontato:
+                            continue
+
+                        task['data_attivita'] = giorno_controllo
                         attivita_da_recuperare.append(task)
                         pdl_gia_recuperati.add(pdl)
 
             if attivita_da_recuperare:
-                num_attivita_mancanti = len(attivita_da_recuperare)
-                st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** degli ultimi 7 giorni non compilate.")
+                st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 7 giorni non rendicontate.")
 
-        # Lista delle schede principali con i nuovi nomi e la nuova struttura
         main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
-
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
         
         tabs = st.tabs(main_tabs_list)
         
-        # Scheda 0: Attività Assegnate (modificata per aggiungere "Compila Relazione")
         with tabs[0]:
-            sub_tab_list = ["Attività di Oggi", "Attività da Recuperare (ultimi 7gg)"]
+            sub_tab_list = ["Attività di Oggi", "Recupero Attività Non rendicontate (Ultimi 7gg)"]
             if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
-
             sub_tabs = st.tabs(sub_tab_list)
 
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-                lista_attivita = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
-                disegna_sezione_attivita(lista_attivita, "today", ruolo)
+                lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+
+                lista_attivita_filtrata = [
+                    task for task in lista_attivita_raw
+                    if not any(
+                        pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() == oggi
+                        for interv in task.get('storico', [])
+                    )
+                ]
+                disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
             with sub_tabs[1]:
-                st.header("Recupero Attività Non Completate (Ultimi 7 Giorni)")
-                # La lista `attivita_da_recuperare` è già stata calcolata in precedenza
+                st.header("Recupero Attività Non Rendicontate (Ultimi 7 Giorni)")
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             # Contenuto per la nuova scheda "Compila Relazione"
