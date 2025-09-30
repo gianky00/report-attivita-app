@@ -728,7 +728,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
 
                     col_yes, col_no, col_spacer = st.columns([1, 1, 2])
                     with col_yes:
-                        if st.button("✅ Sì", key=f"confirm_yes_{turno['ID_Turno']}", use_container_width=True):
+                        if st.button("✅ Sì", key=f"confirm_yes_{turno['ID_Turno']}", width='stretch'):
                             success = False
                             if action_type == 'cancel':
                                 if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
@@ -743,7 +743,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                             st.session_state.confirm_action = None
                             st.rerun()
                     with col_no:
-                        if st.button("❌ No", key=f"confirm_no_{turno['ID_Turno']}", use_container_width=True):
+                        if st.button("❌ No", key=f"confirm_no_{turno['ID_Turno']}", width='stretch'):
                             st.session_state.confirm_action = None
                             st.rerun()
                 else:
@@ -1037,7 +1037,7 @@ def render_report_validation_tab(user_name):
             st.session_state.validation_df,
             num_rows="dynamic",
             key=f"data_editor_{session_id}",
-            use_container_width=True,
+            width='stretch',
             column_config={
                 "Report": st.column_config.TextColumn(width="large"),
                 "Descrizione": st.column_config.TextColumn(width="medium"),
@@ -1059,7 +1059,7 @@ def render_report_validation_tab(user_name):
         # Pulsanti di azione
         col1, col2, col3 = st.columns([2, 2, 5])
         with col1:
-            if st.button("✅ Valida e Salva Modifiche", type="primary", use_container_width=True):
+            if st.button("✅ Valida e Salva Modifiche", type="primary", width='stretch'):
                 with st.spinner("Salvataggio dei report validati in corso..."):
                     if process_and_commit_validated_reports(edited_df.to_dict('records')):
                         delete_validation_session(session_id)
@@ -1072,7 +1072,7 @@ def render_report_validation_tab(user_name):
                         st.error("Si è verificato un errore durante il salvataggio dei report.")
 
         with col2:
-            if st.button("❌ Cancella Sessione", use_container_width=True):
+            if st.button("❌ Cancella Sessione", width='stretch'):
                 if delete_validation_session(session_id):
                     st.info("Sessione di validazione cancellata.")
                     # Pulisci lo stato
@@ -1140,32 +1140,32 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("Invia Richiesta", key=f"swap_confirm_{shift_id_to_manage}", use_container_width=True, type="primary"):
+                    if st.button("Invia Richiesta", key=f"swap_confirm_{shift_id_to_manage}", width='stretch', type="primary"):
                         if richiedi_sostituzione_logic(gestionale_data, user_to_manage, ricevente, shift_id_to_manage):
                             salva_gestionale_async(gestionale_data)
                             del st.session_state.managing_oncall_shift_id
                             if 'oncall_swap_mode' in st.session_state: del st.session_state.oncall_swap_mode
                             st.rerun()
                 with c2:
-                    if st.button("Annulla Scambio", use_container_width=True):
+                    if st.button("Annulla Scambio", width='stretch'):
                         del st.session_state.oncall_swap_mode
                         st.rerun()
             else:
                 st.info("Cosa vuoi fare con questo turno?")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("📢 Pubblica in Bacheca", use_container_width=True):
+                    if st.button("📢 Pubblica in Bacheca", width='stretch'):
                         if pubblica_turno_in_bacheca_logic(gestionale_data, user_to_manage, shift_id_to_manage):
                             salva_gestionale_async(gestionale_data)
                             del st.session_state.managing_oncall_shift_id
                             st.rerun()
                 with col2:
-                    if st.button("🔄 Chiedi Sostituzione", use_container_width=True):
+                    if st.button("🔄 Chiedi Sostituzione", width='stretch'):
                         st.session_state.oncall_swap_mode = True
                         st.rerun()
 
             st.divider()
-            if st.button("⬅️ Torna al Calendario", key=f"cancel_manage_{shift_id_to_manage}", use_container_width=True):
+            if st.button("⬅️ Torna al Calendario", key=f"cancel_manage_{shift_id_to_manage}", width='stretch'):
                 if 'managing_oncall_shift_id' in st.session_state: del st.session_state.managing_oncall_shift_id
                 if 'managing_oncall_user' in st.session_state: del st.session_state.managing_oncall_user
                 if 'oncall_swap_mode' in st.session_state: del st.session_state.oncall_swap_mode
@@ -1197,7 +1197,7 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
     col_nav1, col_nav2, col_nav3 = st.columns([1, 5, 1])
     with col_nav1:
-        if st.button("⬅️", help="Settimana precedente", use_container_width=True):
+        if st.button("⬅️", help="Settimana precedente", width='stretch'):
             st.session_state.week_start_date -= datetime.timedelta(weeks=1)
             st.rerun()
     with col_nav2:
@@ -1212,11 +1212,11 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
             week_label += f" — {week_end.strftime('%d')} {MESI_ITALIANI[week_end.month-1]} {week_end.year}"
         st.markdown(f"<div style='text-align: center; font-weight: bold; margin-top: 8px;'>{week_label}</div>", unsafe_allow_html=True)
     with col_nav3:
-        if st.button("➡️", help="Settimana successiva", use_container_width=True):
+        if st.button("➡️", help="Settimana successiva", width='stretch'):
             st.session_state.week_start_date += datetime.timedelta(weeks=1)
             st.rerun()
 
-    if st.button("Vai a Oggi", use_container_width=True):
+    if st.button("Vai a Oggi", width='stretch'):
         st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
         st.rerun()
 
@@ -1310,7 +1310,7 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
             can_manage = (user_is_on_call or ruolo_utente == "Amministratore") and shift_id_today
             if can_manage:
-                if st.button("Gestisci", key=f"manage_{day}", use_container_width=True):
+                if st.button("Gestisci", key=f"manage_{day}", width='stretch'):
                     st.session_state.managing_oncall_shift_id = shift_id_today
                     st.session_state.managing_oncall_user = managed_user_name
                     st.rerun()
@@ -1384,7 +1384,7 @@ def render_access_logs_tab(gestionale_data):
             'status': 'Esito'
         }, inplace=True)
 
-        st.dataframe(display_df[['Data e Ora', 'Nome Utente', 'Esito']], use_container_width=True)
+        st.dataframe(display_df[['Data e Ora', 'Nome Utente', 'Esito']], width='stretch')
 
 
 def render_guida_tab(ruolo):
@@ -1823,7 +1823,7 @@ def render_programmazione_tab():
                 }
             }
 
-            st.vega_lite_chart(chart_df, vega_spec, use_container_width=True)
+            st.vega_lite_chart(chart_df, vega_spec, width='stretch')
         else:
             st.info("Nessuna attività programmata nei giorni feriali per i filtri selezionati.")
 
@@ -2302,7 +2302,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     st.info("Nessuna richiesta di materiali inviata.")
                 else:
                     df_richieste_materiali['Timestamp'] = pd.to_datetime(df_richieste_materiali['Timestamp'])
-                    st.dataframe(df_richieste_materiali.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+                    st.dataframe(df_richieste_materiali.sort_values(by="Timestamp", ascending=False), width='stretch')
 
 
             # Sottomenù Assenze
@@ -2367,7 +2367,7 @@ def main_app(nome_utente_autenticato, ruolo):
                         df_richieste_assenze['Timestamp'] = pd.to_datetime(df_richieste_assenze['Timestamp'])
                         df_richieste_assenze['Data_Inizio'] = pd.to_datetime(df_richieste_assenze['Data_Inizio']).dt.strftime('%d/%m/%Y')
                         df_richieste_assenze['Data_Fine'] = pd.to_datetime(df_richieste_assenze['Data_Fine']).dt.strftime('%d/%m/%Y')
-                        st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+                        st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), width='stretch')
 
 
         # Scheda 5: Guida
@@ -2624,6 +2624,32 @@ else:
                         st.session_state.login_state = 'setup_2fa'
                         st.session_state.temp_user_for_2fa, st.session_state.ruolo = user_data
                         st.rerun()
+
+                    elif status == "FIRST_LOGIN_SETUP":
+                        # L'utente esiste ma non ha una password. La creiamo ora.
+                        nome_completo, ruolo, password_fornita = user_data
+
+                        # Hashing della nuova password
+                        hashed_password = bcrypt.hashpw(password_fornita.encode('utf-8'), bcrypt.gensalt())
+
+                        # Aggiornamento del DataFrame in memoria
+                        user_idx = df_contatti.index[df_contatti['Nome Cognome'] == nome_completo][0]
+                        df_contatti.loc[user_idx, 'PasswordHash'] = hashed_password.decode('utf-8')
+
+                        # Salvataggio nel database
+                        if salva_gestionale_async(gestionale):
+                            st.success("Password creata con successo! Ora configura la sicurezza.")
+                            log_access_attempt(gestionale, nome_completo, "Primo login: Password creata")
+                            salva_gestionale_async(gestionale) # Salva anche il log
+
+                            # Procedi al setup della 2FA
+                            st.session_state.login_state = 'setup_2fa'
+                            st.session_state.temp_user_for_2fa = nome_completo
+                            st.session_state.ruolo = ruolo
+                            st.rerun()
+                        else:
+                            st.error("Errore critico: impossibile salvare la nuova password.")
+
                     else: # FAILED
                         log_access_attempt(gestionale, matricola_inserita, "Credenziali non valide")
                         salva_gestionale_async(gestionale)

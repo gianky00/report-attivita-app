@@ -40,53 +40,52 @@ def authenticate_user(matricola, password, df_contatti):
 
     Returns:
         tuple: (status, data) dove lo status può essere:
-               - '2FA_REQUIRED': Password corretta, serve il codice 2FA. data = nome_completo
-               - '2FA_SETUP_REQUIRED': Password corretta, serve configurare la 2FA. data = (nome_completo, ruolo)
-               - 'FAILED': Credenziali non valide. data = None
+               - 'FIRST_LOGIN_SETUP': L'utente esiste ma non ha una password. `data` = (nome_completo, ruolo, password_fornisca)
+               - '2FA_REQUIRED': Password corretta, serve il codice 2FA. `data` = nome_completo
+               - '2FA_SETUP_REQUIRED': Password corretta, serve configurare la 2FA. `data` = (nome_completo, ruolo)
+               - 'FAILED': Credenziali non valide. `data` = None
     """
     if df_contatti is None or df_contatti.empty or not matricola or not password:
         return 'FAILED', None
 
     # Cerca l'utente direttamente tramite Matricola (case-insensitive)
+    # Assicurati che la colonna Matricola sia di tipo stringa per il confronto
+    df_contatti['Matricola'] = df_contatti['Matricola'].astype(str)
     user_row_series = df_contatti[df_contatti['Matricola'].str.lower() == str(matricola).lower()]
 
     if user_row_series.empty:
         return 'FAILED', None # Utente non trovato
 
     user_row = user_row_series.iloc[0]
-
-    # --- Logica di autenticazione ---
-    password_bytes = str(password).encode('utf-8')
     nome_completo = str(user_row['Nome Cognome']).strip()
     ruolo = user_row.get('Ruolo', 'Tecnico')
+    password_bytes = str(password).encode('utf-8')
 
-    password_valid = False
+    # --- Logica di autenticazione ---
 
-    # 1. Prova con il nuovo sistema di hash
-    if 'PasswordHash' in user_row and pd.notna(user_row['PasswordHash']):
-        hashed_password_bytes = str(user_row['PasswordHash']).encode('utf-8')
+    # 1. Caso speciale: primo login o reset password.
+    # Controlliamo se 'PasswordHash' non esiste, è None, o una stringa vuota/whitespace.
+    password_hash = user_row.get('PasswordHash')
+    if pd.isna(password_hash) or not str(password_hash).strip():
+        # Questo è il primo login. L'utente ha fornito una password che dobbiamo impostare.
+        return 'FIRST_LOGIN_SETUP', (nome_completo, ruolo, password)
+
+    # 2. Autenticazione Standard
+    try:
+        hashed_password_bytes = str(password_hash).encode('utf-8')
         if bcrypt.checkpw(password_bytes, hashed_password_bytes):
-            password_valid = True
-
-    # 2. Fallback al vecchio sistema con password in chiaro
-    if not password_valid and 'Password' in user_row and pd.notna(user_row['Password']):
-        if str(password) == str(user_row['Password']):
-            password_valid = True
-
-    if not password_valid:
-        return 'FAILED', None
-
-    # --- Gestione 2FA ---
-    # Se la password è valida, controlla se la 2FA è configurata.
-    if '2FA_Secret' in user_row and pd.notna(user_row['2FA_Secret']) and user_row['2FA_Secret']:
-        # Se la 2FA è già configurata, non restituiamo ancora SUCCESS.
-        # Il flusso principale gestirà la verifica del codice 2FA.
-        return '2FA_REQUIRED', nome_completo
-    else:
-        # Se la 2FA non è configurata, l'utente deve impostarla.
-        # Ma se la password è corretta, questo è un "successo parziale".
-        # Il flusso principale gestirà la configurazione.
-        return '2FA_SETUP_REQUIRED', (nome_completo, ruolo)
+            # La password è valida, procedi alla verifica 2FA
+            if '2FA_Secret' in user_row and pd.notna(user_row['2FA_Secret']) and user_row['2FA_Secret']:
+                return '2FA_REQUIRED', nome_completo
+            else:
+                return '2FA_SETUP_REQUIRED', (nome_completo, ruolo)
+        else:
+            # La password non corrisponde all'hash
+            return 'FAILED', None
+    except (ValueError, TypeError):
+        # L'hash memorizzato non è valido (es. vecchio formato o corrotto)
+        # Trattiamo questo caso come un primo login per forzare il reset della password
+        return 'FIRST_LOGIN_SETUP', (nome_completo, ruolo, password)
 
 def log_access_attempt(gestionale_data, username, status):
     """
