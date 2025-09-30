@@ -7,35 +7,53 @@ TABLE_NAME = "attivita_programmate"
 
 def crea_tabella():
     """
-    Crea e ottimizza le tabelle del database con chiavi esterne e indici.
-    La funzione è idempotente: non farà nulla se le tabelle esistono già.
+    Crea e ottimizza le tabelle del database con la nuova struttura per il sync v2.0.
+    La funzione è idempotente.
     """
     conn = None
     try:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
 
-        # Abilita il supporto per le chiavi esterne, essenziale per l'integrità dei dati
+        # Abilita il supporto per le chiavi esterne
         cursor.execute("PRAGMA foreign_keys = ON;")
 
-        # --- TABELLA ATTIVITA' PROGRAMMATE ---
+        # --- TABELLA ATTIVITA' PROGRAMMATE (Schema v2.0) ---
+        # Dropping the old table to ensure the new schema with PRIMARY KEY is applied correctly.
+        # This is safe because the data will be re-synced from the Excel file.
+        cursor.execute(f"DROP TABLE IF EXISTS {TABLE_NAME}")
+
+        # New schema based on validated Excel headers
         cursor.execute(f"""
-        CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            PdL TEXT NOT NULL,
-            Impianto TEXT,
-            Descrizione TEXT,
-            Stato_OdL TEXT,
-            Lunedì TEXT, Martedì TEXT, Mercoledì TEXT, Giovedì TEXT, Venerdì TEXT,
-            TCL TEXT,
-            Area TEXT,
-            GiorniProgrammati TEXT,
-            Stato TEXT,
-            Storico TEXT
+        CREATE TABLE {TABLE_NAME} (
+            PdL TEXT PRIMARY KEY NOT NULL,
+            FERM TEXT,
+            MANUT TEXT,
+            PS TEXT,
+            AREA TEXT,
+            IMP TEXT,
+            DESCRIZIONE_ATTIVITA TEXT,
+            LUN TEXT,
+            MAR TEXT,
+            MER TEXT,
+            GIO TEXT,
+            VEN TEXT,
+            STATO_PdL TEXT,
+            ESE TEXT,
+            SAIT TEXT,
+            PONTEROSSO TEXT,
+            STATO_ATTIVITA TEXT,
+            DATA_CONTROLLO TEXT,
+            PERSONALE_IMPIEGATO TEXT,
+            PO TEXT,
+            AVVISO TEXT,
+            Storico TEXT,
+            row_last_modified DATETIME NOT NULL
         );
         """)
+        print(f"Tabella '{TABLE_NAME}' creata con il nuovo schema v2.0.")
 
-        # --- TABELLE GESTIONALI CON VINCOLI ---
+        # --- TABELLE GESTIONALI (invariate) ---
         tabelle_gestionali = {
             "contatti": """(
                 "Nome Cognome" TEXT PRIMARY KEY NOT NULL,
@@ -132,11 +150,11 @@ def crea_tabella():
         for nome_tabella, schema in tabelle_gestionali.items():
             cursor.execute(f"CREATE TABLE IF NOT EXISTS {nome_tabella} {schema}")
 
-        # --- CREAZIONE INDICI PER OTTIMIZZAZIONE QUERY ---
+        # --- CREAZIONE INDICI PER OTTIMIZZAZIONE QUERY (Schema v2.0) ---
+        # L'indice su PdL non è più necessario perché è la PRIMARY KEY.
         indici = {
-            "idx_attivita_pdl": f"CREATE INDEX IF NOT EXISTS idx_attivita_pdl ON {TABLE_NAME}(PdL);",
-            "idx_attivita_stato": f"CREATE INDEX IF NOT EXISTS idx_attivita_stato ON {TABLE_NAME}(Stato);",
-            "idx_attivita_area_tcl": f"CREATE INDEX IF NOT EXISTS idx_attivita_area_tcl ON {TABLE_NAME}(Area, TCL);",
+            "idx_attivita_stato": f"CREATE INDEX IF NOT EXISTS idx_attivita_stato ON {TABLE_NAME}(STATO_ATTIVITA);",
+            "idx_attivita_area": f"CREATE INDEX IF NOT EXISTS idx_attivita_area ON {TABLE_NAME}(AREA);",
             "idx_turni_tipo_data": "CREATE INDEX IF NOT EXISTS idx_turni_tipo_data ON turni(Tipo, Data);",
             "idx_prenotazioni_turno_utente": "CREATE INDEX IF NOT EXISTS idx_prenotazioni_turno_utente ON prenotazioni(ID_Turno, \"Nome Cognome\");",
             "idx_access_logs_timestamp": "CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp ON access_logs(timestamp);",
@@ -155,7 +173,9 @@ def crea_tabella():
         );
         """)
 
-        # --- SCHEMA MIGRATION ---
+        # --- SCHEMA MIGRATION (pulizia) ---
+        # La vecchia colonna 'db_last_modified' non è più necessaria.
+        # La logica di migrazione per 'Matricola' è ancora utile.
         def add_column_if_not_exists(table, column, col_type):
             cursor.execute(f"PRAGMA table_info({table})")
             existing_columns = [info[1] for info in cursor.fetchall()]
@@ -165,10 +185,9 @@ def crea_tabella():
                 print("Schema aggiornato.")
 
         add_column_if_not_exists("contatti", "Matricola", "TEXT")
-        add_column_if_not_exists(TABLE_NAME, "db_last_modified", "TEXT")
 
         conn.commit()
-        print(f"Database '{DB_NAME}' e tabelle ottimizzate pronti per l'uso.")
+        print(f"Database '{DB_NAME}' e tabelle ottimizzate pronti per l'uso (Schema v2.0).")
 
     except sqlite3.Error as e:
         print(f"Errore durante la creazione/ottimizzazione del database: {e}")
@@ -177,4 +196,8 @@ def crea_tabella():
             conn.close()
 
 if __name__ == "__main__":
+    # Rimuove il vecchio database per forzare la ricreazione con il nuovo schema.
+    if os.path.exists(DB_NAME):
+        print(f"Rimozione del database esistente '{DB_NAME}' per applicare il nuovo schema.")
+        os.remove(DB_NAME)
     crea_tabella()
