@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import pandas as pd
+import bcrypt
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
@@ -18,6 +19,22 @@ SHEET_TABLE_MAP = {
     "Richieste Assenze": ("richieste_assenze", "ID_Richiesta"),
     "Access Logs": ("access_logs", None) # Append-only, no PK needed
 }
+
+def is_valid_bcrypt_hash(h):
+    """
+    Verifica se una stringa è un hash bcrypt valido strutturalmente.
+    Questo non garantisce che sia stato generato da bcrypt, ma esclude
+    dati palesemente non validi come 'vuoto', ' ', o None.
+    """
+    if not isinstance(h, str):
+        return False
+    # I prefissi validi per bcrypt
+    if not (h.startswith('$2a$') or h.startswith('$2b$') or h.startswith('$2y$')):
+        return False
+    # Un hash bcrypt ha una lunghezza standard di 60 caratteri
+    if len(h) != 60:
+        return False
+    return True
 
 def sync_excel_to_db():
     """
@@ -47,14 +64,23 @@ def sync_excel_to_db():
                 for col in df.columns:
                     df[col] = df[col].astype(str).where(pd.notna(df[col]), None)
 
-                # Gestione speciale per la tabella contatti per il primo login e per retrocompatibilità
+                # Gestione speciale per la tabella contatti per pulire i dati delle password
                 if table_name == 'contatti':
                     # Se esiste la vecchia colonna 'Password', la rimuoviamo perché non è sicura
                     if 'Password' in df.columns:
-                        df = df.drop(columns=['Password'])
+                        df = df.drop(columns=['Password'], errors='ignore')
+
                     # Se non esiste la colonna 'PasswordHash', la aggiungiamo vuota
                     if 'PasswordHash' not in df.columns:
                         df['PasswordHash'] = None
+                    else:
+                        # Pulisce e valida la colonna PasswordHash: qualsiasi valore non valido
+                        # viene impostato a None per forzare il setup al primo login.
+                        print("Validazione degli hash delle password...")
+                        df['PasswordHash'] = df['PasswordHash'].apply(
+                            lambda h: h if is_valid_bcrypt_hash(h) else None
+                        )
+                        print("Validazione completata.")
 
                 df.to_sql(f"{table_name}_temp", conn, if_exists='replace', index=False)
 
