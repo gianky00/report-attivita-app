@@ -1640,6 +1640,8 @@ def main_app(matricola_utente, ruolo):
 
     gestionale_data = carica_gestionale()
     df_contatti = gestionale_data['contatti']
+    # Assicura che la matricola sia sempre una stringa per evitare errori di lookup
+    df_contatti['Matricola'] = df_contatti['Matricola'].astype(str)
 
     # Ottieni il nome utente dalla matricola
     user_info = df_contatti[df_contatti['Matricola'] == str(matricola_utente)]
