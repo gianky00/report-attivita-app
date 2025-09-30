@@ -1323,6 +1323,167 @@ def render_reperibilita_tab(gestionale_data, matricola_utente, ruolo_utente):
                     st.rerun()
 
 
+def render_situazione_impianti_tab():
+    st.header("Controllo Generale Attività")
+    st.info("Questa sezione fornisce una visione aggregata dello stato di avanzamento di tutte le attività programmate.")
+
+    df = carica_dati_attivita_programmate()
+
+    if df.empty:
+        st.warning("Nessun dato sulle attività programmate trovato nel database.")
+        return
+
+    # --- Filtri ---
+    st.subheader("Filtra Dati")
+    col1, col2 = st.columns(2)
+
+    aree_disponibili = sorted(df['AREA'].dropna().unique()) if 'AREA' in df.columns else []
+    stati_disponibili = sorted(df['STATO_ATTIVITA'].dropna().unique()) if 'STATO_ATTIVITA' in df.columns else []
+
+    with col1:
+        default_aree = aree_disponibili
+        aree_selezionate = st.multiselect("Filtra per Area", options=aree_disponibili, default=default_aree, key="area_filter_situazione")
+
+    with col2:
+        default_stati = stati_disponibili
+        stati_selezionati = st.multiselect("Filtra per Stato", options=stati_disponibili, default=default_stati)
+
+    # Applica filtri
+    filtered_df = df.copy()
+    if aree_selezionate:
+        filtered_df = filtered_df[filtered_df['AREA'].isin(aree_selezionate)]
+    if stati_selezionati:
+        filtered_df = filtered_df[filtered_df['STATO_ATTIVITA'].isin(stati_selezionati)]
+
+
+    st.divider()
+
+    if filtered_df.empty:
+        st.info("Nessuna attività corrisponde ai filtri selezionati.")
+        return
+
+    # --- Metriche ---
+    st.subheader("Metriche di Riepilogo")
+    total_activities = len(filtered_df)
+    completed_activities = len(filtered_df[filtered_df['STATO_ATTIVITA'] == 'TERMINATA'])
+    pending_activities = total_activities - completed_activities
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Totale Attività", total_activities)
+    c2.metric("Attività Completate", completed_activities)
+    c3.metric("Attività da Completare", pending_activities)
+
+    # --- Grafici ---
+    st.subheader("Visualizzazione Dati")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### Stato Attività")
+        if 'STATO_ATTIVITA' in filtered_df.columns:
+            status_counts = filtered_df['STATO_ATTIVITA'].value_counts()
+            if not status_counts.empty:
+                fig, ax = plt.subplots()
+                ax.pie(status_counts, labels=status_counts.index, autopct='%1.1f%%', startangle=90)
+                ax.axis('equal')
+                st.pyplot(fig)
+            else:
+                st.info("Nessun dato per il grafico dello stato.")
+        else:
+            st.info("Colonna 'STATO_ATTIVITA' non trovata.")
+
+    with col2:
+        st.markdown("#### Attività per Area")
+        if 'AREA' in filtered_df.columns:
+            area_counts = filtered_df['AREA'].value_counts()
+            if not area_counts.empty:
+                st.bar_chart(area_counts)
+            else:
+                st.info("Nessun dato per il grafico dell'area.")
+        else:
+            st.info("Colonna 'AREA' non trovata.")
+
+    st.divider()
+
+    # --- Tabella Dati ---
+    st.subheader("Dettaglio Attività Filtrate")
+    st.dataframe(filtered_df)
+
+
+def render_programmazione_tab():
+    st.header("Pianificazione Dettagliata Attività")
+    st.info("Consulta il dettaglio delle singole attività programmate, filtra per trovare attività specifiche e visualizza lo storico degli interventi.")
+
+    df = carica_dati_attivita_programmate()
+
+    if df.empty:
+        st.warning("Nessun dato sulle attività programmate trovato nel database.")
+        return
+
+    # --- Filtri ---
+    st.subheader("Filtra Attività")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        pdl_search = st.text_input("Cerca per PdL")
+
+    with col2:
+        aree_disponibili = sorted(df['AREA'].dropna().unique()) if 'AREA' in df.columns else []
+        area_selezionata = st.multiselect("Filtra per Area", options=aree_disponibili, default=aree_disponibili, key="area_filter_programmazione")
+
+    with col3:
+        giorni_settimana = ["LUN", "MAR", "MER", "GIO", "VEN"]
+        giorni_selezionati = st.multiselect("Filtra per Giorno", options=giorni_settimana, default=giorni_settimana)
+
+    # Applica filtri
+    filtered_df = df.copy()
+    if pdl_search:
+        filtered_df = filtered_df[filtered_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
+    if area_selezionata:
+        filtered_df = filtered_df[filtered_df['AREA'].isin(area_selezionata)]
+    if giorni_selezionati:
+        mask = pd.Series([False] * len(filtered_df), index=filtered_df.index)
+        for giorno in giorni_selezionati:
+            if giorno in filtered_df.columns:
+                mask |= (filtered_df[giorno].str.lower() == 'x')
+        filtered_df = filtered_df[mask]
+
+    st.divider()
+
+    if filtered_df.empty:
+        st.info("Nessuna attività corrisponde ai filtri selezionati.")
+        return
+
+    # --- Grafico Carico di Lavoro ---
+    st.subheader("Carico di Lavoro per Area")
+    if 'AREA' in filtered_df.columns:
+        area_counts = filtered_df['AREA'].value_counts()
+        if not area_counts.empty:
+            st.bar_chart(area_counts)
+        else:
+            st.info("Nessun dato per il grafico del carico di lavoro.")
+
+    st.divider()
+
+    # --- Dettaglio Attività (Card) ---
+    st.subheader("Dettaglio Attività")
+    for index, row in filtered_df.iterrows():
+        with st.container(border=True):
+            pdl = row.get('PdL', 'N/D')
+            descrizione = row.get('DESCRIZIONE_ATTIVITA', 'N/D')
+            area = row.get('AREA', 'N/D')
+            stato = row.get('STATO_ATTIVITA', 'N/D')
+
+            st.markdown(f"**PdL `{pdl}`** - {descrizione}")
+            st.caption(f"Area: {area} | Stato: {stato}")
+
+            # Storico
+            storico_list = row.get('Storico', [])
+            if storico_list:
+                visualizza_storico_organizzato(storico_list, pdl)
+            else:
+                st.markdown("*Nessuno storico disponibile per questo PdL.*")
+
+
 # La funzione render_update_reports_tab è stata integrata direttamente
 # nella dashboard dell'amministratore per una maggiore chiarezza e per
 # riflettere il nuovo flusso di dati bidirezionale.
@@ -1640,6 +1801,8 @@ def main_app(matricola_utente, ruolo):
 
     gestionale_data = carica_gestionale()
     df_contatti = gestionale_data['contatti']
+    # Assicura che la matricola sia sempre una stringa per evitare errori di lookup
+    df_contatti['Matricola'] = df_contatti['Matricola'].astype(str)
 
     # Ottieni il nome utente dalla matricola
     user_info = df_contatti[df_contatti['Matricola'] == str(matricola_utente)]
@@ -1712,7 +1875,7 @@ def main_app(matricola_utente, ruolo):
                 stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
                 status_dict = {}
                 if not dati_programmati_df.empty:
-                    status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
+                    status_dict = dati_programmati_df.set_index('PdL')['STATO_ATTIVITA'].to_dict()
 
                 pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
 
@@ -2397,6 +2560,8 @@ else:
         st.stop()
 
     df_contatti = gestionale['contatti']
+    # Assicura che la matricola sia una stringa per tutta la logica di login/2FA
+    df_contatti['Matricola'] = df_contatti['Matricola'].astype(str)
 
     if st.session_state.login_state == 'password':
         with st.form("login_form"):
@@ -2410,40 +2575,42 @@ else:
                 else:
                     status, user_data = authenticate_user(matricola_inserita, password_inserita, df_contatti)
 
-                    # user_data ora contiene la MATRICOLA, non il nome
+                    # user_data ora contiene il nome_completo, non la matricola.
+                    # Usiamo la matricola_inserita, che è stata validata, per il session_state.
                     if status == "2FA_REQUIRED":
                         log_access_attempt(gestionale, matricola_inserita, "Password corretta, 2FA richiesta")
                         salva_gestionale_async(gestionale)
                         st.session_state.login_state = 'verify_2fa'
-                        st.session_state.temp_user_for_2fa = user_data # Salva la matricola
+                        st.session_state.temp_user_for_2fa = matricola_inserita # Salva la matricola
                         st.rerun()
                     elif status == "2FA_SETUP_REQUIRED":
                         log_access_attempt(gestionale, matricola_inserita, "Password corretta, setup 2FA richiesto")
                         salva_gestionale_async(gestionale)
                         st.session_state.login_state = 'setup_2fa'
-                        st.session_state.temp_user_for_2fa, st.session_state.ruolo = user_data # Salva (matricola, ruolo)
+                        _, st.session_state.ruolo = user_data # user_data è (nome_completo, ruolo)
+                        st.session_state.temp_user_for_2fa = matricola_inserita # Salva la matricola
                         st.rerun()
 
                     elif status == "FIRST_LOGIN_SETUP":
                         # L'utente esiste ma non ha una password. La creiamo ora.
-                        matricola_utente, ruolo, password_fornita = user_data
+                        nome_completo, ruolo, password_fornita = user_data
 
                         # Hashing della nuova password
                         hashed_password = bcrypt.hashpw(password_fornita.encode('utf-8'), bcrypt.gensalt())
 
-                        # Aggiornamento del DataFrame in memoria
-                        user_idx = df_contatti.index[df_contatti['Matricola'] == str(matricola_utente)][0]
+                        # Aggiornamento del DataFrame in memoria usando la matricola inserita
+                        user_idx = df_contatti.index[df_contatti['Matricola'] == str(matricola_inserita)][0]
                         df_contatti.loc[user_idx, 'PasswordHash'] = hashed_password.decode('utf-8')
 
                         # Salvataggio nel database
                         if salva_gestionale_async(gestionale):
                             st.success("Password creata con successo! Ora configura la sicurezza.")
-                            log_access_attempt(gestionale, matricola_utente, "Primo login: Password creata")
+                            log_access_attempt(gestionale, matricola_inserita, "Primo login: Password creata")
                             salva_gestionale_async(gestionale) # Salva anche il log
 
                             # Procedi al setup della 2FA
                             st.session_state.login_state = 'setup_2fa'
-                            st.session_state.temp_user_for_2fa = matricola_utente
+                            st.session_state.temp_user_for_2fa = matricola_inserita
                             st.session_state.ruolo = ruolo
                             st.rerun()
                         else:
