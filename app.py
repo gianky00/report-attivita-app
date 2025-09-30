@@ -2624,6 +2624,31 @@ else:
                         st.session_state.login_state = 'setup_2fa'
                         st.session_state.temp_user_for_2fa, st.session_state.ruolo = user_data
                         st.rerun()
+                    elif status == "FIRST_LOGIN_SETUP":
+                        # L'utente esiste ma non ha una password. La creiamo ora.
+                        nome_completo, ruolo, password_fornita = user_data
+
+                        # Hashing della nuova password
+                        hashed_password = bcrypt.hashpw(password_fornita.encode('utf-8'), bcrypt.gensalt())
+
+                        # Aggiornamento del DataFrame
+                        user_idx = df_contatti[df_contatti['Nome Cognome'] == nome_completo].index[0]
+                        df_contatti.loc[user_idx, 'PasswordHash'] = hashed_password.decode('utf-8')
+
+                        # Salvataggio del file Excel
+                        if salva_gestionale_async(gestionale):
+                            st.success("Password creata con successo! Ora configura la sicurezza.")
+                            log_access_attempt(gestionale, nome_completo, "Primo login: Password creata")
+                            salva_gestionale_async(gestionale) # Salva anche il log
+
+                            # Procedi al setup della 2FA
+                            st.session_state.login_state = 'setup_2fa'
+                            st.session_state.temp_user_for_2fa = nome_completo
+                            st.session_state.ruolo = ruolo
+                            st.rerun()
+                        else:
+                            st.error("Errore critico: impossibile salvare la nuova password.")
+
                     else: # FAILED
                         log_access_attempt(gestionale, matricola_inserita, "Credenziali non valide")
                         salva_gestionale_async(gestionale)
