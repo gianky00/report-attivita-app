@@ -1,13 +1,13 @@
-2025-09-30 14:06:40,284 - INFO - Lock file created.
-2025-09-30 14:06:40,284 - INFO - --- Inizio Sincronizzazione v2.2 ---
-2025-09-30 14:06:40,285 - INFO - Inizio caricamento dai fogli: ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-2025-09-30 14:06:41,197 - INFO - Letto 268 righe dal foglio 'A1'.
-2025-09-30 14:06:42,528 - INFO - Letto 175 righe dal foglio 'A2'.
-2025-09-30 14:06:43,388 - INFO - Letto 440 righe dal foglio 'A3'.
-2025-09-30 14:06:44,084 - INFO - Letto 27 righe dal foglio 'CTE'.
-2025-09-30 14:06:44,847 - INFO - Letto 179 righe dal foglio 'BLENDING'.
-2025-09-30 14:06:44,852 - WARNING - Trovati 2 PdL duplicati. Verrï¿½ mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
-2025-09-30 14:06:44,857 - ERROR - Errore caricamento dati dal DB: Execution failed on sql 'SELECT * FROM attivita_programmate': no such table: attivita_programmate
+2025-09-30 14:20:46,607 - INFO - Lock file created.
+2025-09-30 14:20:46,607 - INFO - --- Inizio Sincronizzazione v2.2 ---
+2025-09-30 14:20:46,607 - INFO - Inizio caricamento dai fogli: ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
+2025-09-30 14:20:47,372 - INFO - Letto 268 righe dal foglio 'A1'.
+2025-09-30 14:20:48,103 - INFO - Letto 175 righe dal foglio 'A2'.
+2025-09-30 14:20:49,795 - INFO - Letto 440 righe dal foglio 'A3'.
+2025-09-30 14:20:51,393 - INFO - Letto 27 righe dal foglio 'CTE'.
+2025-09-30 14:20:52,240 - INFO - Letto 179 righe dal foglio 'BLENDING'.
+2025-09-30 14:20:52,245 - WARNING - Trovati 2 PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
+2025-09-30 14:20:52,251 - ERROR - Errore caricamento dati dal DB: Execution failed on sql 'SELECT * FROM attivita_programmate': no such table: attivita_programmate
 Traceback (most recent call last):
   File "C:\Users\Coemi\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\io\sql.py", line 2664, in execute
     cur.execute(sql, *args)
@@ -35,4 +35,4 @@ Traceback (most recent call last):
   File "C:\Users\Coemi\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\io\sql.py", line 2676, in execute
     raise ex from exc
 pandas.errors.DatabaseError: Execution failed on sql 'SELECT * FROM attivita_programmate': no such table: attivita_programmate
-2025-09-30 14:06:44,860 - INFO - Lock file removed.
+2025-09-30 14:20:52,254 - INFO - Lock file removed.
