@@ -43,8 +43,8 @@ from modules.db_manager import (
     process_and_commit_validated_reports
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
+from modules.shift_generator import sync_on_call_shifts_to_db
 from modules.shift_management import (
-    sync_oncall_shifts,
     log_shift_change,
     prenota_turno_logic,
     cancella_prenotazione_logic,
@@ -589,6 +589,10 @@ def render_edit_shift_form(gestionale_data):
         df_turni.loc[df_turni['ID_Turno'] == turno_id, 'PostiTecnico'] = posti_tech
         df_turni.loc[df_turni['ID_Turno'] == turno_id, 'PostiAiutante'] = posti_aiut
         df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Tipo'] = tipo_turno
+
+        # Se un turno di reperibilità viene modificato, marchialo come manuale
+        if tipo_turno == 'Reperibilità':
+            df_turni.loc[df_turni['ID_Turno'] == turno_id, 'is_manually_modified'] = 1
 
         # 2. Calcola le modifiche al personale e registra i log
         personale_originale = set(personale_nel_turno['Matricola'].tolist())
@@ -1823,14 +1827,15 @@ def main_app(matricola_utente, ruolo):
 
     # Sincronizza automaticamente i turni di reperibilità all'avvio
     today = datetime.date.today()
-    start_sync_date = today.replace(day=1)
-    # Calcola una finestra di sincronizzazione di circa 2 mesi (mese corrente + prossimo)
-    end_sync_date = (start_sync_date + datetime.timedelta(days=35)).replace(day=1) + datetime.timedelta(days=31)
+    # Sincronizza una finestra di 3 mesi per garantire che ci siano sempre dati disponibili
+    start_sync_date = today - datetime.timedelta(days=30)
+    end_sync_date = today + datetime.timedelta(days=60)
 
-    if sync_oncall_shifts(gestionale_data, start_date=start_sync_date, end_date=end_sync_date):
-        # Se sono stati aggiunti nuovi turni, salva il file gestionale
-        salva_gestionale_async(gestionale_data)
-        st.toast("Calendario reperibilità sincronizzato.")
+    if 'oncall_synced' not in st.session_state:
+        sync_on_call_shifts_to_db(start_date=start_sync_date, end_date=end_sync_date)
+        st.session_state.oncall_synced = True
+        st.toast("Calendario reperibilità sincronizzato. Ricaricamento...")
+        st.rerun()
 
     if st.session_state.get('editing_turno_id'):
         render_edit_shift_form(gestionale_data)

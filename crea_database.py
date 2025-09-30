@@ -205,7 +205,7 @@ def crea_tabelle_se_non_esistono():
                 "Link Attività" TEXT,
                 "2FA_Secret" TEXT
             )""",
-            "turni": """(ID_Turno TEXT PRIMARY KEY NOT NULL, Descrizione TEXT, Data TEXT, OrarioInizio TEXT, OrarioFine TEXT, PostiTecnico INTEGER, PostiAiutante INTEGER, Tipo TEXT)""",
+            "turni": """(ID_Turno TEXT PRIMARY KEY NOT NULL, Descrizione TEXT, Data TEXT, OrarioInizio TEXT, OrarioFine TEXT, PostiTecnico INTEGER, PostiAiutante INTEGER, Tipo TEXT, is_manually_modified INTEGER DEFAULT 0)""",
             "prenotazioni": """(
                 ID_Prenotazione TEXT PRIMARY KEY NOT NULL,
                 ID_Turno TEXT NOT NULL,
@@ -307,6 +307,14 @@ def crea_tabelle_se_non_esistono():
                 print("Aggiunta della colonna 'db_last_modified' alla tabella esistente...")
                 cursor.execute("ALTER TABLE attivita_programmate ADD COLUMN db_last_modified TEXT;")
                 print("Colonna 'db_last_modified' aggiunta.")
+
+        # Logica di migrazione per aggiungere colonne mancanti
+        cursor.execute("PRAGMA table_info(turni)")
+        columns = [info[1] for info in cursor.fetchall()]
+        if 'is_manually_modified' not in columns:
+            print("Aggiunta della colonna 'is_manually_modified' alla tabella esistente 'turni'...")
+            cursor.execute("ALTER TABLE turni ADD COLUMN is_manually_modified INTEGER DEFAULT 0;")
+            print("Colonna 'is_manually_modified' aggiunta.")
 
         conn.commit()
         print("Verifica e creazione tabelle completata.")
