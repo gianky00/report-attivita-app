@@ -8,7 +8,8 @@ import sys
 # Assicurati di aver creato un file 'secrets.toml' a partire da 'secrets.toml.example'.
 
 try:
-    secrets = toml.load("secrets.toml")
+    # Percorso unificato per la configurazione, standard per Streamlit
+    secrets = toml.load(".streamlit/secrets.toml")
 except FileNotFoundError:
     # Termina l'applicazione se il file di configurazione essenziale non è presente.
     # In un ambiente Streamlit, st.error() sarebbe meglio, ma questo file viene
