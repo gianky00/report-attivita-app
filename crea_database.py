@@ -118,6 +118,14 @@ def crea_tabella():
                 timestamp TEXT,
                 username TEXT,
                 status TEXT
+            )""",
+            "validation_sessions": """(
+                session_id TEXT PRIMARY KEY NOT NULL,
+                user_name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                data TEXT NOT NULL,
+                status TEXT NOT NULL,
+                FOREIGN KEY (user_name) REFERENCES contatti("Nome Cognome") ON DELETE CASCADE
             )"""
         }
 
@@ -132,7 +140,8 @@ def crea_tabella():
             "idx_turni_tipo_data": "CREATE INDEX IF NOT EXISTS idx_turni_tipo_data ON turni(Tipo, Data);",
             "idx_prenotazioni_turno_utente": "CREATE INDEX IF NOT EXISTS idx_prenotazioni_turno_utente ON prenotazioni(ID_Turno, \"Nome Cognome\");",
             "idx_access_logs_timestamp": "CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp ON access_logs(timestamp);",
-            "idx_access_logs_username": "CREATE INDEX IF NOT EXISTS idx_access_logs_username ON access_logs(username);"
+            "idx_access_logs_username": "CREATE INDEX IF NOT EXISTS idx_access_logs_username ON access_logs(username);",
+            "idx_validation_sessions_user_status": "CREATE INDEX IF NOT EXISTS idx_validation_sessions_user_status ON validation_sessions(user_name, status);"
         }
 
         for nome_indice, statement in indici.items():
