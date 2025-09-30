@@ -108,7 +108,7 @@ def get_unvalidated_reports():
     conn = get_db_connection()
     reports_to_validate = []
     try:
-        query = "SELECT PdL, Descrizione, Storico, db_last_modified FROM attivita_programmate WHERE db_last_modified IS NOT NULL ORDER BY db_last_modified DESC"
+        query = "SELECT PdL, DESCRIZIONE_ATTIVITA, Storico, db_last_modified FROM attivita_programmate WHERE db_last_modified IS NOT NULL ORDER BY db_last_modified DESC"
         cursor = conn.cursor()
         cursor.execute(query)
         activities = cursor.fetchall()
@@ -121,7 +121,7 @@ def get_unvalidated_reports():
                         latest_report = storico_list[0]
                         reports_to_validate.append({
                             'PdL': activity['PdL'],
-                            'Descrizione': activity['Descrizione'],
+                            'Descrizione': activity['DESCRIZIONE_ATTIVITA'], # Usa il nome corretto
                             'Matricola': latest_report.get('Matricola', 'N/D'),
                             'Tecnico': latest_report.get('Tecnico', 'N/D'),
                             'Stato': latest_report.get('Stato', 'N/D'),
