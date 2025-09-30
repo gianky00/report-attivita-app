@@ -49,7 +49,7 @@ def get_archive_filter_options():
         if conn:
             conn.close()
 
-def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_search=None, tec_search=None):
+def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_search=None, tec_search=None, interventi_eseguiti_only=True):
     """
     Esegue una ricerca diretta e performante sul database delle attività archiviate.
     """
@@ -58,6 +58,9 @@ def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_sear
     base_query = "SELECT PdL, IMP, DESCRIZIONE_ATTIVITA, Storico FROM attivita_programmate"
     conditions = []
     params = []
+
+    if interventi_eseguiti_only:
+        conditions.append("(Storico IS NOT NULL AND Storico != '[]' AND Storico != '')")
 
     if pdl_search:
         conditions.append("PdL LIKE ?")

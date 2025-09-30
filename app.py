@@ -1413,7 +1413,8 @@ def render_situazione_impianti_tab():
                         {"field": "STATO_PdL", "type": "nominal"},
                         {"field": "Numero di Attività", "type": "quantitative"}
                     ]
-                }
+                },
+                "params": []
             }
             st.vega_lite_chart(chart_data, vega_spec, use_container_width=True)
         else:
@@ -1519,7 +1520,8 @@ def render_programmazione_tab():
                     {"field": "Area", "type": "nominal"},
                     {"field": "Numero di Attività", "type": "quantitative"}
                 ]
-            }
+            },
+            "params": []
         }
         st.vega_lite_chart(chart_data, vega_spec, use_container_width=True)
 
@@ -2175,10 +2177,12 @@ def main_app(matricola_utente, ruolo):
             with col4:
                 tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
 
+            interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
+
             # Esegui la ricerca solo se almeno un filtro è attivo
             if pdl_search or desc_search or imp_search or tec_search:
                 with st.spinner("Ricerca in corso nel database..."):
-                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search)
+                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, interventi_eseguiti_only)
                 
                 if risultati_df.empty:
                     st.info("Nessun record trovato per i filtri selezionati.")
