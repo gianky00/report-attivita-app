@@ -2514,31 +2514,35 @@ def main_app(matricola_utente, ruolo):
                                     performance_df = get_technician_performance_data(start_datetime, end_datetime)
                                 st.session_state['performance_results'] = {'df': performance_df, 'start_date': pd.to_datetime(start_datetime), 'end_date': pd.to_datetime(end_datetime)}
 
-                            if 'performance_results' in st.session_state and not st.session_state['performance_results']['df'].empty:
+                            if 'performance_results' in st.session_state:
                                 results = st.session_state['performance_results']
                                 performance_df = results['df']
-                                st.markdown("---")
-                                st.markdown("### Riepilogo Performance del Team")
 
-                                total_interventions_team = performance_df['Totale Interventi'].sum()
-                                total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
-                                # Calcolo ponderato del tasso di completamento
-                                total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
-                                avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
+                                if performance_df.empty:
+                                    st.info("Nessun dato di performance trovato per il periodo selezionato.")
+                                else:
+                                    st.markdown("---")
+                                    st.markdown("### Riepilogo Performance del Team")
 
-                                st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
-                                c1, c2, c3 = st.columns(3)
-                                c1.metric("Totale Interventi", f"{total_interventions_team}")
-                                c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
-                                c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+                                    total_interventions_team = performance_df['Totale Interventi'].sum()
+                                    total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
+                                    # Calcolo ponderato del tasso di completamento
+                                    total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
+                                    avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
 
-                                st.markdown("#### Dettaglio Performance per Tecnico")
-                                for index, row in performance_df.iterrows():
-                                    st.write(f"**Tecnico:** {index}")
-                                    st.dataframe(row.to_frame().T)
-                                    if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                        st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
-                                        st.rerun()
+                                    st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
+                                    c1, c2, c3 = st.columns(3)
+                                    c1.metric("Totale Interventi", f"{total_interventions_team}")
+                                    c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
+                                    c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+
+                                    st.markdown("#### Dettaglio Performance per Tecnico")
+                                    for index, row in performance_df.iterrows():
+                                        st.write(f"**Tecnico:** {index}")
+                                        st.dataframe(row.to_frame().T)
+                                        if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
+                                            st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
+                                            st.rerun()
 
                         with caposquadra_tabs[1]: # Crea Nuovo Turno
                             with st.form("new_shift_form", clear_on_submit=True):
