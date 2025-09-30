@@ -236,7 +236,7 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
             db_last_modified_ts = timestamp.isoformat()
 
             cursor.execute(
-                "UPDATE attivita_programmate SET Storico = ?, Stato = ?, db_last_modified = ? WHERE PdL = ?",
+                "UPDATE attivita_programmate SET Storico = ?, STATO_ATTIVITA = ?, db_last_modified = ? WHERE PdL = ?",
                 (nuovo_storico_json, nuovo_stato, db_last_modified_ts, pdl)
             )
 
