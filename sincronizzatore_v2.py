@@ -26,7 +26,7 @@ logging.basicConfig(
     handlers=[logging.FileHandler("sync_v2.log", mode='w'), logging.StreamHandler()]
 )
 
-# --- MAPPATURA HEADER (FIXED) ---
+# --- MAPPATURA HEADER ---
 HEADER_MAP = {
     'FERM': 'FERM', 'MANUT': 'MANUT', 'PS': 'PS', 'AREA ': 'AREA', 'PdL': 'PdL',
     'IMP.': 'IMP', 'DESCRIZIONE\nATTIVITA\'': 'DESCRIZIONE_ATTIVITA', 'LUN': 'LUN',
@@ -75,10 +75,11 @@ def load_data_from_excel():
     master_df = pd.concat(all_dfs, ignore_index=True)
     master_df.rename(columns=HEADER_MAP, inplace=True)
 
-    # --- GESTIONE DUPLICATI (FIX) ---
     master_df.dropna(subset=[PRIMARY_KEY], inplace=True)
+    duplicates = master_df[master_df.duplicated(subset=[PRIMARY_KEY], keep=False)]
+    if not duplicates.empty:
+        logging.warning(f"Trovati {len(duplicates)} PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: {duplicates[PRIMARY_KEY].tolist()}")
     master_df.drop_duplicates(subset=[PRIMARY_KEY], keep='first', inplace=True)
-    logging.info(f"Rimosse righe con PdL duplicato. Righe uniche: {len(master_df)}")
 
     if TIMESTAMP_COLUMN not in master_df.columns:
         master_df[TIMESTAMP_COLUMN] = pd.NaT
@@ -103,7 +104,6 @@ def sync_data(df_excel, df_db):
 
     for key in excel_keys.union(db_keys):
         is_in_excel, is_in_db = key in excel_keys, key in db_keys
-        row_data = None
 
         if is_in_excel and not is_in_db:
             row_data = df_excel.loc[key].to_dict()
@@ -118,20 +118,31 @@ def sync_data(df_excel, df_db):
             excel_ts = pd.to_datetime(excel_row.get(TIMESTAMP_COLUMN), errors='coerce')
             db_ts = pd.to_datetime(db_row.get(TIMESTAMP_COLUMN), errors='coerce')
 
-            if pd.isna(excel_ts) and not pd.isna(db_ts): excel_ts = db_ts - datetime.timedelta(seconds=1)
-            if pd.isna(db_ts) and not pd.isna(excel_ts): db_ts = excel_ts - datetime.timedelta(seconds=1)
-            if pd.isna(excel_ts) or pd.isna(db_ts): continue
+            # Logica di confronto intelligente
+            if pd.isna(excel_ts) and not pd.isna(db_ts):
+                are_different = False
+                for col in excel_row.index:
+                    if col not in [TIMESTAMP_COLUMN, SOURCE_SHEET_COLUMN]:
+                        excel_val = str(excel_row.get(col, ''))
+                        db_val = str(db_row.get(col, ''))
+                        if excel_val != db_val:
+                            are_different = True
+                            break
+                if are_different:
+                    row_data = db_row.to_dict()
+                    row_data['AZIONE_RICHIESTA'] = 'AGGIORNARE IN EXCEL (Contenuto Diverso)'
+                    excel_actions.append(row_data)
+            elif not pd.isna(excel_ts) and not pd.isna(db_ts):
+                 if excel_ts.floor('s') > db_ts.floor('s'):
+                    row_data = excel_row.to_dict()
+                    row_data[TIMESTAMP_COLUMN] = excel_ts
+                    db_updates.append(row_data)
+                 elif db_ts.floor('s') > excel_ts.floor('s'):
+                    row_data = db_row.to_dict()
+                    row_data['AZIONE_RICHIESTA'] = 'AGGIORNARE IN EXCEL'
+                    excel_actions.append(row_data)
 
-            if excel_ts.floor('s') > db_ts.floor('s'):
-                row_data = excel_row.to_dict()
-                row_data[TIMESTAMP_COLUMN] = excel_ts
-                db_updates.append(row_data)
-            elif db_ts.floor('s') > excel_ts.floor('s'):
-                row_data = db_row.to_dict()
-                row_data['AZIONE_RICHIESTA'] = 'AGGIORNARE IN EXCEL'
-                excel_actions.append(row_data)
-
-        if row_data: row_data[PRIMARY_KEY] = key
+        if 'row_data' in locals() and row_data: row_data[PRIMARY_KEY] = key
 
     if db_inserts or db_updates: commit_to_db(db_inserts, db_updates)
     if excel_actions: export_updates_to_excel(excel_actions)
@@ -189,7 +200,7 @@ def export_updates_to_excel(actions):
 def main():
     if not create_lock(): sys.exit(1)
     try:
-        logging.info("--- Inizio Sincronizzazione v2.1 ---")
+        logging.info("--- Inizio Sincronizzazione v2.2 ---")
         df_excel = load_data_from_excel()
         if df_excel is None: return
         df_db = load_data_from_db()
@@ -213,7 +224,7 @@ def main():
             deleted_from_db = excel_keys - db_keys
             if deleted_from_db:
                 logging.info(f"Trovate {len(deleted_from_db)} righe cancellate dal DB. Aggiunte al file di aggiornamento.")
-                actions_to_export = [{'AZIONE_RICHIESTA': 'CANCELLARE DA EXCEL', PRIMARY_KEY: key} for key in deleted_from_db]
+                actions_to_export = [{'AZIONE_RICHIESTA': 'CANCELLARE DA EXCEL', PRIMARY_KEY: key, SOURCE_SHEET_COLUMN: df_excel_after.loc[key, SOURCE_SHEET_COLUMN]} for key in deleted_from_db]
                 export_updates_to_excel(actions_to_export)
 
         logging.info("--- Sincronizzazione Completata ---")
