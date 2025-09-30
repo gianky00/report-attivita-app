@@ -1,12 +1,7 @@
 # Credenziali e segreti
 credentials.json
-secrets.toml
-.streamlit/secrets.toml
-
 # File eseguibili e di dati sensibili
 ngrok.exe
-*.xlsx
-*.xlsm
 
 # File di ambiente Python e cache
 __pycache__/
