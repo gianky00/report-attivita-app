@@ -1,0 +1,19 @@
+2025-09-30 09:42:14,355 - INFO - Lock file created.
+2025-09-30 09:42:14,355 - INFO - --- Inizio Sincronizzazione v2.2 ---
+2025-09-30 09:42:14,356 - INFO - Inizio caricamento dai fogli: ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
+2025-09-30 09:42:15,453 - INFO - Letto 268 righe dal foglio 'A1'.
+2025-09-30 09:42:16,295 - INFO - Letto 175 righe dal foglio 'A2'.
+2025-09-30 09:42:17,244 - INFO - Letto 440 righe dal foglio 'A3'.
+2025-09-30 09:42:18,188 - INFO - Letto 27 righe dal foglio 'CTE'.
+2025-09-30 09:42:19,237 - INFO - Letto 179 righe dal foglio 'BLENDING'.
+2025-09-30 09:42:19,245 - WARNING - Trovati 2 PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
+2025-09-30 09:42:19,780 - INFO - --- Controllo cancellazioni da Excel ---
+2025-09-30 09:42:19,780 - INFO - Inizio caricamento dai fogli: ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
+2025-09-30 09:42:20,741 - INFO - Letto 268 righe dal foglio 'A1'.
+2025-09-30 09:42:21,541 - INFO - Letto 175 righe dal foglio 'A2'.
+2025-09-30 09:42:22,504 - INFO - Letto 440 righe dal foglio 'A3'.
+2025-09-30 09:42:23,282 - INFO - Letto 27 righe dal foglio 'CTE'.
+2025-09-30 09:42:24,226 - INFO - Letto 179 righe dal foglio 'BLENDING'.
+2025-09-30 09:42:24,230 - WARNING - Trovati 2 PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
+2025-09-30 09:42:24,248 - INFO - --- Sincronizzazione Completata ---
+2025-09-30 09:42:24,248 - INFO - Lock file removed.
