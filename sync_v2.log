@@ -1,19 +1,38 @@
-2025-09-30 09:42:14,355 - INFO - Lock file created.
-2025-09-30 09:42:14,355 - INFO - --- Inizio Sincronizzazione v2.2 ---
-2025-09-30 09:42:14,356 - INFO - Inizio caricamento dai fogli: ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-2025-09-30 09:42:15,453 - INFO - Letto 268 righe dal foglio 'A1'.
-2025-09-30 09:42:16,295 - INFO - Letto 175 righe dal foglio 'A2'.
-2025-09-30 09:42:17,244 - INFO - Letto 440 righe dal foglio 'A3'.
-2025-09-30 09:42:18,188 - INFO - Letto 27 righe dal foglio 'CTE'.
-2025-09-30 09:42:19,237 - INFO - Letto 179 righe dal foglio 'BLENDING'.
-2025-09-30 09:42:19,245 - WARNING - Trovati 2 PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
-2025-09-30 09:42:19,780 - INFO - --- Controllo cancellazioni da Excel ---
-2025-09-30 09:42:19,780 - INFO - Inizio caricamento dai fogli: ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-2025-09-30 09:42:20,741 - INFO - Letto 268 righe dal foglio 'A1'.
-2025-09-30 09:42:21,541 - INFO - Letto 175 righe dal foglio 'A2'.
-2025-09-30 09:42:22,504 - INFO - Letto 440 righe dal foglio 'A3'.
-2025-09-30 09:42:23,282 - INFO - Letto 27 righe dal foglio 'CTE'.
-2025-09-30 09:42:24,226 - INFO - Letto 179 righe dal foglio 'BLENDING'.
-2025-09-30 09:42:24,230 - WARNING - Trovati 2 PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
-2025-09-30 09:42:24,248 - INFO - --- Sincronizzazione Completata ---
-2025-09-30 09:42:24,248 - INFO - Lock file removed.
+2025-09-30 14:06:40,284 - INFO - Lock file created.
+2025-09-30 14:06:40,284 - INFO - --- Inizio Sincronizzazione v2.2 ---
+2025-09-30 14:06:40,285 - INFO - Inizio caricamento dai fogli: ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
+2025-09-30 14:06:41,197 - INFO - Letto 268 righe dal foglio 'A1'.
+2025-09-30 14:06:42,528 - INFO - Letto 175 righe dal foglio 'A2'.
+2025-09-30 14:06:43,388 - INFO - Letto 440 righe dal foglio 'A3'.
+2025-09-30 14:06:44,084 - INFO - Letto 27 righe dal foglio 'CTE'.
+2025-09-30 14:06:44,847 - INFO - Letto 179 righe dal foglio 'BLENDING'.
+2025-09-30 14:06:44,852 - WARNING - Trovati 2 PdL duplicati. Verr� mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
+2025-09-30 14:06:44,857 - ERROR - Errore caricamento dati dal DB: Execution failed on sql 'SELECT * FROM attivita_programmate': no such table: attivita_programmate
+Traceback (most recent call last):
+  File "C:\Users\Coemi\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\io\sql.py", line 2664, in execute
+    cur.execute(sql, *args)
+    ~~~~~~~~~~~^^^^^^^^^^^^
+sqlite3.OperationalError: no such table: attivita_programmate
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app\sincronizzatore.py", line 95, in load_data_from_db
+    return pd.read_sql_query(f"SELECT * FROM {DB_TABLE_NAME}", conn, index_col=PRIMARY_KEY, parse_dates=[TIMESTAMP_COLUMN])
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Coemi\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\io\sql.py", line 528, in read_sql_query
+    return pandas_sql.read_query(
+           ~~~~~~~~~~~~~~~~~~~~~^
+        sql,
+        ^^^^
+    ...<6 lines>...
+        dtype_backend=dtype_backend,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Coemi\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\io\sql.py", line 2728, in read_query
+    cursor = self.execute(sql, params)
+  File "C:\Users\Coemi\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\io\sql.py", line 2676, in execute
+    raise ex from exc
+pandas.errors.DatabaseError: Execution failed on sql 'SELECT * FROM attivita_programmate': no such table: attivita_programmate
+2025-09-30 14:06:44,860 - INFO - Lock file removed.
