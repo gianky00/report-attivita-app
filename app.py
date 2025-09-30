@@ -1342,7 +1342,7 @@ def render_situazione_impianti_tab():
 
     with col1:
         default_aree = aree_disponibili
-        aree_selezionate = st.multiselect("Filtra per Area", options=aree_disponibili, default=default_aree)
+        aree_selezionate = st.multiselect("Filtra per Area", options=aree_disponibili, default=default_aree, key="area_filter_situazione")
 
     with col2:
         default_stati = stati_disponibili
@@ -1428,7 +1428,7 @@ def render_programmazione_tab():
 
     with col2:
         aree_disponibili = sorted(df['AREA'].dropna().unique()) if 'AREA' in df.columns else []
-        area_selezionata = st.multiselect("Filtra per Area", options=aree_disponibili, default=aree_disponibili)
+        area_selezionata = st.multiselect("Filtra per Area", options=aree_disponibili, default=aree_disponibili, key="area_filter_programmazione")
 
     with col3:
         giorni_settimana = ["LUN", "MAR", "MER", "GIO", "VEN"]
