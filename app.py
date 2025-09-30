@@ -1714,7 +1714,7 @@ def main_app(matricola_utente, ruolo):
                 stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
                 status_dict = {}
                 if not dati_programmati_df.empty:
-                    status_dict = dati_programmati_df.set_index('PdL')['Stato'].to_dict()
+                    status_dict = dati_programmati_df.set_index('PdL')['STATO_ATTIVITA'].to_dict()
 
                 pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
 

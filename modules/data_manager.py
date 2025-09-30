@@ -78,17 +78,27 @@ def _save_to_db_backend(data):
     Questa funzione viene eseguita in un thread separato.
     """
     import sqlite3
+    import pandas as pd
     DB_NAME = "schedario.db"
     conn = None
     try:
         conn = sqlite3.connect(DB_NAME)
-        # Usiamo un lock per sicurezza, anche se SQLite gestisce le concorrenze a livello di file
         with config.EXCEL_LOCK:
             for table_name, df in data.items():
                 if not isinstance(df, pd.DataFrame):
                     continue
-                # Sovrascrive completamente la tabella con i nuovi dati
-                df.to_sql(table_name, conn, if_exists='replace', index=False)
+
+                # Crea una copia per la modifica sicura
+                df_to_save = df.copy()
+
+                # Itera su tutte le colonne per convertire i tipi non supportati
+                for col in df_to_save.columns:
+                    # Converte le colonne di tipo datetime in stringhe ISO 8601
+                    if pd.api.types.is_datetime64_any_dtype(df_to_save[col]):
+                        df_to_save[col] = df_to_save[col].apply(lambda x: x.isoformat() if pd.notna(x) else None)
+
+                # Sovrascrive completamente la tabella con i nuovi dati sanificati
+                df_to_save.to_sql(table_name, conn, if_exists='replace', index=False)
         conn.commit()
         return True
     except sqlite3.Error as e:
