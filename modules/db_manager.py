@@ -49,7 +49,7 @@ def get_archive_filter_options():
         if conn:
             conn.close()
 
-def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_search=None, tec_search=None, interventi_eseguiti_only=True):
+def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_search=None, tec_search=None, interventi_eseguiti_only=True, start_date=None, end_date=None):
     """
     Esegue una ricerca diretta e performante sul database delle attività archiviate.
     """
@@ -85,6 +85,16 @@ def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_sear
         )
         """)
         params.extend(tec_search)
+
+    if start_date and end_date:
+        conditions.append(f"""
+        EXISTS (
+            SELECT 1
+            FROM json_each(attivita_programmate.Storico)
+            WHERE date(json_extract(value, '$.Data_Riferimento_dt')) BETWEEN date(?) AND date(?)
+        )
+        """)
+        params.extend([start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')])
 
     if conditions:
         base_query += " WHERE " + " AND ".join(conditions)
@@ -355,11 +365,11 @@ def get_technician_performance_data(start_date, end_date) -> pd.DataFrame:
             # Usa il Nome Tecnico come indice per la visualizzazione in UI
             return df.set_index('Tecnico')
 
-        return pd.DataFrame(columns=['Matricola', 'Totale Interventi', 'Tasso Completamento (%)', 'Ritardo Medio Compilazione (gg)', 'Report Sbrigativi']).set_index('Tecnico')
+        return pd.DataFrame(columns=['Matricola', 'Tecnico', 'Totale Interventi', 'Tasso Completamento (%)', 'Ritardo Medio Compilazione (gg)', 'Report Sbrigativi']).set_index('Tecnico')
 
     except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
         print(f"Errore nel calcolo delle performance dei tecnici: {e}")
-        return pd.DataFrame(columns=['Matricola', 'Totale Interventi', 'Tasso Completamento (%)', 'Ritardo Medio Compilazione (gg)', 'Report Sbrigativi']).set_index('Tecnico')
+        return pd.DataFrame(columns=['Matricola', 'Tecnico', 'Totale Interventi', 'Tasso Completamento (%)', 'Ritardo Medio Compilazione (gg)', 'Report Sbrigativi']).set_index('Tecnico')
     finally:
         if conn:
             conn.close()

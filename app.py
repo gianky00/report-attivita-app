@@ -2167,23 +2167,56 @@ def main_app(matricola_utente, ruolo):
             # Carica le opzioni per i filtri in modo efficiente
             filter_options = get_archive_filter_options()
 
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
+            # Inizializza le date in session_state se non presenti
+            if 'db_start_date' not in st.session_state:
+                st.session_state.db_start_date = None
+            if 'db_end_date' not in st.session_state:
+                st.session_state.db_end_date = None
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
                 pdl_search = st.text_input("Filtra per PdL", key="db_pdl_search")
-            with col2:
+            with c2:
                 desc_search = st.text_input("Filtra per Descrizione", key="db_desc_search")
-            with col3:
+            with c3:
                 imp_search = st.multiselect("Filtra per Impianto", options=filter_options['impianti'], key="db_imp_search")
-            with col4:
+            with c4:
                 tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
 
-            interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
+            st.divider()
+            st.markdown("##### Filtra per Data Intervento")
+            d1, d2, d3, d4 = st.columns([1,1,1,2])
+            with d1:
+                st.date_input("Da:", key="db_start_date", format="DD/MM/YYYY")
+            with d2:
+                st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
+            with d3:
+                if st.button("Ultimi 15 gg", key="db_last_15_days"):
+                    st.session_state.db_end_date = datetime.date.today()
+                    st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
+                    st.rerun()
 
-            # Esegui la ricerca solo se almeno un filtro è attivo
-            if pdl_search or desc_search or imp_search or tec_search:
+
+            interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
+            st.divider()
+
+            # Messaggio informativo per chiarire il comportamento della ricerca
+            st.info("""
+            **Nota:** La ricerca mostra per impostazione predefinita solo gli interventi con uno **storico compilato**.
+            Per cercare anche le attività **pianificate ma non ancora eseguite**, deseleziona la casella "Mostra solo interventi eseguiti".
+            """)
+
+            # Esegui la ricerca se almeno un filtro è attivo o se è stato premuto il pulsante dei 15 giorni
+            search_is_active = pdl_search or desc_search or imp_search or tec_search or (st.session_state.db_start_date and st.session_state.db_end_date)
+
+            if search_is_active:
                 with st.spinner("Ricerca in corso nel database..."):
-                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, interventi_eseguiti_only)
-                
+                    risultati_df = get_filtered_archived_activities(
+                        pdl_search, desc_search, imp_search, tec_search,
+                        interventi_eseguiti_only,
+                        st.session_state.db_start_date, st.session_state.db_end_date
+                    )
+
                 if risultati_df.empty:
                     st.info("Nessun record trovato per i filtri selezionati.")
                 else:
