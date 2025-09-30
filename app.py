@@ -815,7 +815,7 @@ def render_gestione_account(gestionale_data):
                 new_role = st.selectbox("Nuovo Ruolo", options=ruoli_disponibili, index=current_role_index)
 
                 is_placeholder_current = pd.isna(user_to_edit.get('PasswordHash'))
-                is_placeholder_new = st.checkbox("Imposta come Utente Placeholder (senza accesso)", value=is_placeholder_current)
+                is_placeholder_new = st.checkbox("Resetta Account (forza creazione nuova password)", value=is_placeholder_current)
 
                 new_password = ""
                 if not is_placeholder_new:
@@ -829,7 +829,7 @@ def render_gestione_account(gestionale_data):
 
                         if is_placeholder_new:
                             df_contatti.loc[user_idx, 'PasswordHash'] = None
-                            st.success(f"L'utente {user_name} è stato impostato come Placeholder.")
+                            st.success(f"Account di {user_name} resettato. Dovrà creare una nuova password al prossimo accesso.")
                         elif new_password:
                             hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
                             df_contatti.loc[user_idx, 'PasswordHash'] = hashed.decode('utf-8')
@@ -860,7 +860,7 @@ def render_gestione_account(gestionale_data):
                     st.markdown(f"**{user_name}** (`{user_matricola}`)")
                 with col2:
                     is_placeholder = pd.isna(user.get('PasswordHash'))
-                    status = "Placeholder (senza accesso)" if is_placeholder else "Attivo"
+                    status = "Da Attivare (primo accesso)" if is_placeholder else "Attivo"
                     st.markdown(f"*{user['Ruolo']}* - Stato: *{status}*")
                 with col3:
                     if st.button("Modifica", key=f"edit_{user_matricola}"):
@@ -880,7 +880,7 @@ def render_gestione_account(gestionale_data):
 
     st.divider()
 
-    # --- Crea Nuovo Utente Placeholder ---
+    # --- Crea Nuovo Utente ---
     with st.expander("Crea Nuovo Utente"):
         with st.form("new_user_form", clear_on_submit=True):
             st.subheader("Dati Nuovo Utente")
@@ -914,7 +914,7 @@ def render_gestione_account(gestionale_data):
                         gestionale_data['contatti'] = pd.concat([df_contatti, nuovo_utente_df], ignore_index=True)
 
                         if salva_gestionale_async(gestionale_data):
-                            st.success(f"Utente placeholder '{nome_completo}' creato con successo!")
+                            st.success(f"Utente '{nome_completo}' creato con successo! Dovrà impostare la password al primo accesso.")
                             st.rerun()
                         else:
                             st.error("Errore durante il salvataggio del nuovo utente.")
