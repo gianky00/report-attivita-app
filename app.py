@@ -330,7 +330,7 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                         st.session_state.report_mode = 'manual'
                         st.rerun()
 
-def render_notification_center(notifications_df, gestionale_data):
+def render_notification_center(notifications_df, gestionale_data, matricola_utente):
     unread_count = len(notifications_df[notifications_df['Stato'] == 'non letta'])
     icon_label = f"🔔 {unread_count}" if unread_count > 0 else "🔔"
 
@@ -349,7 +349,7 @@ def render_notification_center(notifications_df, gestionale_data):
                         st.markdown(f"**{notifica['Messaggio']}**")
                     else:
                         st.markdown(f"<span style='color: grey;'>{notifica['Messaggio']}</span>", unsafe_allow_html=True)
-                    st.caption(notifica['Timestamp'].strftime('%d/%m/%Y %H:%M'))
+                    st.caption(pd.to_datetime(notifica['Timestamp']).strftime('%d/%m/%Y %H:%M'))
 
                 with col2:
                     if is_unread:
@@ -359,7 +359,7 @@ def render_notification_center(notifications_df, gestionale_data):
                             st.rerun()
                 st.divider()
 
-def render_debriefing_ui(knowledge_core, utente, data_riferimento):
+def render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento):
     task = st.session_state.debriefing_task
     section_key = task['section_key']
 
@@ -371,7 +371,7 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento):
                     pdl=task['pdl'],
                     attivita=task['attivita'],
                     report_lines=report_lines,
-                    tecnico=utente
+                    tecnico=matricola_utente
                 )
                 st.info("💡 La tua segnalazione per 'Altro' è stata registrata e sarà usata per migliorare il sistema.")
 
@@ -382,7 +382,7 @@ def render_debriefing_ui(knowledge_core, utente, data_riferimento):
             }
 
             # La nuova funzione scrive direttamente nel DB e non ha più bisogno del client_google o del row_index
-            success = scrivi_o_aggiorna_risposta(dati, utente, data_riferimento)
+            success = scrivi_o_aggiorna_risposta(dati, matricola_utente, data_riferimento)
 
             if success:
                 completed_task_data = {**task, 'report': report_text, 'stato': stato, 'answers': answers_dict}
@@ -559,13 +559,15 @@ def render_edit_shift_form(gestionale_data):
         df_contatti = gestionale_data['contatti']
 
         personale_nel_turno = df_prenotazioni[df_prenotazioni['ID_Turno'] == turno_id]
-        tecnici_nel_turno = personale_nel_turno[personale_nel_turno['RuoloOccupato'] == 'Tecnico']['Nome Cognome'].tolist()
-        aiutanti_nel_turno = personale_nel_turno[personale_nel_turno['RuoloOccupato'] == 'Aiutante']['Nome Cognome'].tolist()
+        tecnici_nel_turno = personale_nel_turno[personale_nel_turno['RuoloOccupato'] == 'Tecnico']['Matricola'].tolist()
+        aiutanti_nel_turno = personale_nel_turno[personale_nel_turno['RuoloOccupato'] == 'Aiutante']['Matricola'].tolist()
 
-        tutti_i_contatti = df_contatti['Nome Cognome'].tolist()
+        # Crea una mappa Matricola -> Nome Cognome per la visualizzazione
+        matricola_to_name = pd.Series(df_contatti['Nome Cognome'].values, index=df_contatti['Matricola']).to_dict()
 
-        tecnici_selezionati = st.multiselect("Seleziona Tecnici Assegnati", options=tutti_i_contatti, default=tecnici_nel_turno, key="edit_tecnici")
-        aiutanti_selezionati = st.multiselect("Seleziona Aiutanti Assegnati", options=tutti_i_contatti, default=aiutanti_nel_turno, key="edit_aiutanti")
+        tecnici_selezionati = st.multiselect("Seleziona Tecnici Assegnati", options=df_contatti['Matricola'].tolist(), default=tecnici_nel_turno, format_func=lambda x: matricola_to_name.get(x, x), key="edit_tecnici")
+        aiutanti_selezionati = st.multiselect("Seleziona Aiutanti Assegnati", options=df_contatti['Matricola'].tolist(), default=aiutanti_nel_turno, format_func=lambda x: matricola_to_name.get(x, x), key="edit_aiutanti")
+
 
         # Form submission buttons
         col_submit, col_cancel = st.columns(2)
@@ -589,27 +591,17 @@ def render_edit_shift_form(gestionale_data):
         df_turni.loc[df_turni['ID_Turno'] == turno_id, 'Tipo'] = tipo_turno
 
         # 2. Calcola le modifiche al personale e registra i log
-        personale_originale = set(personale_nel_turno['Nome Cognome'].tolist())
+        personale_originale = set(personale_nel_turno['Matricola'].tolist())
         personale_nuovo = set(tecnici_selezionati + aiutanti_selezionati)
-        admin_user = st.session_state.get('authenticated_user', 'N/D')
+        admin_user_matricola = st.session_state.get('authenticated_user', 'N/D')
 
         personale_rimosso = personale_originale - personale_nuovo
-        for utente in personale_rimosso:
-            log_shift_change(
-                turno_id=turno_id,
-                azione="Rimozione Admin",
-                utente_originale=utente,
-                eseguito_da=admin_user
-            )
+        for matricola in personale_rimosso:
+            log_shift_change(gestionale_data, turno_id, "Rimozione Admin", matricola_originale=matricola, matricola_eseguito_da=admin_user_matricola)
 
         personale_aggiunto = personale_nuovo - personale_originale
-        for utente in personale_aggiunto:
-            log_shift_change(
-                turno_id=turno_id,
-                azione="Aggiunta Admin",
-                utente_subentrante=utente,
-                eseguito_da=admin_user
-            )
+        for matricola in personale_aggiunto:
+            log_shift_change(gestionale_data, turno_id, "Aggiunta Admin", matricola_subentrante=matricola, matricola_eseguito_da=admin_user_matricola)
 
         # 3. Aggiorna le prenotazioni
         # Rimuovi tutte le vecchie prenotazioni per questo turno
@@ -617,19 +609,19 @@ def render_edit_shift_form(gestionale_data):
 
         # Aggiungi le nuove prenotazioni aggiornate
         nuove_prenotazioni_list = []
-        for utente in tecnici_selezionati:
-            nuove_prenotazioni_list.append({'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}_{utente.replace(' ', '')}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()})
-        for utente in aiutanti_selezionati:
-             nuove_prenotazioni_list.append({'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}_{utente.replace(' ', '')}", 'ID_Turno': turno_id, 'Nome Cognome': utente, 'RuoloOccupato': 'Aiutante', 'Timestamp': datetime.datetime.now()})
+        for matricola in tecnici_selezionati:
+            nuove_prenotazioni_list.append({'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}_{matricola}", 'ID_Turno': turno_id, 'Matricola': matricola, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()})
+        for matricola in aiutanti_selezionati:
+             nuove_prenotazioni_list.append({'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}_{matricola}", 'ID_Turno': turno_id, 'Matricola': matricola, 'RuoloOccupato': 'Aiutante', 'Timestamp': datetime.datetime.now()})
 
         if nuove_prenotazioni_list:
             df_nuove_prenotazioni = pd.DataFrame(nuove_prenotazioni_list)
             gestionale_data['prenotazioni'] = pd.concat([gestionale_data['prenotazioni'], df_nuove_prenotazioni], ignore_index=True)
 
         # 4. Invia notifiche per il personale rimosso
-        for utente in personale_rimosso:
+        for matricola in personale_rimosso:
             messaggio = f"Sei stato rimosso dal turno '{desc_turno}' del {data_turno.strftime('%d/%m/%Y')} dall'amministratore."
-            crea_notifica(gestionale_data, utente, messaggio)
+            crea_notifica(gestionale_data, matricola, messaggio)
 
         # 5. Salva le modifiche e termina la modalità di modifica
         if salva_gestionale_async(gestionale_data):
@@ -640,7 +632,7 @@ def render_edit_shift_form(gestionale_data):
         else:
             st.error("Si è verificato un errore durante il salvataggio delle modifiche.")
 
-def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_suffix):
+def render_turni_list(df_turni, gestionale, matricola_utente, ruolo, key_suffix):
     """
     Renderizza una lista di turni, con la logica per la prenotazione, cancellazione e sostituzione.
     """
@@ -682,23 +674,18 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
             if not prenotazioni_turno.empty:
                 st.markdown("**Personale Prenotato:**")
                 df_contatti = gestionale.get('contatti', pd.DataFrame())
+                matricola_to_name = pd.Series(df_contatti['Nome Cognome'].values, index=df_contatti['Matricola'].astype(str)).to_dict()
+
                 for _, p in prenotazioni_turno.iterrows():
-                    nome_utente = p['Nome Cognome']
-                    ruolo_utente = p['RuoloOccupato']
+                    matricola = str(p['Matricola'])
+                    nome_utente = matricola_to_name.get(matricola, f"Matricola {matricola}")
+                    ruolo_utente_turno = p['RuoloOccupato']
 
-                    # Check if the user is a placeholder (no password)
-                    user_details = df_contatti[df_contatti['Nome Cognome'] == nome_utente] if not df_contatti.empty else pd.DataFrame()
-
-                    # A user is a placeholder if they don't have a password entry.
-                    # pd.isna() correctly handles None, NaN, etc.
+                    user_details = df_contatti[df_contatti['Matricola'] == matricola]
                     is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('PasswordHash'))
 
-                    if is_placeholder:
-                        display_name = f"*{nome_utente} (Esterno)*"
-                    else:
-                        display_name = nome_utente
-
-                    st.markdown(f"- {display_name} (*{ruolo_utente}*)", unsafe_allow_html=True)
+                    display_name = f"*{nome_utente} (Esterno)*" if is_placeholder else nome_utente
+                    st.markdown(f"- {display_name} (*{ruolo_utente_turno}*)", unsafe_allow_html=True)
 
             st.markdown("---")
 
@@ -708,7 +695,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                     st.rerun()
                 st.markdown("---")
 
-            prenotazione_utente = prenotazioni_turno[prenotazioni_turno['Nome Cognome'] == nome_utente_autenticato]
+            prenotazione_utente = prenotazioni_turno[prenotazioni_turno['Matricola'] == str(matricola_utente)]
 
             if not prenotazione_utente.empty:
                 st.success("Sei prenotato per questo turno.")
@@ -731,10 +718,10 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                         if st.button("✅ Sì", key=f"confirm_yes_{turno['ID_Turno']}", use_container_width=True):
                             success = False
                             if action_type == 'cancel':
-                                if cancella_prenotazione_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
+                                if cancella_prenotazione_logic(gestionale, matricola_utente, turno['ID_Turno']):
                                     success = True
                             elif action_type == 'publish':
-                                if pubblica_turno_in_bacheca_logic(gestionale, nome_utente_autenticato, turno['ID_Turno']):
+                                if pubblica_turno_in_bacheca_logic(gestionale, matricola_utente, turno['ID_Turno']):
                                     success = True
 
                             if success:
@@ -767,7 +754,7 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
                 if opzioni:
                     ruolo_scelto = st.selectbox("Prenota come:", opzioni, key=f"sel_{turno['ID_Turno']}_{key_suffix}")
                     if st.button("Conferma Prenotazione", key=f"add_{turno['ID_Turno']}_{key_suffix}"):
-                        if prenota_turno_logic(gestionale, nome_utente_autenticato, turno['ID_Turno'], ruolo_scelto):
+                        if prenota_turno_logic(gestionale, matricola_utente, turno['ID_Turno'], ruolo_scelto):
                             salva_gestionale_async(gestionale); st.rerun()
                 else:
                     st.warning("Turno al completo.")
@@ -777,10 +764,21 @@ def render_turni_list(df_turni, gestionale, nome_utente_autenticato, ruolo, key_
             if st.session_state.get('sostituzione_turno_id') == turno['ID_Turno']:
                 st.markdown("---")
                 st.markdown("**A chi vuoi chiedere il cambio?**")
-                ricevente_options = prenotazioni_turno['Nome Cognome'].tolist() if not prenotazione_utente.empty else gestionale['contatti']['Nome Cognome'].tolist()
-                ricevente = st.selectbox("Seleziona collega:", ricevente_options, key=f"swap_select_{turno['ID_Turno']}_{key_suffix}")
+
+                matricola_to_name = pd.Series(gestionale['contatti']['Nome Cognome'].values, index=gestionale['contatti']['Matricola'].astype(str)).to_dict()
+
+                # Opzioni per la sostituzione: o chi è già nel turno, o tutti i contatti
+                if not prenotazione_utente.empty:
+                    ricevente_options = prenotazioni_turno['Matricola'].tolist()
+                else:
+                    ricevente_options = gestionale['contatti']['Matricola'].tolist()
+
+                ricevente_options = [str(m) for m in ricevente_options if str(m) != str(matricola_utente)] # Escludi te stesso
+
+                ricevente_matricola = st.selectbox("Seleziona collega:", ricevente_options, format_func=lambda m: matricola_to_name.get(m, m), key=f"swap_select_{turno['ID_Turno']}_{key_suffix}")
+
                 if st.button("Invia Richiesta", key=f"swap_confirm_{turno['ID_Turno']}_{key_suffix}"):
-                    if richiedi_sostituzione_logic(gestionale, nome_utente_autenticato, ricevente, turno['ID_Turno']):
+                    if richiedi_sostituzione_logic(gestionale, matricola_utente, ricevente_matricola, turno['ID_Turno']):
                         salva_gestionale_async(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
 
 def render_gestione_account(gestionale_data):
@@ -789,20 +787,24 @@ def render_gestione_account(gestionale_data):
     # --- Modifica Utenti Esistenti ---
     st.subheader("Modifica Utenti Esistenti")
 
-    search_term = st.text_input("Cerca utente per nome...", key="user_search_admin")
+    search_term = st.text_input("Cerca utente per nome o matricola...", key="user_search_admin")
     if search_term:
-        df_contatti = df_contatti[df_contatti['Nome Cognome'].str.contains(search_term, case=False, na=False)]
+        df_contatti = df_contatti[
+            df_contatti['Nome Cognome'].str.contains(search_term, case=False, na=False) |
+            df_contatti['Matricola'].astype(str).str.contains(search_term, case=False, na=False)
+        ]
 
-    if 'editing_user' not in st.session_state:
-        st.session_state.editing_user = None
+    if 'editing_user_matricola' not in st.session_state:
+        st.session_state.editing_user_matricola = None
 
     # Se un utente è in modifica, mostra solo il form di modifica
-    if st.session_state.editing_user:
-        user_to_edit_series = df_contatti[df_contatti['Nome Cognome'] == st.session_state.editing_user]
+    if st.session_state.editing_user_matricola:
+        user_to_edit_series = df_contatti[df_contatti['Matricola'] == st.session_state.editing_user_matricola]
         if not user_to_edit_series.empty:
             user_to_edit = user_to_edit_series.iloc[0]
+            user_name = user_to_edit['Nome Cognome']
             with st.form(key="edit_user_form"):
-                st.subheader(f"Modifica Utente: {st.session_state.editing_user}")
+                st.subheader(f"Modifica Utente: {user_name} ({st.session_state.editing_user_matricola})")
 
                 ruoli_disponibili = ["Tecnico", "Aiutante", "Amministratore"]
                 try:
@@ -812,7 +814,7 @@ def render_gestione_account(gestionale_data):
 
                 new_role = st.selectbox("Nuovo Ruolo", options=ruoli_disponibili, index=current_role_index)
 
-                is_placeholder_current = pd.isna(user_to_edit.get('PasswordHash')) and pd.isna(user_to_edit.get('Password'))
+                is_placeholder_current = pd.isna(user_to_edit.get('PasswordHash'))
                 is_placeholder_new = st.checkbox("Imposta come Utente Placeholder (senza accesso)", value=is_placeholder_current)
 
                 new_password = ""
@@ -822,58 +824,55 @@ def render_gestione_account(gestionale_data):
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.form_submit_button("Salva Modifiche", type="primary"):
-                        user_idx = df_contatti[df_contatti['Nome Cognome'] == st.session_state.editing_user].index[0]
+                        user_idx = df_contatti[df_contatti['Matricola'] == st.session_state.editing_user_matricola].index[0]
                         df_contatti.loc[user_idx, 'Ruolo'] = new_role
 
                         if is_placeholder_new:
                             df_contatti.loc[user_idx, 'PasswordHash'] = None
-                            if 'Password' in df_contatti.columns:
-                                df_contatti.loc[user_idx, 'Password'] = None
-                            st.success(f"L'utente {st.session_state.editing_user} è stato impostato come Placeholder.")
+                            st.success(f"L'utente {user_name} è stato impostato come Placeholder.")
                         elif new_password:
                             hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
                             df_contatti.loc[user_idx, 'PasswordHash'] = hashed.decode('utf-8')
-                            if 'Password' in df_contatti.columns:
-                                df_contatti.loc[user_idx, 'Password'] = None
-                            st.success(f"Password per {st.session_state.editing_user} aggiornata.")
+                            st.success(f"Password per {user_name} aggiornata.")
 
                         salva_gestionale_async(gestionale_data)
-                        st.session_state.editing_user = None
+                        st.session_state.editing_user_matricola = None
                         st.toast("Modifiche salvate!")
                         st.rerun()
 
                 with col2:
                     if st.form_submit_button("Annulla"):
-                        st.session_state.editing_user = None
+                        st.session_state.editing_user_matricola = None
                         st.rerun()
         else:
             st.error("Utente non trovato. Ricaricamento...")
-            st.session_state.editing_user = None
+            st.session_state.editing_user_matricola = None
             st.rerun()
 
     # Altrimenti, mostra la lista di tutti gli utenti
     else:
         for index, user in df_contatti.iterrows():
             user_name = user['Nome Cognome']
+            user_matricola = user['Matricola']
             with st.container(border=True):
                 col1, col2, col3 = st.columns([2, 2, 1])
                 with col1:
-                    st.markdown(f"**{user_name}**")
+                    st.markdown(f"**{user_name}** (`{user_matricola}`)")
                 with col2:
-                    is_placeholder = pd.isna(user.get('PasswordHash')) and pd.isna(user.get('Password'))
+                    is_placeholder = pd.isna(user.get('PasswordHash'))
                     status = "Placeholder (senza accesso)" if is_placeholder else "Attivo"
                     st.markdown(f"*{user['Ruolo']}* - Stato: *{status}*")
                 with col3:
-                    if st.button("Modifica", key=f"edit_{user_name}"):
-                        st.session_state.editing_user = user_name
+                    if st.button("Modifica", key=f"edit_{user_matricola}"):
+                        st.session_state.editing_user_matricola = user_matricola
                         st.rerun()
 
                 # Aggiungi colonna per reset 2FA
                 has_2fa = '2FA_Secret' in user and pd.notna(user['2FA_Secret']) and user['2FA_Secret']
                 if has_2fa:
                     with col1:
-                        if st.button("Resetta 2FA", key=f"reset_2fa_{user_name}", help="Rimuove la 2FA per questo utente. Dovrà configurarla di nuovo al prossimo accesso."):
-                            user_idx = df_contatti[df_contatti['Nome Cognome'] == user_name].index[0]
+                        if st.button("Resetta 2FA", key=f"reset_2fa_{user_matricola}", help="Rimuove la 2FA per questo utente. Dovrà configurarla di nuovo al prossimo accesso."):
+                            user_idx = df_contatti[df_contatti['Matricola'] == user_matricola].index[0]
                             df_contatti.loc[user_idx, '2FA_Secret'] = None
                             salva_gestionale_async(gestionale_data)
                             st.success(f"2FA resettata per {user_name}.")
@@ -882,26 +881,27 @@ def render_gestione_account(gestionale_data):
     st.divider()
 
     # --- Crea Nuovo Utente Placeholder ---
-    with st.expander("Crea Nuovo Utente Placeholder"):
+    with st.expander("Crea Nuovo Utente"):
         with st.form("new_user_form", clear_on_submit=True):
             st.subheader("Dati Nuovo Utente")
-            c1, c2 = st.columns(2)
-            new_nome = c1.text_input("Nome")
-            new_cognome = c2.text_input("Cognome")
+            c1, c2, c3 = st.columns(3)
+            new_nome = c1.text_input("Nome*")
+            new_cognome = c2.text_input("Cognome*")
+            new_matricola = c3.text_input("Matricola*")
             new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante", "Amministratore"])
 
             submitted_new_user = st.form_submit_button("Crea Utente")
 
             if submitted_new_user:
-                if new_nome and new_cognome:
-                    nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
-                    if nome_completo in df_contatti['Nome Cognome'].tolist():
-                        st.error(f"Errore: L'utente '{nome_completo}' esiste già.")
+                if new_nome and new_cognome and new_matricola:
+                    if str(new_matricola) in df_contatti['Matricola'].astype(str).tolist():
+                        st.error(f"Errore: La matricola '{new_matricola}' esiste già.")
                     else:
+                        nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
                         new_user_data = {
+                            'Matricola': str(new_matricola),
                             'Nome Cognome': nome_completo,
                             'Ruolo': new_ruolo,
-                            'Password': None,
                             'PasswordHash': None,
                             'Link Attività': ''
                         }
@@ -919,23 +919,27 @@ def render_gestione_account(gestionale_data):
                         else:
                             st.error("Errore durante il salvataggio del nuovo utente.")
                 else:
-                    st.warning("Nome e Cognome sono obbligatori.")
+                    st.warning("Nome, Cognome e Matricola sono obbligatori.")
 
 
 def render_technician_detail_view():
     """Mostra la vista di dettaglio per un singolo tecnico."""
-    tecnico = st.session_state['detail_technician']
+    technician_matricola = st.session_state['detail_technician_matricola']
     start_date = st.session_state['detail_start_date']
     end_date = st.session_state['detail_end_date']
 
-    st.title(f"Dettaglio Performance: {tecnico}")
+    # Recupera il nome del tecnico dalla matricola per la visualizzazione
+    df_contatti = carica_gestionale()['contatti']
+    technician_name = df_contatti[df_contatti['Matricola'] == technician_matricola].iloc[0]['Nome Cognome']
+
+    st.title(f"Dettaglio Performance: {technician_name}")
     st.markdown(f"Periodo: **{start_date.strftime('%d/%m/%Y')}** - **{end_date.strftime('%d/%m/%Y')}**")
 
     # Recupera le metriche già calcolate dalla sessione
     if 'performance_results' in st.session_state:
         performance_df = st.session_state['performance_results']['df']
-        if tecnico in performance_df.index:
-            technician_metrics = performance_df.loc[tecnico]
+        if technician_name in performance_df.index:
+            technician_metrics = performance_df.loc[technician_name]
             
             # Mostra le metriche specifiche per il tecnico
             st.markdown("#### Riepilogo Metriche")
@@ -947,13 +951,13 @@ def render_technician_detail_view():
             st.markdown("---")
 
     if st.button("⬅️ Torna alla Dashboard"):
-        del st.session_state['detail_technician']
+        del st.session_state['detail_technician_matricola']
         del st.session_state['detail_start_date']
         del st.session_state['detail_end_date']
         st.rerun()
 
     # Utilizza la nuova funzione per caricare i dati in modo efficiente
-    technician_interventions = get_interventions_for_technician(tecnico, start_date, end_date)
+    technician_interventions = get_interventions_for_technician(technician_matricola, start_date, end_date)
 
 
     if technician_interventions.empty:
@@ -968,7 +972,7 @@ def render_technician_detail_view():
     st.download_button(
         label="📥 Esporta Dettaglio CSV",
         data=to_csv(technician_interventions),
-        file_name=f"dettaglio_{tecnico}.csv",
+        file_name=f"dettaglio_{technician_name}.csv",
         mime='text/csv',
     )
 
@@ -991,7 +995,7 @@ def render_technician_detail_view():
 
     with col2:
         st.markdown("#### Andamento Attività nel Tempo")
-        interventions_by_day = technician_interventions.groupby(technician_interventions['Data_Riferimento_dt'].dt.date).size()
+        interventions_by_day = technician_interventions.groupby(pd.to_datetime(technician_interventions['Data_Riferimento_dt']).dt.date).size()
         interventions_by_day.index.name = 'Data'
         st.bar_chart(interventions_by_day)
 
@@ -1005,7 +1009,7 @@ def render_technician_detail_view():
     else:
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
-def render_report_validation_tab(user_name):
+def render_report_validation_tab(user_matricola):
     st.subheader("Validazione Report Tecnici")
     st.info("""
     Questa sezione permette di validare i report inviati dai tecnici.
@@ -1017,7 +1021,7 @@ def render_report_validation_tab(user_name):
     """)
 
     # 1. Controlla se esiste una sessione di validazione attiva per l'utente
-    active_session = get_active_validation_session(user_name)
+    active_session = get_active_validation_session(user_matricola)
 
     if active_session:
         st.markdown("---")
@@ -1045,7 +1049,7 @@ def render_report_validation_tab(user_name):
                 "Tecnico": st.column_config.TextColumn(width="small"),
                 "Stato": st.column_config.TextColumn(width="small"),
             },
-            disabled=["PdL", "Descrizione", "Tecnico", "Data_Compilazione"]
+            disabled=["PdL", "Descrizione", "Tecnico", "Data_Compilazione", "Matricola"]
         )
 
         # Salva le modifiche in tempo reale
@@ -1087,7 +1091,7 @@ def render_report_validation_tab(user_name):
         if st.button("📥 Carica Report da Validare", type="primary"):
             unvalidated_reports = get_unvalidated_reports()
             if unvalidated_reports:
-                session_id = create_validation_session(user_name, unvalidated_reports)
+                session_id = create_validation_session(user_matricola, unvalidated_reports)
                 if session_id:
                     st.success(f"Creati {len(unvalidated_reports)} report da validare. La sessione è iniziata.")
                     st.rerun()
@@ -1096,7 +1100,7 @@ def render_report_validation_tab(user_name):
             else:
                 st.success("🎉 Nessun nuovo report da validare al momento.")
 
-def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_utente):
+def render_reperibilita_tab(gestionale_data, matricola_utente, ruolo_utente):
     st.subheader("📅 Calendario Reperibilità Settimanale")
 
     # --- DATI E CONFIGURAZIONE ---
@@ -1114,13 +1118,16 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
     # Se siamo in modalità "gestione", mostriamo solo l'interfaccia di gestione e fermiamo il resto.
     if 'managing_oncall_shift_id' in st.session_state and st.session_state.managing_oncall_shift_id:
         shift_id_to_manage = st.session_state.managing_oncall_shift_id
-        user_to_manage = st.session_state.managing_oncall_user
+        matricola_to_manage = st.session_state.managing_oncall_user_matricola
+
+        df_contatti = gestionale_data['contatti']
+        user_to_manage_name = df_contatti[df_contatti['Matricola'] == matricola_to_manage].iloc[0]['Nome Cognome']
 
         with st.container(border=True):
             st.subheader("Gestione Turno di Reperibilità")
             try:
                 turno_info = gestionale_data['turni'][gestionale_data['turni']['ID_Turno'] == shift_id_to_manage].iloc[0]
-                st.write(f"Stai modificando il turno di **{user_to_manage}** per il giorno **{pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')}**.")
+                st.write(f"Stai modificando il turno di **{user_to_manage_name}** per il giorno **{pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')}**.")
             except IndexError:
                 st.error("Dettagli del turno non trovati.")
                 # Aggiungiamo un pulsante per uscire in caso di errore
@@ -1132,16 +1139,19 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
 
             if st.session_state.get('oncall_swap_mode'):
                 st.markdown("**A chi vuoi chiedere il cambio?**")
-                contatti_validi = gestionale_data['contatti'][
-                    (gestionale_data['contatti']['Nome Cognome'] != user_to_manage) &
-                    (gestionale_data['contatti']['PasswordHash'].notna())
+                contatti_validi = df_contatti[
+                    (df_contatti['Matricola'] != matricola_to_manage) &
+                    (df_contatti['PasswordHash'].notna())
                 ]
-                ricevente = st.selectbox("Seleziona collega:", contatti_validi['Nome Cognome'].tolist(), key=f"swap_select_{shift_id_to_manage}")
+
+                matricola_to_name = pd.Series(contatti_validi['Nome Cognome'].values, index=contatti_validi['Matricola']).to_dict()
+                ricevente_matricola = st.selectbox("Seleziona collega:", contatti_validi['Matricola'].tolist(), format_func=lambda m: matricola_to_name.get(m, m), key=f"swap_select_{shift_id_to_manage}")
+
 
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("Invia Richiesta", key=f"swap_confirm_{shift_id_to_manage}", use_container_width=True, type="primary"):
-                        if richiedi_sostituzione_logic(gestionale_data, user_to_manage, ricevente, shift_id_to_manage):
+                        if richiedi_sostituzione_logic(gestionale_data, matricola_to_manage, ricevente_matricola, shift_id_to_manage):
                             salva_gestionale_async(gestionale_data)
                             del st.session_state.managing_oncall_shift_id
                             if 'oncall_swap_mode' in st.session_state: del st.session_state.oncall_swap_mode
@@ -1155,7 +1165,7 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("📢 Pubblica in Bacheca", use_container_width=True):
-                        if pubblica_turno_in_bacheca_logic(gestionale_data, user_to_manage, shift_id_to_manage):
+                        if pubblica_turno_in_bacheca_logic(gestionale_data, matricola_to_manage, shift_id_to_manage):
                             salva_gestionale_async(gestionale_data)
                             del st.session_state.managing_oncall_shift_id
                             st.rerun()
@@ -1167,7 +1177,7 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
             st.divider()
             if st.button("⬅️ Torna al Calendario", key=f"cancel_manage_{shift_id_to_manage}", use_container_width=True):
                 if 'managing_oncall_shift_id' in st.session_state: del st.session_state.managing_oncall_shift_id
-                if 'managing_oncall_user' in st.session_state: del st.session_state.managing_oncall_user
+                if 'managing_oncall_user_matricola' in st.session_state: del st.session_state.managing_oncall_user_matricola
                 if 'oncall_swap_mode' in st.session_state: del st.session_state.oncall_swap_mode
                 st.rerun()
         st.stop() # Ferma l'esecuzione per non mostrare il calendario sotto la modale
@@ -1253,36 +1263,33 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
             shift_today = oncall_shifts_df[oncall_shifts_df['date_only'] == day]
             user_is_on_call = False
             shift_id_today = None
-            managed_user_name = nome_utente_autenticato
+            managed_user_matricola = matricola_utente
 
             if not shift_today.empty:
                 shift_id_today = shift_today.iloc[0]['ID_Turno']
                 prenotazioni_today = df_prenotazioni[df_prenotazioni['ID_Turno'] == shift_id_today]
                 df_contatti = gestionale_data.get('contatti', pd.DataFrame())
+                matricola_to_name = pd.Series(df_contatti['Nome Cognome'].values, index=df_contatti['Matricola'].astype(str)).to_dict()
 
 
                 if not prenotazioni_today.empty:
                     tech_display_list = []
                     for _, booking in prenotazioni_today.iterrows():
-                        technician_name = booking['Nome Cognome']
+                        technician_matricola = str(booking['Matricola'])
+                        technician_name = matricola_to_name.get(technician_matricola, f"Matricola {technician_matricola}")
                         surname = technician_name.split()[-1].upper()
 
-                        # --- LOGICA PLACEHOLDER ---
-                        user_details = df_contatti[df_contatti['Nome Cognome'] == technician_name] if not df_contatti.empty else pd.DataFrame()
-                        is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('Password')) or pd.isna(user_details.iloc[0].get('PasswordHash'))
+                        user_details = df_contatti[df_contatti['Matricola'] == technician_matricola]
+                        is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('PasswordHash'))
 
-                        if is_placeholder:
-                            display_name = f"<i>{surname} (Esterno)</i>"
-                        else:
-                            display_name = surname
+                        display_name = f"<i>{surname} (Esterno)</i>" if is_placeholder else surname
                         tech_display_list.append(display_name)
-                        # --- FINE LOGICA PLACEHOLDER ---
 
-                        if technician_name == nome_utente_autenticato:
+                        if technician_matricola == str(matricola_utente):
                             user_is_on_call = True
 
                     if tech_display_list:
-                        managed_user_name = prenotazioni_today.iloc[0]['Nome Cognome']
+                        managed_user_matricola = str(prenotazioni_today.iloc[0]['Matricola'])
 
                     technicians_html = "".join([f"<div style='font-size: 0.9em; font-weight: 500; line-height: 1.3; margin-bottom: 2px;'>{s}</div>" for s in tech_display_list])
                 else:
@@ -1312,7 +1319,7 @@ def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_uten
             if can_manage:
                 if st.button("Gestisci", key=f"manage_{day}", use_container_width=True):
                     st.session_state.managing_oncall_shift_id = shift_id_today
-                    st.session_state.managing_oncall_user = managed_user_name
+                    st.session_state.managing_oncall_user_matricola = managed_user_matricola
                     st.rerun()
 
 
@@ -1380,11 +1387,11 @@ def render_access_logs_tab(gestionale_data):
         display_df['timestamp'] = display_df['timestamp'].dt.strftime('%d/%m/%Y %H:%M:%S')
         display_df.rename(columns={
             'timestamp': 'Data e Ora',
-            'username': 'Nome Utente',
+            'username': 'Nome Utente/Matricola',
             'status': 'Esito'
         }, inplace=True)
 
-        st.dataframe(display_df[['Data e Ora', 'Nome Utente', 'Esito']], use_container_width=True)
+        st.dataframe(display_df[['Data e Ora', 'Nome Utente/Matricola', 'Esito']], use_container_width=True)
 
 
 def render_guida_tab(ruolo):
@@ -1573,12 +1580,12 @@ SESSION_DURATION_HOURS = 8760 # 1 anno (365 * 24)
 if not os.path.exists(SESSION_DIR):
     os.makedirs(SESSION_DIR)
 
-def save_session(username, role):
+def save_session(matricola, role):
     """Salva i dati di una sessione in un file basato su token e restituisce il token."""
     token = str(uuid.uuid4())
     session_filepath = os.path.join(SESSION_DIR, f"session_{token}.json")
     session_data = {
-        'authenticated_user': username,
+        'authenticated_user': matricola,
         'ruolo': role,
         'timestamp': datetime.datetime.now().isoformat()
     }
@@ -1628,237 +1635,20 @@ def delete_session(token):
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
-def render_situazione_impianti_tab():
-    st.header("📊 Situazione Generale Impianti")
-
-    # Carica i dati una sola volta per ottenere le opzioni dei filtri
-    # @st.cache_data
-    def get_filter_options():
-        df_all = carica_dati_attivita_programmate()
-        if df_all.empty:
-            return {}, {}, {}
-        return sorted(df_all['TCL'].unique()), sorted(df_all['Area'].unique()), sorted(df_all['Stato'].unique())
-
-    tcl_options, area_options, stato_options = get_filter_options()
-
-    if not tcl_options:
-        st.warning("Nessun dato di attività trovato nel database per popolare i filtri.")
-        return
-
-    with st.form("situazione_filters_form"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            selected_tcl = st.multiselect("Filtra per TCL", options=tcl_options, default=tcl_options)
-        with col2:
-            selected_area = st.multiselect("Filtra per Area", options=area_options, default=area_options)
-        with col3:
-            selected_stato = st.multiselect("Filtra per Stato", options=stato_options, default=stato_options)
-
-        submitted = st.form_submit_button("Applica Filtri")
-
-    if not submitted:
-        st.info("Usa i filtri e clicca su 'Applica Filtri' per visualizzare i dati.")
-        return
-
-    # Applica i filtri tramite la query al DB
-    filters = {
-        'tcl': selected_tcl,
-        'area': selected_area,
-        'stato': selected_stato
-    }
-    filtered_df = get_filtered_activities(filters)
-
-    st.download_button(
-        label="📥 Esporta Dati Filtrati CSV",
-        data=to_csv(filtered_df),
-        file_name='situazione_impianti.csv',
-        mime='text/csv',
-    )
-
-    if filtered_df.empty:
-        st.info("Nessuna attività corrisponde ai filtri selezionati.")
-        return
-
-    # --- Visualizzazione Dati ---
-    st.subheader("Riepilogo Attività per Stato")
-
-    # Calcola le metriche
-    total_activities = len(filtered_df)
-    status_counts = filtered_df['Stato'].value_counts()
-
-    # Se la colonna STATO non è ancora stata definita, mostra un avviso
-    if "Non Definito" in status_counts.index:
-        st.info("NOTA: La colonna 'Stato' non è stata ancora configurata. I dati seguenti sono aggregati su un valore di default.")
-
-    st.metric("Totale Attività Filtrate", total_activities)
-
-    st.markdown("##### Conteggio per Stato")
-    st.dataframe(status_counts)
-
-    # Grafico a barre
-    if not (status_counts.index == "Non Definito").all():
-        st.bar_chart(status_counts)
-
-    st.subheader("Dettaglio Attività Filtrate")
-    # Sostituisce la tabella con un layout a card per coerenza e per includere lo storico.
-    for index, row in filtered_df.iterrows():
-        with st.container(border=True):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown(f"#### PdL `{row['PdL']}`")
-                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
-            with col2:
-                st.markdown(f"**Stato Attuale**")
-                st.info(f"_{row['Stato']}_")
-
-            if pd.notna(row['Descrizione']):
-                st.caption(f"Descrizione: {row['Descrizione']}")
-
-            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
-
-            # Mostra storico interventi
-            if row['Storico']:
-                visualizza_storico_organizzato(row['Storico'], row['PdL'])
-
-
-def render_programmazione_tab():
-    st.header("🗓️ Programmazione Attività Settimanale")
-
-    # Carica i dati una sola volta per ottenere le opzioni dei filtri
-    # @st.cache_data
-    def get_filter_options():
-        # Ottimizzazione: potremmo voler caricare solo le colonne necessarie per i filtri
-        df_all = carica_dati_attivita_programmate()
-        if df_all.empty:
-            return [], [], []
-        return sorted(df_all['Area'].unique()), sorted(df_all['TCL'].unique()), ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-
-    area_options, tcl_options, day_options = get_filter_options()
-
-    if not area_options:
-        st.warning("Nessun dato di attività trovato nel database per popolare i filtri.")
-        return
-
-    with st.form("programmazione_filters_form"):
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            pdl_filter = st.text_input("Filtra per PdL...")
-        with col2:
-            area_filter = st.multiselect("Filtra per Area", options=area_options)
-        with col3:
-            tcl_filter = st.multiselect("Filtra per TCL", options=tcl_options)
-        with col4:
-            day_filter = st.multiselect("Filtra per Giorno", options=day_options)
-
-        submitted = st.form_submit_button("Applica Filtri")
-
-    # Applica i filtri solo se il form è stato sottomesso
-    if submitted:
-        filters = {
-            'pdl_search': pdl_filter if pdl_filter else None,
-            'area': area_filter if area_filter else None,
-            'tcl': tcl_filter if tcl_filter else None,
-            'day_filter': day_filter if day_filter else None
-        }
-        # Rimuovi le chiavi con valori None/vuoti per non applicare filtri non necessari
-        active_filters = {k: v for k, v in filters.items() if v}
-
-        df_to_show = get_filtered_activities(active_filters)
-    else:
-        # Di default, mostra tutte le attività programmate
-        df_to_show = get_filtered_activities({'day_filter': day_options})
-
-    # --- Grafico a barre raggruppato ---
-    if not df_to_show.empty:
-        st.subheader("Carico di Lavoro Settimanale per Area")
-
-        days_of_week = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
-
-        # Creiamo una lista di dizionari per il DataFrame
-        chart_data = []
-        for _, row in df_to_show.iterrows():
-            # Assicuriamoci che GiorniProgrammati sia una stringa prima di splittare
-            if isinstance(row['GiorniProgrammati'], str):
-                giorni = [g.strip() for g in row['GiorniProgrammati'].split(',')]
-                area = row['Area']
-                for giorno in giorni:
-                    if giorno in days_of_week:
-                        chart_data.append({'Giorno': giorno, 'Area': area})
-
-        if chart_data:
-            chart_df = pd.DataFrame(chart_data)
-
-            # Specifica Vega-Lite per il grafico a barre verticali raggruppate (stacked)
-            # Non è necessario pre-aggregare i dati, Vega-Lite può farlo
-            vega_spec = {
-                "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-                "description": "Grafico a barre verticale delle attività per giorno e area.",
-                "width": "container",
-                "mark": "bar",
-                "encoding": {
-                    "x": {
-                        "field": "Giorno",
-                        "type": "ordinal",
-                        "sort": days_of_week,
-                        "title": "Giorno della Settimana"
-                    },
-                    "y": {
-                        "aggregate": "count",
-                        "type": "quantitative",
-                        "title": "Numero di Attività Programmate"
-                    },
-                    "color": {
-                        "field": "Area",
-                        "type": "nominal",
-                        "title": "Area"
-                    },
-                    "tooltip": [
-                        {"field": "Giorno", "type": "nominal"},
-                        {"field": "Area", "type": "nominal"},
-                        {"aggregate": "count", "type": "quantitative", "title": "Numero Attività"}
-                    ]
-                },
-                "config": {
-                    "view": {"stroke": "transparent"} # Rimuove il bordo attorno al grafico
-                }
-            }
-
-            st.vega_lite_chart(chart_df, vega_spec, use_container_width=True)
-        else:
-            st.info("Nessuna attività programmata nei giorni feriali per i filtri selezionati.")
-
-
-    st.divider()
-
-    if df_to_show.empty:
-        st.info("Nessuna attività programmata corrisponde ai filtri selezionati.")
-        return
-
-    # Layout a card, mobile-friendly
-    for index, row in df_to_show.iterrows():
-        with st.container(border=True):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown(f"#### PdL `{row['PdL']}`")
-                st.markdown(f"**Impianto:** {row.get('Impianto', 'N/D')} | **Area:** {row.get('Area', 'N/D')} | **TCL:** {row.get('TCL', 'N/D')}")
-            with col2:
-                st.markdown(f"**Stato Attuale**")
-                st.info(f"_{row['Stato']}_")
-
-            if pd.notna(row['Descrizione']):
-                st.caption(f"Descrizione: {row['Descrizione']}")
-
-            st.markdown(f"**Programmato per:** 🗓️ `{row['GiorniProgrammati']}`")
-
-            # Mostra storico interventi
-            if row['Storico']:
-                visualizza_storico_organizzato(row['Storico'], row['PdL'])
-
-
-def main_app(nome_utente_autenticato, ruolo):
+def main_app(matricola_utente, ruolo):
     st.set_page_config(layout="wide", page_title="Gestionale")
 
     gestionale_data = carica_gestionale()
+    df_contatti = gestionale_data['contatti']
+
+    # Ottieni il nome utente dalla matricola
+    user_info = df_contatti[df_contatti['Matricola'] == str(matricola_utente)]
+    if not user_info.empty:
+        nome_utente_autenticato = user_info.iloc[0]['Nome Cognome']
+    else:
+        st.error("Errore critico: impossibile trovare i dati dell'utente loggato.")
+        st.stop()
+
 
     # Sincronizza automaticamente i turni di reperibilità all'avvio
     today = datetime.date.today()
@@ -1876,7 +1666,7 @@ def main_app(nome_utente_autenticato, ruolo):
     elif st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
-            render_debriefing_ui(knowledge_core, nome_utente_autenticato, datetime.date.today())
+            render_debriefing_ui(knowledge_core, matricola_utente, datetime.date.today())
     else:
         # Header con titolo, notifiche e pulsante di logout
         col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
@@ -1887,8 +1677,8 @@ def main_app(nome_utente_autenticato, ruolo):
         with col2:
             st.write("") # Spacer
             st.write("") # Spacer
-            user_notifications = leggi_notifiche(gestionale_data, nome_utente_autenticato)
-            render_notification_center(user_notifications, gestionale_data)
+            user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
+            render_notification_center(user_notifications, gestionale_data, matricola_utente)
         with col3:
             st.write("")
             st.write("")
@@ -1916,7 +1706,7 @@ def main_app(nome_utente_autenticato, ruolo):
 
         if ruolo in ["Amministratore", "Tecnico"]:
             # Nuova logica per trovare attività non completate del giorno precedente
-            attivita_pianificate_ieri = trova_attivita(nome_utente_autenticato, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
+            attivita_pianificate_ieri = trova_attivita(matricola_utente, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
 
             if attivita_pianificate_ieri:
                 stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
@@ -1962,7 +1752,7 @@ def main_app(nome_utente_autenticato, ruolo):
 
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-                lista_attivita = trova_attivita(nome_utente_autenticato, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+                lista_attivita = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
                 disegna_sezione_attivita(lista_attivita, "today", ruolo)
 
             with sub_tabs[1]:
@@ -1995,7 +1785,7 @@ def main_app(nome_utente_autenticato, ruolo):
                     # Carica la lista dei contatti per il selettore del partner
                     contatti_df = gestionale_data.get('contatti', pd.DataFrame())
                     # Escludi l'utente corrente dalla lista dei partner selezionabili
-                    lista_partner = contatti_df[contatti_df['Nome Cognome'] != nome_utente_autenticato]['Nome Cognome'].tolist()
+                    lista_partner = contatti_df[contatti_df['Matricola'] != str(matricola_utente)]['Nome Cognome'].tolist()
 
                     with st.form("form_relazione"):
                         col_tech, col_partner = st.columns(2)
@@ -2192,12 +1982,12 @@ def main_app(nome_utente_autenticato, ruolo):
                 assistenza_tab, straordinario_tab, reperibilita_tab = st.tabs(["Turni Assistenza", "Turni Straordinario", "Turni Reperibilità"])
                 with assistenza_tab:
                     df_assistenza = get_shifts_by_type('Assistenza')
-                    render_turni_list(df_assistenza, gestionale_data, nome_utente_autenticato, ruolo, "assistenza")
+                    render_turni_list(df_assistenza, gestionale_data, matricola_utente, ruolo, "assistenza")
                 with straordinario_tab:
                     df_straordinario = get_shifts_by_type('Straordinario')
-                    render_turni_list(df_straordinario, gestionale_data, nome_utente_autenticato, ruolo, "straordinario")
+                    render_turni_list(df_straordinario, gestionale_data, matricola_utente, ruolo, "straordinario")
                 with reperibilita_tab:
-                    render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo)
+                    render_reperibilita_tab(gestionale_data, matricola_utente, ruolo)
             with bacheca_tab:
                 st.subheader("Turni Liberi in Bacheca")
                 df_bacheca = gestionale_data.get('bacheca', pd.DataFrame())
@@ -2206,18 +1996,22 @@ def main_app(nome_utente_autenticato, ruolo):
                     st.info("Al momento non ci sono turni liberi in bacheca.")
                 else:
                     df_turni = gestionale_data['turni']
+                    matricola_to_name = pd.Series(gestionale_data['contatti']['Nome Cognome'].values, index=gestionale_data['contatti']['Matricola'].astype(str)).to_dict()
                     for _, bacheca_entry in turni_disponibili_bacheca.iterrows():
                         try:
                             turno_details = df_turni[df_turni['ID_Turno'] == bacheca_entry['ID_Turno']].iloc[0]
+                            matricola_originale = str(bacheca_entry['Tecnico_Originale_Matricola'])
+                            nome_originale = matricola_to_name.get(matricola_originale, f"Matricola {matricola_originale}")
+
                             with st.container(border=True):
                                 st.markdown(f"**{turno_details['Descrizione']}** ({bacheca_entry['Ruolo_Originale']})")
                                 st.caption(f"Data: {pd.to_datetime(turno_details['Data']).strftime('%d/%m/%Y')} | Orario: {turno_details['OrarioInizio']} - {turno_details['OrarioFine']}")
-                                st.write(f"Pubblicato da: {bacheca_entry['Tecnico_Originale']} il {pd.to_datetime(bacheca_entry['Timestamp_Pubblicazione']).strftime('%d/%m %H:%M')}")
+                                st.write(f"Pubblicato da: {nome_originale} il {pd.to_datetime(bacheca_entry['Timestamp_Pubblicazione']).strftime('%d/%m %H:%M')}")
                                 ruolo_richiesto = bacheca_entry['Ruolo_Originale']
                                 is_eligible = not (ruolo_richiesto == 'Tecnico' and ruolo == 'Aiutante')
                                 if is_eligible:
                                     if st.button("Prendi questo turno", key=f"take_{bacheca_entry['ID_Bacheca']}"):
-                                        if prendi_turno_da_bacheca_logic(gestionale_data, nome_utente_autenticato, ruolo, bacheca_entry['ID_Bacheca']):
+                                        if prendi_turno_da_bacheca_logic(gestionale_data, matricola_utente, ruolo, bacheca_entry['ID_Bacheca']):
                                             salva_gestionale_async(gestionale_data)
                                             st.rerun()
                                 else:
@@ -2227,27 +2021,31 @@ def main_app(nome_utente_autenticato, ruolo):
             with sostituzioni_tab:
                 st.subheader("Richieste di Sostituzione")
                 df_sostituzioni = gestionale_data['sostituzioni']
+                matricola_to_name = pd.Series(gestionale_data['contatti']['Nome Cognome'].values, index=gestionale_data['contatti']['Matricola'].astype(str)).to_dict()
+
                 st.markdown("#### 📥 Richieste Ricevute")
-                richieste_ricevute = df_sostituzioni[df_sostituzioni['Ricevente'] == nome_utente_autenticato]
+                richieste_ricevute = df_sostituzioni[df_sostituzioni['Ricevente_Matricola'] == str(matricola_utente)]
                 if richieste_ricevute.empty: st.info("Nessuna richiesta di sostituzione ricevuta.")
                 for _, richiesta in richieste_ricevute.iterrows():
                     with st.container(border=True):
-                        st.markdown(f"**{richiesta['Richiedente']}** ti ha chiesto un cambio per il turno **{richiesta['ID_Turno']}**.")
+                        richiedente_nome = matricola_to_name.get(str(richiesta['Richiedente_Matricola']), "Sconosciuto")
+                        st.markdown(f"**{richiedente_nome}** ti ha chiesto un cambio per il turno **{richiesta['ID_Turno']}**.")
                         c1, c2 = st.columns(2)
                         with c1:
                             if st.button("✅ Accetta", key=f"acc_{richiesta['ID_Richiesta']}"):
-                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], nome_utente_autenticato, True):
+                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], matricola_utente, True):
                                     salva_gestionale_async(gestionale_data); st.rerun()
                         with c2:
                             if st.button("❌ Rifiuta", key=f"rif_{richiesta['ID_Richiesta']}"):
-                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], nome_utente_autenticato, False):
+                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], matricola_utente, False):
                                     salva_gestionale_async(gestionale_data); st.rerun()
                 st.divider()
                 st.markdown("#### 📤 Richieste Inviate")
-                richieste_inviate = df_sostituzioni[df_sostituzioni['Richiedente'] == nome_utente_autenticato]
+                richieste_inviate = df_sostituzioni[df_sostituzioni['Richiedente_Matricola'] == str(matricola_utente)]
                 if richieste_inviate.empty: st.info("Nessuna richiesta di sostituzione inviata.")
                 for _, richiesta in richieste_inviate.iterrows():
-                    st.markdown(f"- Richiesta inviata a **{richiesta['Ricevente']}** per il turno **{richiesta['ID_Turno']}**.")
+                    ricevente_nome = matricola_to_name.get(str(richiesta['Ricevente_Matricola']), "Sconosciuto")
+                    st.markdown(f"- Richiesta inviata a **{ricevente_nome}** per il turno **{richiesta['ID_Turno']}**.")
 
         # Scheda 4: Richieste
         with tabs[4]:
@@ -2266,14 +2064,14 @@ def main_app(nome_utente_autenticato, ruolo):
                             new_id = f"MAT_{int(datetime.datetime.now().timestamp())}"
                             nuova_richiesta = pd.DataFrame([{
                                 'ID_Richiesta': new_id,
-                                'Richiedente': nome_utente_autenticato,
+                                'Richiedente_Matricola': str(matricola_utente),
                                 'Timestamp': datetime.datetime.now(),
                                 'Stato': 'Inviata',
                                 'Dettagli': dettagli_richiesta
                             }])
 
                             # Aggiungi la nuova riga al dataframe
-                            df_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame(columns=['ID_Richiesta', 'Richiedente', 'Timestamp', 'Stato', 'Dettagli']))
+                            df_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame())
                             gestionale_data['richieste_materiali'] = pd.concat([df_materiali, nuova_richiesta], ignore_index=True)
 
                             if salva_gestionale_async(gestionale_data):
@@ -2282,7 +2080,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                 titolo_email = f"Nuova Richiesta Materiali da {nome_utente_autenticato}"
                                 html_body = f"""
                                 <h3>Nuova Richiesta Materiali</h3>
-                                <p><strong>Richiedente:</strong> {nome_utente_autenticato}</p>
+                                <p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p>
                                 <p><strong>Data e Ora:</strong> {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
                                 <hr>
                                 <h4>Materiali Richiesti:</h4>
@@ -2324,7 +2122,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                 new_id = f"ASS_{int(datetime.datetime.now().timestamp())}"
                                 nuova_richiesta_assenza = pd.DataFrame([{
                                     'ID_Richiesta': new_id,
-                                    'Richiedente': nome_utente_autenticato,
+                                    'Richiedente_Matricola': str(matricola_utente),
                                     'Timestamp': datetime.datetime.now(),
                                     'Tipo_Assenza': tipo_assenza,
                                     'Data_Inizio': pd.to_datetime(data_inizio),
@@ -2333,7 +2131,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                     'Stato': 'Inviata'
                                 }])
 
-                                df_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame(columns=['ID_Richiesta', 'Richiedente', 'Timestamp', 'Tipo_Assenza', 'Data_Inizio', 'Data_Fine', 'Note', 'Stato']))
+                                df_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame())
                                 gestionale_data['richieste_assenze'] = pd.concat([df_assenze, nuova_richiesta_assenza], ignore_index=True)
 
                                 if salva_gestionale_async(gestionale_data):
@@ -2342,7 +2140,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                     titolo_email = f"Nuova Richiesta di Assenza da {nome_utente_autenticato}"
                                     html_body = f"""
                                     <h3>Nuova Richiesta di Assenza</h3>
-                                    <p><strong>Richiedente:</strong> {nome_utente_autenticato}</p>
+                                    <p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p>
                                     <p><strong>Tipo:</strong> {tipo_assenza}</p>
                                     <p><strong>Periodo:</strong> dal {data_inizio.strftime('%d/%m/%Y')} al {data_fine.strftime('%d/%m/%Y')}</p>
                                     <hr>
@@ -2379,7 +2177,7 @@ def main_app(nome_utente_autenticato, ruolo):
                 st.subheader("Dashboard di Controllo")
 
                 # Se è stata selezionata la vista di dettaglio, mostrala
-                if st.session_state.get('detail_technician'):
+                if st.session_state.get('detail_technician_matricola'):
                     render_technician_detail_view()
                 else:
                     # Nuova struttura a due livelli per la dashboard admin
@@ -2436,7 +2234,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                     st.write(f"**Tecnico:** {index}")
                                     st.dataframe(row.to_frame().T)
                                     if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                        st.session_state.update({'detail_technician': index, 'detail_start_date': results['start_date'], 'end_date': results['end_date']})
+                                        st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
                                         st.rerun()
 
                         with caposquadra_tabs[1]: # Crea Nuovo Turno
@@ -2459,9 +2257,9 @@ def main_app(nome_utente_autenticato, ruolo):
                                         gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
                                         df_contatti = gestionale_data.get('contatti')
                                         if df_contatti is not None:
-                                            utenti_da_notificare = df_contatti['Nome Cognome'].tolist()
+                                            utenti_da_notificare = df_contatti['Matricola'].tolist()
                                             messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
-                                            for utente in utenti_da_notificare: crea_notifica(gestionale_data, utente, messaggio)
+                                            for matricola in utenti_da_notificare: crea_notifica(gestionale_data, matricola, messaggio)
                                         if salva_gestionale_async(gestionale_data):
                                             st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
                                             st.rerun()
@@ -2506,7 +2304,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                         st.error(message)
 
                         with caposquadra_tabs[3]: # Validazione Report
-                            render_report_validation_tab(nome_utente_autenticato)
+                            render_report_validation_tab(matricola_utente)
 
                     # --- Dashboard Tecnica ---
                     with main_admin_tabs[1]:
@@ -2561,10 +2359,10 @@ def main_app(nome_utente_autenticato, ruolo):
 # Initialize session state keys if they don't exist
 keys_to_initialize = {
     'login_state': 'password', # 'password', 'setup_2fa', 'verify_2fa', 'logged_in'
-    'authenticated_user': None,
+    'authenticated_user': None, # Ora conterrà la MATRICOLA
     'ruolo': None,
     'debriefing_task': None,
-    'temp_user_for_2fa': None,
+    'temp_user_for_2fa': None, # Ora conterrà la MATRICOLA
     '2fa_secret': None,
     'completed_tasks_yesterday': []
 }
@@ -2612,39 +2410,40 @@ else:
                 else:
                     status, user_data = authenticate_user(matricola_inserita, password_inserita, df_contatti)
 
+                    # user_data ora contiene la MATRICOLA, non il nome
                     if status == "2FA_REQUIRED":
                         log_access_attempt(gestionale, matricola_inserita, "Password corretta, 2FA richiesta")
                         salva_gestionale_async(gestionale)
                         st.session_state.login_state = 'verify_2fa'
-                        st.session_state.temp_user_for_2fa = user_data # Salva il nome utente
+                        st.session_state.temp_user_for_2fa = user_data # Salva la matricola
                         st.rerun()
                     elif status == "2FA_SETUP_REQUIRED":
                         log_access_attempt(gestionale, matricola_inserita, "Password corretta, setup 2FA richiesto")
                         salva_gestionale_async(gestionale)
                         st.session_state.login_state = 'setup_2fa'
-                        st.session_state.temp_user_for_2fa, st.session_state.ruolo = user_data
+                        st.session_state.temp_user_for_2fa, st.session_state.ruolo = user_data # Salva (matricola, ruolo)
                         st.rerun()
 
                     elif status == "FIRST_LOGIN_SETUP":
                         # L'utente esiste ma non ha una password. La creiamo ora.
-                        nome_completo, ruolo, password_fornita = user_data
+                        matricola_utente, ruolo, password_fornita = user_data
 
                         # Hashing della nuova password
                         hashed_password = bcrypt.hashpw(password_fornita.encode('utf-8'), bcrypt.gensalt())
 
                         # Aggiornamento del DataFrame in memoria
-                        user_idx = df_contatti.index[df_contatti['Nome Cognome'] == nome_completo][0]
+                        user_idx = df_contatti.index[df_contatti['Matricola'] == str(matricola_utente)][0]
                         df_contatti.loc[user_idx, 'PasswordHash'] = hashed_password.decode('utf-8')
 
                         # Salvataggio nel database
                         if salva_gestionale_async(gestionale):
                             st.success("Password creata con successo! Ora configura la sicurezza.")
-                            log_access_attempt(gestionale, nome_completo, "Primo login: Password creata")
+                            log_access_attempt(gestionale, matricola_utente, "Primo login: Password creata")
                             salva_gestionale_async(gestionale) # Salva anche il log
 
                             # Procedi al setup della 2FA
                             st.session_state.login_state = 'setup_2fa'
-                            st.session_state.temp_user_for_2fa = nome_completo
+                            st.session_state.temp_user_for_2fa = matricola_utente
                             st.session_state.ruolo = ruolo
                             st.rerun()
                         else:
@@ -2663,9 +2462,12 @@ else:
             st.session_state['2fa_secret'] = generate_2fa_secret()
 
         secret = st.session_state['2fa_secret']
-        user_to_setup = st.session_state['temp_user_for_2fa']
+        matricola_to_setup = st.session_state['temp_user_for_2fa']
 
-        uri = get_provisioning_uri(user_to_setup, secret)
+        # Recupera il nome utente per la visualizzazione
+        user_name_for_display = df_contatti[df_contatti['Matricola'] == str(matricola_to_setup)].iloc[0]['Nome Cognome']
+
+        uri = get_provisioning_uri(user_name_for_display, secret)
         img = qrcode.make(uri)
         buf = io.BytesIO()
         img.save(buf, format='PNG')
@@ -2684,19 +2486,19 @@ else:
             if submitted:
                 if verify_2fa_code(secret, code):
                     # Salva il segreto nel file gestionale
-                    user_idx = df_contatti[df_contatti['Nome Cognome'] == user_to_setup].index[0]
+                    user_idx = df_contatti[df_contatti['Matricola'] == str(matricola_to_setup)].index[0]
                     if '2FA_Secret' not in df_contatti.columns:
                         df_contatti['2FA_Secret'] = None
                     df_contatti.loc[user_idx, '2FA_Secret'] = secret
 
                     if salva_gestionale_async(gestionale):
-                        log_access_attempt(gestionale, user_to_setup, "Setup 2FA completato e login riuscito")
+                        log_access_attempt(gestionale, matricola_to_setup, "Setup 2FA completato e login riuscito")
                         salva_gestionale_async(gestionale) # Salva anche il log
                         st.success("Configurazione 2FA completata con successo! Accesso in corso...")
-                        token = save_session(user_to_setup, st.session_state.ruolo)
+                        token = save_session(matricola_to_setup, st.session_state.ruolo)
                         if token:
                             st.session_state.login_state = 'logged_in'
-                            st.session_state.authenticated_user = user_to_setup
+                            st.session_state.authenticated_user = matricola_to_setup
                             st.session_state.session_token = token
                             st.query_params['session_token'] = token
                             st.rerun()
@@ -2705,30 +2507,31 @@ else:
                     else:
                         st.error("Errore durante il salvataggio della configurazione. Riprova.")
                 else:
-                    log_access_attempt(gestionale, user_to_setup, "Setup 2FA fallito (codice non valido)")
+                    log_access_attempt(gestionale, matricola_to_setup, "Setup 2FA fallito (codice non valido)")
                     salva_gestionale_async(gestionale)
                     st.error("Codice non valido. Riprova.")
 
     elif st.session_state.login_state == 'verify_2fa':
         st.subheader("Verifica in Due Passaggi")
-        user_to_verify = st.session_state.temp_user_for_2fa
-        user_row = df_contatti[df_contatti['Nome Cognome'] == user_to_verify].iloc[0]
+        matricola_to_verify = st.session_state.temp_user_for_2fa
+        user_row = df_contatti[df_contatti['Matricola'] == str(matricola_to_verify)].iloc[0]
         secret = user_row['2FA_Secret']
         ruolo = user_row['Ruolo']
+        nome_utente = user_row['Nome Cognome']
 
         with st.form("verify_2fa_login"):
-            code = st.text_input(f"Ciao {user_to_verify.split()[0]}, inserisci il codice dalla tua app di autenticazione")
+            code = st.text_input(f"Ciao {nome_utente.split()[0]}, inserisci il codice dalla tua app di autenticazione")
             submitted = st.form_submit_button("Verifica")
 
             if submitted:
                 if verify_2fa_code(secret, code):
-                    log_access_attempt(gestionale, user_to_verify, "Login 2FA riuscito")
+                    log_access_attempt(gestionale, matricola_to_verify, "Login 2FA riuscito")
                     salva_gestionale_async(gestionale)
                     st.success("Codice corretto! Accesso in corso...")
-                    token = save_session(user_to_verify, ruolo)
+                    token = save_session(matricola_to_verify, ruolo)
                     if token:
                         st.session_state.login_state = 'logged_in'
-                        st.session_state.authenticated_user = user_to_verify
+                        st.session_state.authenticated_user = matricola_to_verify
                         st.session_state.ruolo = ruolo
                         st.session_state.session_token = token
                         st.query_params['session_token'] = token
@@ -2736,6 +2539,6 @@ else:
                     else:
                         st.error("Impossibile creare una sessione dopo la verifica 2FA.")
                 else:
-                    log_access_attempt(gestionale, user_to_verify, "Login 2FA fallito (codice non valido)")
+                    log_access_attempt(gestionale, matricola_to_verify, "Login 2FA fallito (codice non valido)")
                     salva_gestionale_async(gestionale)
                     st.error("Codice non valido. Riprova.")
