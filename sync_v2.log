@@ -6,7 +6,7 @@
 2025-09-30 14:06:43,388 - INFO - Letto 440 righe dal foglio 'A3'.
 2025-09-30 14:06:44,084 - INFO - Letto 27 righe dal foglio 'CTE'.
 2025-09-30 14:06:44,847 - INFO - Letto 179 righe dal foglio 'BLENDING'.
-2025-09-30 14:06:44,852 - WARNING - Trovati 2 PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
+2025-09-30 14:06:44,852 - WARNING - Trovati 2 PdL duplicati. Verrï¿½ mantenuta solo la prima occorrenza. Duplicati: ['540300/C', '540300/C']
 2025-09-30 14:06:44,857 - ERROR - Errore caricamento dati dal DB: Execution failed on sql 'SELECT * FROM attivita_programmate': no such table: attivita_programmate
 Traceback (most recent call last):
   File "C:\Users\Coemi\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\io\sql.py", line 2664, in execute
