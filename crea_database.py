@@ -1,9 +1,76 @@
 import sqlite3
 import os
+import pandas as pd
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
 TABLE_NAME = "attivita_programmate"
+EXCEL_GESTIONALE = "Gestionale_Tecnici.xlsx"
+
+
+def sincronizza_contatti_da_excel():
+    """
+    Legge i dati dal file Gestionale_Tecnici.xlsx e li sincronizza
+    con la tabella 'contatti' nel database SQLite, inserendo solo i nuovi utenti.
+    """
+    if not os.path.exists(EXCEL_GESTIONALE):
+        print(f"File gestionale '{EXCEL_GESTIONALE}' non trovato. Salto la sincronizzazione dei contatti.")
+        return
+
+    conn = None
+    try:
+        # Leggi i dati da Excel, assicurandoti che tutte le colonne siano stringhe per evitare errori di tipo
+        df_excel = pd.read_excel(EXCEL_GESTIONALE, sheet_name="Contatti", dtype=str)
+        df_excel.columns = [str(col).strip() for col in df_excel.columns]
+
+        required_cols = ["Nome Cognome", "Ruolo", "Matricola"]
+        if not all(col in df_excel.columns for col in required_cols):
+            print(f"Errore: Il file Excel deve contenere le colonne {required_cols}. Sincronizzazione annullata.")
+            return
+
+        # Pulisce e prepara i dati
+        df_excel['Matricola'] = df_excel['Matricola'].str.strip()
+        df_excel.dropna(subset=['Matricola'], inplace=True)
+        df_excel = df_excel[df_excel['Matricola'] != '']
+
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        utenti_inseriti = 0
+        for _, row_excel in df_excel.iterrows():
+            matricola = row_excel.get('Matricola')
+            if not matricola or matricola.lower() == 'nan':
+                continue
+
+            cursor.execute("SELECT Matricola FROM contatti WHERE Matricola = ?", (matricola,))
+            if cursor.fetchone() is None:
+                # L'utente non esiste, lo inseriamo
+                nome_cognome = row_excel['Nome Cognome']
+                ruolo = row_excel['Ruolo']
+
+                # Inseriamo None per PasswordHash e 2FA_Secret, verranno impostati al primo login
+                user_data = (nome_cognome, ruolo, None, None, matricola)
+
+                cursor.execute("""
+                    INSERT INTO contatti ("Nome Cognome", Ruolo, PasswordHash, "2FA_Secret", Matricola)
+                    VALUES (?, ?, ?, ?, ?)
+                """, user_data)
+                print(f"Nuovo utente inserito: {nome_cognome} (Matricola: {matricola})")
+                utenti_inseriti += 1
+
+        conn.commit()
+        print(f"Sincronizzazione dei contatti completata. {utenti_inseriti} nuovi utenti aggiunti.")
+
+    except FileNotFoundError:
+        print(f"File '{EXCEL_GESTIONALE}' non trovato.")
+    except Exception as e:
+        print(f"Errore durante la sincronizzazione dei contatti: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if conn:
+            conn.close()
+
 
 def crea_tabella():
     """
@@ -111,7 +178,10 @@ def crea_tabella():
             conn.close()
 
 if __name__ == "__main__":
-    if os.path.exists(DB_NAME):
-        print(f"Rimozione del database esistente '{DB_NAME}' per applicare il nuovo schema.")
-        os.remove(DB_NAME)
+    # La logica ora è: crea le tabelle se non esistono, poi sincronizza i contatti.
+    # Non rimuove più il DB se esiste, per preservare i dati esistenti.
+    print("Avvio dello script di creazione/aggiornamento del database...")
     crea_tabella()
+    print("\nAvvio della sincronizzazione dei contatti da Excel...")
+    sincronizza_contatti_da_excel()
+    print("\nOperazione completata.")
