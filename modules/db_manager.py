@@ -32,6 +32,129 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+# --- NUOVE FUNZIONI PER LA GESTIONE DELLE SESSIONI DI VALIDAZIONE ---
+
+def create_validation_session(user_name: str, data: list) -> str:
+    """
+    Crea una nuova sessione di validazione per un utente.
+    Se esiste già una sessione attiva per l'utente, la sovrascrive.
+
+    Args:
+        user_name (str): Il nome dell'utente che avvia la sessione.
+        data (list): La lista di dizionari dei report da validare.
+
+    Returns:
+        str: L'ID della sessione creata.
+    """
+    import uuid
+    import json
+    import datetime
+
+    session_id = str(uuid.uuid4())
+    created_at = datetime.datetime.now().isoformat()
+    data_json = json.dumps(data)
+    status = "active"
+
+    conn = get_db_connection()
+    try:
+        with conn:
+            # Rimuove eventuali vecchie sessioni attive per lo stesso utente
+            conn.execute("DELETE FROM validation_sessions WHERE user_name = ? AND status = 'active'", (user_name,))
+            # Inserisce la nuova sessione
+            conn.execute(
+                "INSERT INTO validation_sessions (session_id, user_name, created_at, data, status) VALUES (?, ?, ?, ?, ?)",
+                (session_id, user_name, created_at, data_json, status)
+            )
+        return session_id
+    except sqlite3.Error as e:
+        print(f"Errore durante la creazione della sessione di validazione per {user_name}: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_active_validation_session(user_name: str) -> dict:
+    """
+    Recupera la sessione di validazione attiva per un dato utente.
+
+    Args:
+        user_name (str): Il nome dell'utente.
+
+    Returns:
+        dict: I dati della sessione (incluso l'ID e i dati dei report), o None se non trovata.
+    """
+    import json
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT session_id, data FROM validation_sessions WHERE user_name = ? AND status = 'active'", (user_name,))
+        result = cursor.fetchone()
+
+        if result:
+            return {
+                "session_id": result["session_id"],
+                "data": json.loads(result["data"])
+            }
+        return None
+    except (sqlite3.Error, json.JSONDecodeError) as e:
+        print(f"Errore nel recuperare la sessione di validazione attiva per {user_name}: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def update_validation_session_data(session_id: str, new_data: list):
+    """
+    Aggiorna i dati di una sessione di validazione esistente.
+
+    Args:
+        session_id (str): L'ID della sessione da aggiornare.
+        new_data (list): La nuova lista di report (come lista di dizionari).
+
+    Returns:
+        bool: True se l'aggiornamento ha avuto successo, altrimenti False.
+    """
+    import json
+    conn = get_db_connection()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE validation_sessions SET data = ? WHERE session_id = ?",
+                (json.dumps(new_data), session_id)
+            )
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiornamento della sessione {session_id}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_validation_session(session_id: str):
+    """
+    Elimina una sessione di validazione. Da usare dopo aver validato o cancellato.
+
+    Args:
+        session_id (str): L'ID della sessione da eliminare.
+
+    Returns:
+        bool: True se l'eliminazione ha avuto successo, altrimenti False.
+    """
+    conn = get_db_connection()
+    try:
+        with conn:
+            conn.execute("DELETE FROM validation_sessions WHERE session_id = ?", (session_id,))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'eliminazione della sessione {session_id}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 
 def get_unvalidated_reports():
     """
@@ -82,20 +205,58 @@ def get_unvalidated_reports():
             conn.close()
 
 
-def validate_report(pdl: str):
+def process_and_commit_validated_reports(validated_data: list):
     """
-    Marca un report come validato impostando 'db_last_modified' a NULL.
+    Processa i report validati, aggiornandoli nel DB e marcandoli come validati.
+    Questa funzione è atomica: o tutti i report vengono aggiornati, o nessuno.
+
+    Args:
+        validated_data (list): Una lista di dizionari, dove ogni dizionario
+                               rappresenta un report validato (e potenzialmente modificato).
     """
+    import json
     conn = get_db_connection()
     try:
-        with conn:
-            conn.execute(
-                "UPDATE attivita_programmate SET db_last_modified = NULL WHERE PdL = ?",
-                (pdl,)
-            )
-        return True
+        with conn: # Inizia una transazione
+            cursor = conn.cursor()
+            for report in validated_data:
+                pdl = report.get('PdL')
+                report_text = report.get('Report')
+                new_status = report.get('Stato')
+                compilation_date = report.get('Data_Compilazione')
+
+                if not all([pdl, report_text, new_status, compilation_date]):
+                    print(f"Skipping report due to missing data: {report}")
+                    continue
+
+                # 1. Leggi lo storico attuale
+                cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
+                result = cursor.fetchone()
+                if not result or not result['Storico']:
+                    continue
+
+                storico_list = json.loads(result['Storico'])
+
+                # 2. Trova e aggiorna il report specifico nello storico
+                report_found_and_updated = False
+                for i, storico_item in enumerate(storico_list):
+                    if storico_item.get('Data_Compilazione') == compilation_date:
+                        storico_list[i]['Report'] = report_text
+                        storico_list[i]['Stato'] = new_status
+                        report_found_and_updated = True
+                        break
+
+                # 3. Se il report è stato aggiornato, salva le modifiche e azzera il flag
+                if report_found_and_updated:
+                    new_storico_json = json.dumps(storico_list)
+                    cursor.execute(
+                        "UPDATE attivita_programmate SET Storico = ?, Stato = ?, db_last_modified = NULL WHERE PdL = ?",
+                        (new_storico_json, new_status, pdl)
+                    )
+        return True # Se la transazione ha successo
     except sqlite3.Error as e:
-        print(f"Errore durante la validazione del report per PdL {pdl}: {e}")
+        print(f"Errore durante il salvataggio dei report validati: {e}")
+        # La transazione verrà automaticamente annullata dal blocco 'with'
         return False
     finally:
         if conn:
