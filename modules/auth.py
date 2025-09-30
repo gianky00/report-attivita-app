@@ -33,34 +33,27 @@ def verify_2fa_code(secret, code):
 
 # --- Funzione di Autenticazione Principale ---
 
-def authenticate_user(username, password, df_contatti):
+def authenticate_user(matricola, password, df_contatti):
     """
-    Autentica un utente e gestisce il flusso 2FA.
+    Autentica un utente tramite Matricola e gestisce il flusso 2FA.
+    Questa è la nuova logica robusta.
 
     Returns:
         tuple: (status, data) dove lo status può essere:
-               - 'SUCCESS': Login completo. data = (nome_completo, ruolo)
                - '2FA_REQUIRED': Password corretta, serve il codice 2FA. data = nome_completo
                - '2FA_SETUP_REQUIRED': Password corretta, serve configurare la 2FA. data = (nome_completo, ruolo)
                - 'FAILED': Credenziali non valide. data = None
     """
-    if df_contatti is None or df_contatti.empty or password is None:
+    if df_contatti is None or df_contatti.empty or not matricola or not password:
         return 'FAILED', None
 
-    user_row = None
-    # Trova la riga dell'utente in base al nome utente fornito
-    for _, riga in df_contatti.iterrows():
-        nome_completo = str(riga['Nome Cognome']).strip()
-        user_param_corretto = nome_completo.split()[-1]
-        if "Garro" in nome_completo:
-            user_param_corretto = "Garro L"
+    # Cerca l'utente direttamente tramite Matricola (case-insensitive)
+    user_row_series = df_contatti[df_contatti['Matricola'].str.lower() == str(matricola).lower()]
 
-        if username.lower() == user_param_corretto.lower():
-            user_row = riga
-            break
-
-    if user_row is None:
+    if user_row_series.empty:
         return 'FAILED', None # Utente non trovato
+
+    user_row = user_row_series.iloc[0]
 
     # --- Logica di autenticazione ---
     password_bytes = str(password).encode('utf-8')

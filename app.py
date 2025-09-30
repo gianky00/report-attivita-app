@@ -2602,33 +2602,30 @@ else:
 
     if st.session_state.login_state == 'password':
         with st.form("login_form"):
-            username_inserito = st.text_input("Nome Utente (Cognome)")
+            matricola_inserita = st.text_input("Matricola")
             password_inserita = st.text_input("Password", type="password")
             submitted = st.form_submit_button("Accedi")
 
             if submitted:
-                if not username_inserito or not password_inserita:
-                    st.warning("Per favore, inserisci nome utente e password.")
+                if not matricola_inserita or not password_inserita:
+                    st.warning("Per favore, inserisci Matricola e Password.")
                 else:
-                    status, user_data = authenticate_user(username_inserito, password_inserita, df_contatti)
+                    status, user_data = authenticate_user(matricola_inserita, password_inserita, df_contatti)
 
                     if status == "2FA_REQUIRED":
-                        log_access_attempt(gestionale, username_inserito, "Password corretta, 2FA richiesta")
+                        log_access_attempt(gestionale, matricola_inserita, "Password corretta, 2FA richiesta")
                         salva_gestionale_async(gestionale)
                         st.session_state.login_state = 'verify_2fa'
                         st.session_state.temp_user_for_2fa = user_data # Salva il nome utente
                         st.rerun()
                     elif status == "2FA_SETUP_REQUIRED":
-                        log_access_attempt(gestionale, username_inserito, "Password corretta, setup 2FA richiesto")
+                        log_access_attempt(gestionale, matricola_inserita, "Password corretta, setup 2FA richiesto")
                         salva_gestionale_async(gestionale)
                         st.session_state.login_state = 'setup_2fa'
                         st.session_state.temp_user_for_2fa, st.session_state.ruolo = user_data
                         st.rerun()
-                    elif status == "SUCCESS": # Questo caso non dovrebbe più verificarsi direttamente qui
-                        # La logica di successo è spostata dopo la verifica 2FA
-                        pass
                     else: # FAILED
-                        log_access_attempt(gestionale, username_inserito, "Credenziali non valide")
+                        log_access_attempt(gestionale, matricola_inserita, "Credenziali non valide")
                         salva_gestionale_async(gestionale)
                         st.error("Credenziali non valide.")
 
