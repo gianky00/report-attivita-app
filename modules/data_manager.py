@@ -24,7 +24,7 @@ def carica_knowledge_core():
 
 def carica_gestionale():
     """
-    Carica tutti i dati gestionali direttamente dal database SQLite.
+    Carica tutti i dati gestionali direttamente dal database SQLite in modo thread-safe.
     """
     import sqlite3
     DB_NAME = "schedario.db"
@@ -35,33 +35,33 @@ def carica_gestionale():
 
     conn = None
     try:
-        conn = sqlite3.connect(DB_NAME)
+        # Acquisisce il lock per prevenire la lettura durante una scrittura in background
+        with config.EXCEL_LOCK:
+            conn = sqlite3.connect(DB_NAME)
 
-        tabelle = [
-            "contatti", "turni", "prenotazioni", "sostituzioni",
-            "notifiche", "bacheca", "richieste_materiali", "richieste_assenze", "access_logs"
-        ]
+            tabelle = [
+                "contatti", "turni", "prenotazioni", "sostituzioni",
+                "notifiche", "bacheca", "richieste_materiali", "richieste_assenze", "access_logs"
+            ]
 
-        data = {}
-        for tabella in tabelle:
-            try:
-                # Carica ogni tabella in un DataFrame
-                data[tabella] = pd.read_sql_query(f"SELECT * FROM {tabella}", conn)
-            except pd.io.sql.DatabaseError as e:
-                # Se una tabella non esiste o è vuota, crea un DataFrame vuoto
-                # Questo può accadere se lo schema è aggiornato ma il DB no
-                print(f"Avviso: tabella '{tabella}' non trovata o vuota nel DB. Errore: {e}")
-                # Per sicurezza, proviamo a leggere le colonne dallo schema
-                cursor = conn.cursor()
-                cursor.execute(f"PRAGMA table_info({tabella});")
-                columns = [info[1] for info in cursor.fetchall()]
-                data[tabella] = pd.DataFrame(columns=columns)
+            data = {}
+            for tabella in tabelle:
+                try:
+                    data[tabella] = pd.read_sql_query(f"SELECT * FROM {tabella}", conn)
+                except pd.io.sql.DatabaseError as e:
+                    print(f"Avviso: tabella '{tabella}' non trovata o vuota nel DB. Errore: {e}")
+                    cursor = conn.cursor()
+                    cursor.execute(f"PRAGMA table_info({tabella});")
+                    columns = [info[1] for info in cursor.fetchall()]
+                    data[tabella] = pd.DataFrame(columns=columns)
 
-        # Gestione retrocompatibilità per la colonna 'Tipo' (se necessario)
-        if 'turni' in data and 'Tipo' not in data['turni'].columns:
-            data['turni']['Tipo'] = 'Assistenza'
-        if 'turni' in data:
-             data['turni']['Tipo'] = data['turni']['Tipo'].fillna('Assistenza')
+            if 'turni' in data and 'Tipo' not in data['turni'].columns:
+                data['turni']['Tipo'] = 'Assistenza'
+            if 'turni' in data:
+                 data['turni']['Tipo'] = data['turni']['Tipo'].fillna('Assistenza')
+
+            conn.close()
+            conn = None # Evita la doppia chiusura nel blocco finally
 
         return data
 
