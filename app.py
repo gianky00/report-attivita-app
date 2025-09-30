@@ -2399,6 +2399,8 @@ else:
         st.stop()
 
     df_contatti = gestionale['contatti']
+    # Assicura che la matricola sia una stringa per tutta la logica di login/2FA
+    df_contatti['Matricola'] = df_contatti['Matricola'].astype(str)
 
     if st.session_state.login_state == 'password':
         with st.form("login_form"):
@@ -2412,40 +2414,42 @@ else:
                 else:
                     status, user_data = authenticate_user(matricola_inserita, password_inserita, df_contatti)
 
-                    # user_data ora contiene la MATRICOLA, non il nome
+                    # user_data ora contiene il nome_completo, non la matricola.
+                    # Usiamo la matricola_inserita, che è stata validata, per il session_state.
                     if status == "2FA_REQUIRED":
                         log_access_attempt(gestionale, matricola_inserita, "Password corretta, 2FA richiesta")
                         salva_gestionale_async(gestionale)
                         st.session_state.login_state = 'verify_2fa'
-                        st.session_state.temp_user_for_2fa = user_data # Salva la matricola
+                        st.session_state.temp_user_for_2fa = matricola_inserita # Salva la matricola
                         st.rerun()
                     elif status == "2FA_SETUP_REQUIRED":
                         log_access_attempt(gestionale, matricola_inserita, "Password corretta, setup 2FA richiesto")
                         salva_gestionale_async(gestionale)
                         st.session_state.login_state = 'setup_2fa'
-                        st.session_state.temp_user_for_2fa, st.session_state.ruolo = user_data # Salva (matricola, ruolo)
+                        _, st.session_state.ruolo = user_data # user_data è (nome_completo, ruolo)
+                        st.session_state.temp_user_for_2fa = matricola_inserita # Salva la matricola
                         st.rerun()
 
                     elif status == "FIRST_LOGIN_SETUP":
                         # L'utente esiste ma non ha una password. La creiamo ora.
-                        matricola_utente, ruolo, password_fornita = user_data
+                        nome_completo, ruolo, password_fornita = user_data
 
                         # Hashing della nuova password
                         hashed_password = bcrypt.hashpw(password_fornita.encode('utf-8'), bcrypt.gensalt())
 
-                        # Aggiornamento del DataFrame in memoria
-                        user_idx = df_contatti.index[df_contatti['Matricola'] == str(matricola_utente)][0]
+                        # Aggiornamento del DataFrame in memoria usando la matricola inserita
+                        user_idx = df_contatti.index[df_contatti['Matricola'] == str(matricola_inserita)][0]
                         df_contatti.loc[user_idx, 'PasswordHash'] = hashed_password.decode('utf-8')
 
                         # Salvataggio nel database
                         if salva_gestionale_async(gestionale):
                             st.success("Password creata con successo! Ora configura la sicurezza.")
-                            log_access_attempt(gestionale, matricola_utente, "Primo login: Password creata")
+                            log_access_attempt(gestionale, matricola_inserita, "Primo login: Password creata")
                             salva_gestionale_async(gestionale) # Salva anche il log
 
                             # Procedi al setup della 2FA
                             st.session_state.login_state = 'setup_2fa'
-                            st.session_state.temp_user_for_2fa = matricola_utente
+                            st.session_state.temp_user_for_2fa = matricola_inserita
                             st.session_state.ruolo = ruolo
                             st.rerun()
                         else:
