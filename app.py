@@ -86,7 +86,7 @@ def analizza_storico_con_ia(_storico_df):
         return {"info": "Dati storici insufficienti per un'analisi avanzata."}
     
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('models/gemini-flash-latest')
         base_prompt = """Sei un Direttore Tecnico di Manutenzione. Analizza la seguente cronologia di interventi e fornisci una diagnosi strategica in formato JSON con le chiavi "profilo", "diagnosi_tematica", "rischio_predittivo", "azione_strategica".
 
 CRONOLOGIA:
@@ -169,7 +169,7 @@ def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
 
     # 2. Costruzione del prompt per l'IA
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('models/gemini-flash-latest')
 
         if technical_summary:
             # Prompt avanzato con contesto tecnico
