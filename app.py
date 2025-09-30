@@ -273,7 +273,12 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
     
     for i, task in enumerate(attivita_da_fare):
         with st.container(border=True):
-            st.markdown(f"**PdL `{task['pdl']}`** - {task['attivita']}")
+            # Aggiungi la data se presente (per le attività recuperate)
+            date_display = ""
+            if 'data_attivita' in task:
+                date_display = f" del **{task['data_attivita'].strftime('%d/%m/%Y')}**"
+
+            st.markdown(f"**PdL `{task['pdl']}`** - {task['attivita']}{date_display}")
 
             # --- LOGICA TEAM ---
             team = task.get('team', [])
@@ -1333,28 +1338,26 @@ def render_situazione_impianti_tab():
         st.warning("Nessun dato sulle attività programmate trovato nel database.")
         return
 
+    # Raggruppa gli stati "DA CHIUDERE" e "SCADUTO" in "TERMINATA"
+    df['STATO_PdL'] = df['STATO_PdL'].replace(['DA CHIUDERE', 'SCADUTO'], 'TERMINATA')
+
+
     # --- Filtri ---
     st.subheader("Filtra Dati")
-    col1, col2 = st.columns(2)
 
+    # Ora c'è solo un filtro per Area
     aree_disponibili = sorted(df['AREA'].dropna().unique()) if 'AREA' in df.columns else []
-    stati_disponibili = sorted(df['STATO_PdL'].dropna().unique()) if 'STATO_PdL' in df.columns else []
+    default_aree = aree_disponibili
+    aree_selezionate = st.multiselect("Filtra per Area", options=aree_disponibili, default=default_aree, key="area_filter_situazione")
 
-    with col1:
-        default_aree = aree_disponibili
-        aree_selezionate = st.multiselect("Filtra per Area", options=aree_disponibili, default=default_aree, key="area_filter_situazione")
+    # Il filtro per stato non è più necessario come prima, ma lo usiamo internamente
+    # per separare le terminate dalle altre per il grafico
+    # stati_disponibili = sorted(df['STATO_PdL'].dropna().unique())
 
-    with col2:
-        default_stati = stati_disponibili
-        stati_selezionati = st.multiselect("Filtra per Stato", options=stati_disponibili, default=default_stati, key="status_filter_situazione")
-
-    # Applica filtri
+    # Applica filtro per area
     filtered_df = df.copy()
     if aree_selezionate:
         filtered_df = filtered_df[filtered_df['AREA'].isin(aree_selezionate)]
-    if stati_selezionati:
-        filtered_df = filtered_df[filtered_df['STATO_PdL'].isin(stati_selezionati)]
-
 
     st.divider()
 
@@ -1365,27 +1368,59 @@ def render_situazione_impianti_tab():
     # --- Metriche ---
     st.subheader("Metriche di Riepilogo")
     total_activities = len(filtered_df)
-    # Assumiamo che 'COMPLETATO' o termini simili siano gli stati finali positivi in STATO_PdL
-    completed_activities = len(filtered_df[filtered_df['STATO_PdL'].str.contains("COMPLETATO|TERMINATA", na=False, case=False)])
+    # La metrica delle completate ora conta solo 'TERMINATA'
+    completed_activities = len(filtered_df[filtered_df['STATO_PdL'] == "TERMINATA"])
     pending_activities = total_activities - completed_activities
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Totale Attività", total_activities)
-    c2.metric("Attività Completate", completed_activities)
+    c2.metric("Attività Terminate", completed_activities) # Etichetta cambiata
     c3.metric("Attività da Completare", pending_activities)
 
     # --- Grafici ---
     st.subheader("Visualizzazione Dati")
 
-    st.markdown("#### Attività per Area")
-    if 'AREA' in filtered_df.columns:
-        area_counts = filtered_df['AREA'].value_counts()
-        if not area_counts.empty:
-            st.bar_chart(area_counts)
+    st.markdown("#### Attività per Area e Stato")
+    if 'AREA' in filtered_df.columns and 'STATO_PdL' in filtered_df.columns:
+        # Crea un pivot table per avere il conteggio per Area e Stato
+        status_pivot = filtered_df.groupby(['AREA', 'STATO_PdL']).size().unstack(fill_value=0)
+
+        # Assicurati che le colonne desiderate esistano
+        if 'TERMINATA' not in status_pivot.columns:
+            status_pivot['TERMINATA'] = 0
+
+        # Riorganizza le colonne per avere un ordine consistente se necessario
+        # Esempio: status_pivot = status_pivot[['IN CORSO', 'SOSPESA', 'TERMINATA']]
+
+        if not status_pivot.empty:
+            # Prepara i dati per Vega-Lite (formato lungo)
+            chart_data = status_pivot.reset_index().melt(
+                id_vars='AREA',
+                var_name='STATO_PdL',
+                value_name='Numero di Attività'
+            )
+
+            # Specifica Vega-Lite per un grafico a barre impilate senza zoom
+            vega_spec = {
+                "width": "container",
+                "mark": "bar",
+                "encoding": {
+                    "x": {"field": "AREA", "type": "nominal", "axis": {"title": "Area"}},
+                    "y": {"field": "Numero di Attività", "type": "quantitative", "axis": {"title": "Numero di Attività"}},
+                    "color": {"field": "STATO_PdL", "type": "nominal", "title": "Stato"},
+                    "tooltip": [
+                        {"field": "AREA", "type": "nominal"},
+                        {"field": "STATO_PdL", "type": "nominal"},
+                        {"field": "Numero di Attività", "type": "quantitative"}
+                    ]
+                }
+            }
+            st.vega_lite_chart(chart_data, vega_spec, use_container_width=True)
         else:
-            st.info("Nessun dato per il grafico dell'area.")
+            st.info("Nessun dato per il grafico.")
     else:
-        st.info("Colonna 'AREA' non trovata.")
+        st.info("Colonne 'AREA' o 'STATO_PdL' non trovate.")
+
 
     st.divider()
 
@@ -1461,10 +1496,32 @@ def render_programmazione_tab():
         chart_df = pd.DataFrame(chart_data)
         pivot_df = chart_df.pivot(index='Giorno', columns='Area', values='Numero di Attività').fillna(0)
 
-        # Assicura l'ordine corretto dei giorni
+        # Assicura l'ordine corretto dei giorni da LUN a VEN
         pivot_df = pivot_df.reindex(giorni_settimana).fillna(0)
 
-        st.bar_chart(pivot_df)
+        # Prepara i dati per Vega-Lite
+        chart_data = pivot_df.reset_index().melt(
+            id_vars='Giorno',
+            var_name='Area',
+            value_name='Numero di Attività'
+        )
+
+        # Specifica Vega-Lite
+        vega_spec = {
+            "width": "container",
+            "mark": "bar",
+            "encoding": {
+                "x": {"field": "Giorno", "type": "ordinal", "sort": giorni_settimana, "axis": {"title": "Giorno della Settimana"}},
+                "y": {"field": "Numero di Attività", "type": "quantitative", "axis": {"title": "Numero di Attività"}},
+                "color": {"field": "Area", "type": "nominal", "title": "Area"},
+                "tooltip": [
+                    {"field": "Giorno", "type": "nominal"},
+                    {"field": "Area", "type": "nominal"},
+                    {"field": "Numero di Attività", "type": "quantitative"}
+                ]
+            }
+        }
+        st.vega_lite_chart(chart_data, vega_spec, use_container_width=True)
 
     st.divider()
 
@@ -1867,68 +1924,77 @@ def main_app(matricola_utente, ruolo):
                 st.rerun()
 
         oggi = datetime.date.today()
-        giorno_precedente = oggi - datetime.timedelta(days=1)
-        if oggi.weekday() == 0: giorno_precedente = oggi - datetime.timedelta(days=3)
-        elif oggi.weekday() == 6: giorno_precedente = oggi - datetime.timedelta(days=2)
         
         # Carica i dati delle attività una sola volta
         dati_programmati_df = carica_dati_attivita_programmate()
         attivita_da_recuperare = []
+        pdl_gia_recuperati = set()
 
         if ruolo in ["Amministratore", "Tecnico"]:
-            # Nuova logica per trovare attività non completate del giorno precedente
-            attivita_pianificate_ieri = trova_attivita(matricola_utente, giorno_precedente.day, giorno_precedente.month, giorno_precedente.year, gestionale_data['contatti'])
+            stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
+            status_dict = {}
+            if not dati_programmati_df.empty:
+                status_dict = dati_programmati_df.set_index('PdL')['STATO_ATTIVITA'].to_dict()
 
-            if attivita_pianificate_ieri:
-                stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
-                status_dict = {}
-                if not dati_programmati_df.empty:
-                    status_dict = dati_programmati_df.set_index('PdL')['STATO_ATTIVITA'].to_dict()
+            pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
 
-                pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
+            for i in range(1, 8):
+                giorno_controllo = oggi - datetime.timedelta(days=i)
+                attivita_del_giorno = trova_attivita(matricola_utente, giorno_controllo.day, giorno_controllo.month, giorno_controllo.year, gestionale_data['contatti'])
 
-                for task in attivita_pianificate_ieri:
-                    pdl = task['pdl']
+                if attivita_del_giorno:
+                    for task in attivita_del_giorno:
+                        pdl = task['pdl']
+                        if pdl in pdl_gia_recuperati or pdl in pdl_compilati_sessione:
+                            continue
 
-                    # Salta se già compilato nella sessione corrente
-                    if pdl in pdl_compilati_sessione:
-                        continue
+                        stato_attuale = status_dict.get(pdl, 'Pianificato')
+                        if stato_attuale in stati_finali:
+                            continue
 
-                    # Salta se lo stato nel DB principale è già finale
-                    stato_attuale = status_dict.get(pdl, 'Pianificato')
-                    if stato_attuale in stati_finali:
-                        continue
+                        # Logica Falsi Positivi Avanzata: controlla se esiste un intervento successivo o uguale
+                        gia_rendicontato_dopo = any(
+                            pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= giorno_controllo
+                            for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
+                        )
+                        if gia_rendicontato_dopo:
+                            continue
 
-                    attivita_da_recuperare.append(task)
+                        task['data_attivita'] = giorno_controllo
+                        attivita_da_recuperare.append(task)
+                        pdl_gia_recuperati.add(pdl)
 
             if attivita_da_recuperare:
-                num_attivita_mancanti = len(attivita_da_recuperare)
-                st.warning(f"**Promemoria:** Hai **{num_attivita_mancanti} attività** del giorno precedente non compilate.")
+                st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 7 giorni non rendicontate.")
 
-        # Lista delle schede principali con i nuovi nomi e la nuova struttura
         main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
-
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
         
         tabs = st.tabs(main_tabs_list)
         
-        # Scheda 0: Attività Assegnate (modificata per aggiungere "Compila Relazione")
         with tabs[0]:
-            sub_tab_list = ["Attività di Oggi", "Attività Giorno Precedente"]
+            sub_tab_list = ["Attività di Oggi", "Recupero Attività Non rendicontate (Ultimi 7gg)"]
             if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
-
             sub_tabs = st.tabs(sub_tab_list)
 
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-                lista_attivita = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
-                disegna_sezione_attivita(lista_attivita, "today", ruolo)
+                lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+
+                # Applica la logica dei falsi positivi anche per le attività di oggi
+                lista_attivita_filtrata = [
+                    task for task in lista_attivita_raw
+                    if not any(
+                        pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= oggi
+                        for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
+                    )
+                ]
+                disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
             with sub_tabs[1]:
-                st.header(f"Recupero attività del {giorno_precedente.strftime('%d/%m/%Y')}")
-                # La lista `attivita_da_recuperare` è già stata calcolata in precedenza
+                st.header("Recupero Attività Non Rendicontate (Ultimi 7 Giorni)")
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             # Contenuto per la nuova scheda "Compila Relazione"
@@ -2102,23 +2168,32 @@ def main_app(matricola_utente, ruolo):
                 if 'num_items_to_show' not in st.session_state:
                     st.session_state.num_items_to_show = ITEMS_PER_PAGE
                 if 'last_search_filters' not in st.session_state:
-                    st.session_state.last_search_filters = (None, None, None)
+                    st.session_state.last_search_filters = (None, None, None, None)
 
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 with col1: pdl_search = st.text_input("Filtra per PdL", key="pdl_search")
                 with col2: desc_search = st.text_input("Filtra per Descrizione", key="desc_search")
                 with col3:
+                    # Assicurati che la colonna 'IMP' esista prima di creare il filtro
+                    if 'IMP' in archivio_df.columns:
+                        lista_impianti = sorted(list(archivio_df['IMP'].dropna().unique()))
+                        imp_search = st.multiselect("Filtra per Impianto", options=lista_impianti, key="imp_search")
+                    else:
+                        imp_search = []
+                        st.caption("Colonna 'Impianto' non trovata.")
+                with col4:
                     lista_tecnici = sorted(list(archivio_df['Tecnico'].dropna().unique()))
                     tec_search = st.multiselect("Filtra per Tecnico/i", options=lista_tecnici, key="tec_search")
 
-                current_filters = (pdl_search, desc_search, tuple(sorted(tec_search)))
+                current_filters = (pdl_search, desc_search, tuple(sorted(imp_search)), tuple(sorted(tec_search)))
                 if current_filters != st.session_state.last_search_filters:
                     st.session_state.num_items_to_show = ITEMS_PER_PAGE
                 st.session_state.last_search_filters = current_filters
-                
+
                 risultati_df = archivio_df.copy()
                 if pdl_search: risultati_df = risultati_df[risultati_df['PdL'].astype(str).str.contains(pdl_search, case=False, na=False)]
                 if desc_search: risultati_df = risultati_df[risultati_df['Descrizione'].astype(str).str.contains(desc_search, case=False, na=False)]
+                if imp_search: risultati_df = risultati_df[risultati_df['IMP'].isin(imp_search)]
                 if tec_search: risultati_df = risultati_df[risultati_df['Tecnico'].isin(tec_search)]
                 
                 if not risultati_df.empty:
