@@ -170,7 +170,7 @@ def json_serial(obj):
         return obj.isoformat()
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
-def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento):
+def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
     """
     Scrive un report direttamente nel database SQLite, aggiornando lo storico,
     lo stato e il timestamp di modifica dell'attività.
@@ -181,7 +181,19 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
     timestamp = datetime.datetime.now()
     data_riferimento_str = data_riferimento.strftime('%d/%m/%Y')
 
+    conn = None
     try:
+        conn = sqlite3.connect("schedario.db")
+        cursor = conn.cursor()
+
+        # Recupera il nome completo dalla matricola per usarlo nel report e nell'email
+        cursor.execute("SELECT \"Nome Cognome\" FROM contatti WHERE Matricola = ?", (str(matricola),))
+        user_result = cursor.fetchone()
+        if not user_result:
+            st.error(f"Impossibile trovare l'utente con matricola {matricola}.")
+            return False
+        nome_completo = user_result[0]
+
         descrizione_completa = str(dati_da_scrivere['descrizione'])
         pdl_match = re.search(r'PdL (\d{6}/[CS]|\d{6})', descrizione_completa)
         if not pdl_match:
@@ -191,6 +203,7 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
 
         nuovo_record_storico = {
             'PdL': pdl,
+            'Matricola': str(matricola),
             'Descrizione': dati_da_scrivere['descrizione'],
             'Stato': dati_da_scrivere['stato'],
             'Data_Riferimento': data_riferimento_str,
@@ -199,9 +212,6 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
             'Data_Compilazione': timestamp.isoformat(),
             'Data_Riferimento_dt': data_riferimento.isoformat()
         }
-
-        conn = sqlite3.connect("schedario.db")
-        cursor = conn.cursor()
 
         with conn:
             cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
@@ -252,7 +262,7 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, nome_completo, data_riferimento
         st.error(f"Errore imprevisto durante il salvataggio del report: {e}")
         return False
     finally:
-        if 'conn' in locals() and conn:
+        if conn:
             conn.close()
 
 def _match_partial_name(partial_name, full_name):
@@ -286,8 +296,20 @@ def _match_partial_name(partial_name, full_name):
 
     return True
 
-def trova_attivita(utente_completo, giorno, mese, anno, df_contatti):
+def trova_attivita(matricola, giorno, mese, anno, df_contatti):
     try:
+        # --- FASE 1: Trova il nome completo dell'utente dalla matricola ---
+        if df_contatti is None or df_contatti.empty:
+            st.warning("Dataframe contatti non disponibile per `trova_attivita`.")
+            return []
+
+        user_series = df_contatti[df_contatti['Matricola'] == str(matricola)]
+        if user_series.empty:
+            st.warning(f"Impossibile trovare l'utente con matricola {matricola}.")
+            return []
+        utente_completo = user_series.iloc[0]['Nome Cognome']
+
+
         path_giornaliera_mensile = os.path.join(config.PATH_GIORNALIERA_BASE, f"Giornaliera {mese:02d}-{anno}.xlsm")
 
         target_sheet = str(giorno)

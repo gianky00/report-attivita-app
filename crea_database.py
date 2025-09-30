@@ -9,7 +9,7 @@ EXCEL_GESTIONALE = "Gestionale_Tecnici.xlsx"
 
 # Mappa Nomi Foglio Excel -> Nomi Tabella DB e Chiavi Primarie
 SHEET_TABLE_MAP = {
-    "Contatti": ("contatti", "Nome Cognome"),
+    "Contatti": ("contatti", "Matricola"),
     "Turni": ("turni", "ID_Turno"),
     "Prenotazioni": ("prenotazioni", "ID_Prenotazione"),
     "Sostituzioni": ("sostituzioni", "ID_Richiesta"),
@@ -49,6 +49,22 @@ def sync_excel_to_db():
     try:
         conn = sqlite3.connect(DB_NAME)
 
+        # --- FASE 1: Creazione mappa Nome Cognome -> Matricola ---
+        print("Creazione della mappa di conversione da Nome a Matricola...")
+        nome_a_matricola = {}
+        with pd.ExcelFile(EXCEL_GESTIONALE) as xls:
+            if "Contatti" in xls.sheet_names:
+                contatti_df = pd.read_excel(xls, sheet_name="Contatti")
+                contatti_df.columns = [str(col).strip() for col in contatti_df.columns]
+                contatti_df.dropna(subset=['Matricola', 'Nome Cognome'], inplace=True)
+                contatti_df = contatti_df[contatti_df['Matricola'].astype(str).str.strip() != '']
+                contatti_df = contatti_df[contatti_df['Nome Cognome'].astype(str).str.strip() != '']
+                nome_a_matricola = pd.Series(contatti_df.Matricola.astype(str).values, index=contatti_df['Nome Cognome']).to_dict()
+                print(f"Mappa creata con successo con {len(nome_a_matricola)} voci.")
+            else:
+                print("ERRORE: Foglio 'Contatti' non trovato. Impossibile procedere.")
+                return
+
         with pd.ExcelFile(EXCEL_GESTIONALE) as xls:
             for sheet_name, (table_name, pk_col) in SHEET_TABLE_MAP.items():
                 if sheet_name not in xls.sheet_names:
@@ -64,8 +80,48 @@ def sync_excel_to_db():
                 for col in df.columns:
                     df[col] = df[col].astype(str).where(pd.notna(df[col]), None)
 
+                # --- FASE 2: Trasformazione dati per Foreign Keys ---
+                transformations = {
+                    'prenotazioni': [('Nome Cognome', 'Matricola')],
+                    'sostituzioni': [('Richiedente', 'Richiedente_Matricola'), ('Ricevente', 'Ricevente_Matricola')],
+                    'notifiche': [('Destinatario', 'Destinatario_Matricola')],
+                    'bacheca': [('Tecnico_Originale', 'Tecnico_Originale_Matricola'), ('Tecnico_Subentrante', 'Tecnico_Subentrante_Matricola')],
+                    'richieste_materiali': [('Richiedente', 'Richiedente_Matricola')],
+                    'richieste_assenze': [('Richiedente', 'Richiedente_Matricola')],
+                    'validation_sessions': [('user_name', 'user_matricola')]
+                }
+
+                if table_name in transformations:
+                    print(f"Applicazione trasformazioni per '{table_name}'...")
+                    original_rows = len(df)
+                    for old_col, new_col in transformations[table_name]:
+                        if old_col in df.columns:
+                            # Applica la mappa e gestisce i nomi non trovati (imposta a None)
+                            df[new_col] = df[old_col].map(nome_a_matricola)
+                            # Pulisce le righe dove non è stata trovata una matricola
+                            df.dropna(subset=[new_col], inplace=True)
+                            df = df.drop(columns=[old_col])
+
+                    if len(df) < original_rows:
+                        print(f"Attenzione: {original_rows - len(df)} righe in '{sheet_name}' sono state saltate per mappatura Nome->Matricola fallita.")
+
                 # Gestione speciale per la tabella contatti per pulire i dati delle password
                 if table_name == 'contatti':
+                    # Validazione: La Matricola è obbligatoria e non può essere vuota.
+                    original_rows = len(df)
+                    df.dropna(subset=['Matricola'], inplace=True)
+                    df = df[df['Matricola'].astype(str).str.strip() != '']
+
+                    if len(df) < original_rows:
+                        print(f"Attenzione: {original_rows - len(df)} righe sono state saltate perché prive di Matricola.")
+
+                    # Rimuove la colonna 'Nome Cognome' se non è la PK (lo è Matricola ora)
+                    # per evitare problemi di 'colonna duplicata' con lo schema.
+                    if pk_col != 'Nome Cognome' and 'Nome Cognome' in df.columns:
+                         # Questo non dovrebbe accadere con lo schema nuovo, ma è una sicurezza
+                         pass
+
+
                     # Se esiste la vecchia colonna 'Password', la rimuoviamo perché non è sicura
                     if 'Password' in df.columns:
                         df = df.drop(columns=['Password'], errors='ignore')
@@ -141,16 +197,83 @@ def crea_tabelle_se_non_esistono():
         cursor.execute("PRAGMA foreign_keys = ON;")
 
         tabelle_gestionali = {
-            "contatti": """("Nome Cognome" TEXT PRIMARY KEY NOT NULL, Ruolo TEXT, PasswordHash TEXT, "Link Attività" TEXT, "2FA_Secret" TEXT, Matricola TEXT)""",
+            "contatti": """(
+                Matricola TEXT PRIMARY KEY NOT NULL,
+                "Nome Cognome" TEXT NOT NULL UNIQUE,
+                Ruolo TEXT,
+                PasswordHash TEXT,
+                "Link Attività" TEXT,
+                "2FA_Secret" TEXT
+            )""",
             "turni": """(ID_Turno TEXT PRIMARY KEY NOT NULL, Descrizione TEXT, Data TEXT, OrarioInizio TEXT, OrarioFine TEXT, PostiTecnico INTEGER, PostiAiutante INTEGER, Tipo TEXT)""",
-            "prenotazioni": """(ID_Prenotazione TEXT PRIMARY KEY NOT NULL, ID_Turno TEXT NOT NULL, "Nome Cognome" TEXT NOT NULL, RuoloOccupato TEXT, Timestamp TEXT, FOREIGN KEY (ID_Turno) REFERENCES turni(ID_Turno) ON DELETE CASCADE, FOREIGN KEY ("Nome Cognome") REFERENCES contatti("Nome Cognome") ON DELETE CASCADE)""",
-            "sostituzioni": """(ID_Richiesta TEXT PRIMARY KEY NOT NULL, ID_Turno TEXT NOT NULL, Richiedente TEXT NOT NULL, Ricevente TEXT NOT NULL, Timestamp TEXT, FOREIGN KEY (ID_Turno) REFERENCES turni(ID_Turno) ON DELETE CASCADE, FOREIGN KEY (Richiedente) REFERENCES contatti("Nome Cognome") ON DELETE CASCADE, FOREIGN KEY (Ricevente) REFERENCES contatti("Nome Cognome") ON DELETE CASCADE)""",
-            "notifiche": """(ID_Notifica TEXT PRIMARY KEY NOT NULL, Timestamp TEXT, Destinatario TEXT NOT NULL, Messaggio TEXT, Stato TEXT, Link_Azione TEXT, FOREIGN KEY (Destinatario) REFERENCES contatti("Nome Cognome") ON DELETE CASCADE)""",
-            "bacheca": """(ID_Bacheca TEXT PRIMARY KEY NOT NULL, ID_Turno TEXT NOT NULL, Tecnico_Originale TEXT NOT NULL, Ruolo_Originale TEXT, Timestamp_Pubblicazione TEXT, Stato TEXT, Tecnico_Subentrante TEXT, Timestamp_Assegnazione TEXT, FOREIGN KEY (ID_Turno) REFERENCES turni(ID_Turno) ON DELETE CASCADE, FOREIGN KEY (Tecnico_Originale) REFERENCES contatti("Nome Cognome") ON DELETE CASCADE)""",
-            "richieste_materiali": """(ID_Richiesta TEXT PRIMARY KEY NOT NULL, Richiedente TEXT NOT NULL, Timestamp TEXT, Stato TEXT, Dettagli TEXT, FOREIGN KEY (Richiedente) REFERENCES contatti("Nome Cognome") ON DELETE CASCADE)""",
-            "richieste_assenze": """(ID_Richiesta TEXT PRIMARY KEY NOT NULL, Richiedente TEXT NOT NULL, Timestamp TEXT, Tipo_Assenza TEXT, Data_Inizio TEXT, Data_Fine TEXT, Note TEXT, Stato TEXT, FOREIGN KEY (Richiedente) REFERENCES contatti("Nome Cognome") ON DELETE CASCADE)""",
+            "prenotazioni": """(
+                ID_Prenotazione TEXT PRIMARY KEY NOT NULL,
+                ID_Turno TEXT NOT NULL,
+                Matricola TEXT NOT NULL,
+                RuoloOccupato TEXT,
+                Timestamp TEXT,
+                FOREIGN KEY (ID_Turno) REFERENCES turni(ID_Turno) ON DELETE CASCADE,
+                FOREIGN KEY (Matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )""",
+            "sostituzioni": """(
+                ID_Richiesta TEXT PRIMARY KEY NOT NULL,
+                ID_Turno TEXT NOT NULL,
+                Richiedente_Matricola TEXT NOT NULL,
+                Ricevente_Matricola TEXT NOT NULL,
+                Timestamp TEXT,
+                FOREIGN KEY (ID_Turno) REFERENCES turni(ID_Turno) ON DELETE CASCADE,
+                FOREIGN KEY (Richiedente_Matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE,
+                FOREIGN KEY (Ricevente_Matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )""",
+            "notifiche": """(
+                ID_Notifica TEXT PRIMARY KEY NOT NULL,
+                Timestamp TEXT,
+                Destinatario_Matricola TEXT NOT NULL,
+                Messaggio TEXT,
+                Stato TEXT,
+                Link_Azione TEXT,
+                FOREIGN KEY (Destinatario_Matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )""",
+            "bacheca": """(
+                ID_Bacheca TEXT PRIMARY KEY NOT NULL,
+                ID_Turno TEXT NOT NULL,
+                Tecnico_Originale_Matricola TEXT NOT NULL,
+                Ruolo_Originale TEXT,
+                Timestamp_Pubblicazione TEXT,
+                Stato TEXT,
+                Tecnico_Subentrante_Matricola TEXT,
+                Timestamp_Assegnazione TEXT,
+                FOREIGN KEY (ID_Turno) REFERENCES turni(ID_Turno) ON DELETE CASCADE,
+                FOREIGN KEY (Tecnico_Originale_Matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )""",
+            "richieste_materiali": """(
+                ID_Richiesta TEXT PRIMARY KEY NOT NULL,
+                Richiedente_Matricola TEXT NOT NULL,
+                Timestamp TEXT,
+                Stato TEXT,
+                Dettagli TEXT,
+                FOREIGN KEY (Richiedente_Matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )""",
+            "richieste_assenze": """(
+                ID_Richiesta TEXT PRIMARY KEY NOT NULL,
+                Richiedente_Matricola TEXT NOT NULL,
+                Timestamp TEXT,
+                Tipo_Assenza TEXT,
+                Data_Inizio TEXT,
+                Data_Fine TEXT,
+                Note TEXT,
+                Stato TEXT,
+                FOREIGN KEY (Richiedente_Matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )""",
             "access_logs": """(timestamp TEXT, username TEXT, status TEXT)""",
-            "validation_sessions": """(session_id TEXT PRIMARY KEY NOT NULL, user_name TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL, status TEXT NOT NULL, FOREIGN KEY (user_name) REFERENCES contatti("Nome Cognome") ON DELETE CASCADE)"""
+            "validation_sessions": """(
+                session_id TEXT PRIMARY KEY NOT NULL,
+                user_matricola TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                data TEXT NOT NULL,
+                status TEXT NOT NULL,
+                FOREIGN KEY (user_matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )"""
         }
 
         for nome_tabella, schema in tabelle_gestionali.items():
