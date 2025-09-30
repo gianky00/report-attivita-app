@@ -35,7 +35,13 @@ from modules.data_manager import (
     carica_dati_attivita_programmate,
     consolida_report_giornalieri
 )
-from modules.db_manager import get_shifts_by_type, get_filtered_activities, get_technician_performance_data, get_interventions_for_technician, get_unvalidated_reports, validate_report
+from modules.db_manager import (
+    get_shifts_by_type, get_filtered_activities, get_technician_performance_data,
+    get_interventions_for_technician, get_unvalidated_reports,
+    create_validation_session, get_active_validation_session,
+    update_validation_session_data, delete_validation_session,
+    process_and_commit_validated_reports
+)
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
     sync_oncall_shifts,
@@ -999,32 +1005,96 @@ def render_technician_detail_view():
     else:
         st.success("Nessun report sbrigativo trovato in questo periodo.")
 
-def render_report_validation_tab():
-    st.subheader("Report in Attesa di Validazione")
-    st.info("Questa sezione mostra gli ultimi report inviati dai tecnici. Clicca su 'Valida' per confermare di averli presi in carico. Il report verrà rimosso da questa lista.")
+def render_report_validation_tab(user_name):
+    st.subheader("Validazione Report Tecnici")
+    st.info("""
+    Questa sezione permette di validare i report inviati dai tecnici.
+    - **Carica Report**: Avvia una nuova sessione di validazione con gli ultimi report non ancora processati.
+    - **Sessione Persistente**: La sessione rimane attiva anche se chiudi o aggiorni la pagina.
+    - **Modifica Live**: Puoi modificare i dati direttamente nella tabella. Ogni modifica viene salvata automaticamente.
+    - **Valida e Salva**: Invia le modifiche finali al database e chiude la sessione.
+    - **Cancella**: Annulla la sessione corrente, eliminando tutte le modifiche non salvate.
+    """)
 
-    unvalidated_reports = get_unvalidated_reports()
+    # 1. Controlla se esiste una sessione di validazione attiva per l'utente
+    active_session = get_active_validation_session(user_name)
 
-    if not unvalidated_reports:
-        st.success("🎉 Nessun report da validare al momento.")
-        return
+    if active_session:
+        st.markdown("---")
+        st.subheader("📝 Sessione di Validazione in Corso")
 
-    for report in unvalidated_reports:
-        with st.container(border=True):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown(f"**PdL:** `{report['PdL']}` - {report['Descrizione']}")
-                st.caption(f"Tecnico: {report['Tecnico']} | Stato: {report['Stato']} | Inviato il: {pd.to_datetime(report['Data_Compilazione']).strftime('%d/%m/%Y %H:%M')}")
-            with col2:
-                if st.button("✅ Valida", key=f"validate_{report['PdL']}_{report['Data_Compilazione']}", use_container_width=True):
-                    if validate_report(report['PdL']):
-                        st.toast(f"Report per PdL {report['PdL']} validato!")
+        session_id = active_session["session_id"]
+        report_data = active_session["data"]
+
+        # Usa un DataFrame per st.data_editor
+        # Inizializza o aggiorna il DataFrame in session_state solo se necessario
+        if 'validation_df' not in st.session_state or st.session_state.get('validation_session_id') != session_id:
+             st.session_state.validation_df = pd.DataFrame(report_data)
+             st.session_state.validation_session_id = session_id
+
+        # L'editor dati
+        edited_df = st.data_editor(
+            st.session_state.validation_df,
+            num_rows="dynamic",
+            key=f"data_editor_{session_id}",
+            use_container_width=True,
+            column_config={
+                "Report": st.column_config.TextColumn(width="large"),
+                "Descrizione": st.column_config.TextColumn(width="medium"),
+                "PdL": st.column_config.TextColumn(width="small"),
+                "Tecnico": st.column_config.TextColumn(width="small"),
+                "Stato": st.column_config.TextColumn(width="small"),
+            },
+            disabled=["PdL", "Descrizione", "Tecnico", "Data_Compilazione"]
+        )
+
+        # Salva le modifiche in tempo reale
+        if not edited_df.equals(st.session_state.validation_df):
+            update_validation_session_data(session_id, edited_df.to_dict('records'))
+            st.session_state.validation_df = edited_df.copy() # Aggiorna lo stato base
+            st.toast("Modifiche salvate nella sessione.")
+
+        st.markdown("---")
+
+        # Pulsanti di azione
+        col1, col2, col3 = st.columns([2, 2, 5])
+        with col1:
+            if st.button("✅ Valida e Salva Modifiche", type="primary", use_container_width=True):
+                with st.spinner("Salvataggio dei report validati in corso..."):
+                    if process_and_commit_validated_reports(edited_df.to_dict('records')):
+                        delete_validation_session(session_id)
+                        st.success("Report validati e salvati con successo!")
+                        # Pulisci lo stato per forzare il ricaricamento
+                        if 'validation_df' in st.session_state: del st.session_state.validation_df
+                        if 'validation_session_id' in st.session_state: del st.session_state.validation_session_id
                         st.rerun()
                     else:
-                        st.error("Errore durante la validazione.")
+                        st.error("Si è verificato un errore durante il salvataggio dei report.")
 
-            with st.expander("Mostra Dettaglio Report"):
-                st.markdown(report['Report'])
+        with col2:
+            if st.button("❌ Cancella Sessione", use_container_width=True):
+                if delete_validation_session(session_id):
+                    st.info("Sessione di validazione cancellata.")
+                    # Pulisci lo stato
+                    if 'validation_df' in st.session_state: del st.session_state.validation_df
+                    if 'validation_session_id' in st.session_state: del st.session_state.validation_session_id
+                    st.rerun()
+                else:
+                    st.error("Errore durante la cancellazione della sessione.")
+    else:
+        # Se non c'è una sessione attiva, mostra il pulsante per crearne una
+        st.markdown("---")
+        if st.button("📥 Carica Report da Validare", type="primary"):
+            unvalidated_reports = get_unvalidated_reports()
+            if unvalidated_reports:
+                session_id = create_validation_session(user_name, unvalidated_reports)
+                if session_id:
+                    st.success(f"Creati {len(unvalidated_reports)} report da validare. La sessione è iniziata.")
+                    st.rerun()
+                else:
+                    st.error("Impossibile creare una sessione di validazione.")
+            else:
+                st.success("🎉 Nessun nuovo report da validare al momento.")
 
 def render_reperibilita_tab(gestionale_data, nome_utente_autenticato, ruolo_utente):
     st.subheader("📅 Calendario Reperibilità Settimanale")
@@ -2436,7 +2506,7 @@ def main_app(nome_utente_autenticato, ruolo):
                                         st.error(message)
 
                         with caposquadra_tabs[3]: # Validazione Report
-                            render_report_validation_tab()
+                            render_report_validation_tab(nome_utente_autenticato)
 
                     # --- Dashboard Tecnica ---
                     with main_admin_tabs[1]:
