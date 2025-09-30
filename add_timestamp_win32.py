@@ -11,9 +11,16 @@ except ImportError:
     sys.exit(1)
 
 # --- CONFIGURAZIONE ---
-# Usa una stringa raw (r"...") per gestire correttamente i backslash nei percorsi di rete Windows.
-# ATTENZIONE: Assicurati che questo percorso sia corretto e accessibile dalla macchina Windows su cui eseguirai lo script.
-FILE_PATH = r"\\192.168.11.251\Database_Tecnico_SMI\cartella strumentale condivisa\ALLEGRETTI\ATTIVITA_PROGRAMMATE.xlsm"
+
+# Nome del file Excel da modificare
+FILE_NAME = "ATTIVITA_PROGRAMMATE.xlsm"
+
+# Costruisce il percorso completo del file, assumendo che si trovi
+# nella stessa cartella dello script Python.
+# __file__ è una variabile speciale che contiene il percorso dello script corrente.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FILE_PATH = os.path.join(BASE_DIR, FILE_NAME)
+
 
 # Fogli da modificare
 SHEETS_TO_MODIFY = ["A1", "A2", "A3", "BLENDING", "CTE"]
@@ -27,12 +34,13 @@ TIMESTAMP_VALUE = "2025-09-30 20:00:00"
 def add_timestamp_with_win32():
     """
     Aggiunge in modo sicuro una colonna di timestamp a un file .xlsm utilizzando
-    l'automazione dell'applicazione Excel per garantire l'integrità del file.
+    l'automazione dell'applicazione Excel. Gestisce i fogli di lavoro protetti
+    rimuovendo e riapplicando la protezione.
     """
     if not os.path.exists(FILE_PATH):
-        print(f"ERRORE: Il file specificato non è stato trovato al percorso:")
-        print(FILE_PATH)
-        print("Controlla che il percorso di rete sia corretto e che tu abbia accesso.")
+        print(f"ERRORE: Il file '{FILE_NAME}' non è stato trovato nella cartella dello script.")
+        print(f"Percorso cercato: {FILE_PATH}")
+        print("Assicurati che il file si trovi nella stessa directory del programma Python.")
         return
 
     excel = None
@@ -45,60 +53,73 @@ def add_timestamp_with_win32():
     try:
         # Avvia una nuova istanza di Excel in background
         excel = win32com.client.Dispatch("Excel.Application")
-        excel.Visible = False  # L'applicazione non sarà visibile
-        excel.DisplayAlerts = False  # Non mostrare pop-up di Excel
+        excel.Visible = False
+        excel.DisplayAlerts = False
 
         # Apri il workbook
         print(f"Apertura del file: {os.path.basename(FILE_PATH)}...")
         workbook = excel.Workbooks.Open(FILE_PATH)
-
-        # Disabilita l'aggiornamento dello schermo per velocizzare le operazioni
-        excel.ScreenUpdating = False
+        excel.ScreenUpdating = False # Disabilita l'aggiornamento dello schermo per velocità
 
         # Itera sui fogli da modificare
         for sheet_name in SHEETS_TO_MODIFY:
+            sheet = None # Resetta la variabile sheet per ogni ciclo
             try:
                 sheet = workbook.Sheets(sheet_name)
                 print(f"\nAnalisi del foglio: '{sheet_name}'...")
 
+                # --- CORREZIONE CHIAVE: GESTIONE DELLA PROTEZIONE ---
+                # 1. Rimuovi la protezione per permettere le modifiche
+                # Se i fogli hanno una password, usala qui:
+                # sheet.Unprotect(Password="la_tua_password") # AGGIUNGI PASSWORD QUI
+                sheet.Unprotect()
+                print(f"Protezione temporaneamente rimossa dal foglio '{sheet_name}'.")
+
                 # --- Verifica se la colonna esiste già ---
                 col_exists = False
-                for cell in sheet.Rows(HEADER_ROW).Cells:
+                header_range = sheet.Range(sheet.Cells(HEADER_ROW, 1), sheet.Cells(HEADER_ROW, sheet.Columns.Count).End(-4159)) # -4159 è xlToLeft
+                for cell in header_range:
                     if cell.Value == COLUMN_NAME:
                         col_exists = True
                         break
 
                 if col_exists:
                     print(f"La colonna '{COLUMN_NAME}' esiste già. Salto questo foglio.")
+                    # Passiamo alla sezione 'finally' per ri-proteggere il foglio
                     continue
 
                 # --- Aggiunta della colonna e dei dati ---
-                # Trova la prima colonna libera sulla riga dell'intestazione
-                new_col_idx = sheet.Cells(HEADER_ROW, sheet.Columns.Count).End(-4159).Column + 1 # -4159 è xlToLeft
-
-                # Aggiungi l'intestazione
+                new_col_idx = sheet.Cells(HEADER_ROW, sheet.Columns.Count).End(-4159).Column + 1
                 sheet.Cells(HEADER_ROW, new_col_idx).Value = COLUMN_NAME
                 print(f"Aggiunta intestazione '{COLUMN_NAME}' alla colonna {new_col_idx}.")
 
-                # Trova l'ultima riga con dati nella colonna A (o 1)
                 last_row = sheet.Cells(sheet.Rows.Count, 1).End(-4162).Row # -4162 è xlUp
 
-                # Popola la nuova colonna con il timestamp
-                # Usiamo un range per un'operazione più veloce invece di un ciclo riga per riga
                 if last_row >= DATA_START_ROW:
                     target_range = sheet.Range(
                         sheet.Cells(DATA_START_ROW, new_col_idx),
                         sheet.Cells(last_row, new_col_idx)
                     )
                     target_range.Value = TIMESTAMP_VALUE
+                    # Questa riga ora funzionerà perché il foglio non è protetto
+                    target_range.NumberFormat = "dd/mm/yyyy hh:mm:ss"
                     print(f"Popolate {last_row - DATA_START_ROW + 1} righe con il timestamp.")
                 else:
                     print("Nessuna riga di dati trovata da popolare.")
 
             except Exception as e:
+                # Stampa un errore specifico se qualcosa va storto durante la modifica
                 print(f"ATTENZIONE: Impossibile processare il foglio '{sheet_name}'. Errore: {e}")
+            finally:
+                # --- CORREZIONE CHIAVE: RIPRISTINO DELLA PROTEZIONE ---
+                # 2. Questo blocco viene eseguito SEMPRE (sia in caso di successo che di errore),
+                # garantendo che il foglio venga ri-protetto.
+                if sheet:
+                    # Se i fogli avevano una password, ri-proteggili con la stessa password:
+                    # sheet.Protect(Password="la_tua_password") # AGGIUNGI PASSWORD QUI
+                    sheet.Protect()
+                    print(f"Protezione ripristinata sul foglio '{sheet_name}'.")
 
-        # Salva il workbook con le modifiche
         print("\nSalvataggio del file in corso... (potrebbe richiedere tempo)")
         workbook.Save()
         print("File salvato con successo!")
@@ -107,8 +128,7 @@ def add_timestamp_with_win32():
         print(f"\nERRORE CRITICO durante l'automazione di Excel: {e}")
         print("Le modifiche potrebbero non essere state salvate.")
     finally:
-        # --- Pulizia ---
-        # Questo è il passaggio più importante per evitare processi Excel "fantasma"
+        # --- Pulizia finale per evitare processi Excel "fantasma" ---
         if workbook:
             workbook.Close(SaveChanges=False) # Chiudi senza salvare di nuovo
         if excel:
