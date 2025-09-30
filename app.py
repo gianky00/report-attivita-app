@@ -2225,17 +2225,24 @@ def main_app(matricola_utente, ruolo):
                     if submitted:
                         if dettagli_richiesta.strip():
                             new_id = f"MAT_{int(datetime.datetime.now().timestamp())}"
-                            nuova_richiesta = pd.DataFrame([{
+                            df_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame())
+
+                            nuova_richiesta_data = {
                                 'ID_Richiesta': new_id,
                                 'Richiedente_Matricola': str(matricola_utente),
                                 'Timestamp': datetime.datetime.now(),
                                 'Stato': 'Inviata',
                                 'Dettagli': dettagli_richiesta
-                            }])
+                            }
 
-                            # Aggiungi la nuova riga al dataframe
-                            df_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame())
-                            gestionale_data['richieste_materiali'] = pd.concat([df_materiali, nuova_richiesta], ignore_index=True)
+                            # Assicura che la nuova riga abbia le stesse colonne del DataFrame di destinazione
+                            # per prevenire problemi di disallineamento con pd.concat.
+                            if not df_materiali.columns.empty:
+                                nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data], columns=df_materiali.columns)
+                            else:
+                                nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data])
+
+                            gestionale_data['richieste_materiali'] = pd.concat([df_materiali, nuova_richiesta_df], ignore_index=True)
 
                             if salva_gestionale_async(gestionale_data):
                                 st.success("Richiesta materiali inviata con successo!")
