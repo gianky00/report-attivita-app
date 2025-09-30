@@ -2167,23 +2167,56 @@ def main_app(matricola_utente, ruolo):
             # Carica le opzioni per i filtri in modo efficiente
             filter_options = get_archive_filter_options()
 
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
+            # Inizializza le date in session_state se non presenti
+            if 'db_start_date' not in st.session_state:
+                st.session_state.db_start_date = None
+            if 'db_end_date' not in st.session_state:
+                st.session_state.db_end_date = None
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
                 pdl_search = st.text_input("Filtra per PdL", key="db_pdl_search")
-            with col2:
+            with c2:
                 desc_search = st.text_input("Filtra per Descrizione", key="db_desc_search")
-            with col3:
+            with c3:
                 imp_search = st.multiselect("Filtra per Impianto", options=filter_options['impianti'], key="db_imp_search")
-            with col4:
+            with c4:
                 tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
 
-            interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
+            st.divider()
+            st.markdown("##### Filtra per Data Intervento")
+            d1, d2, d3, d4 = st.columns([1,1,1,2])
+            with d1:
+                st.date_input("Da:", key="db_start_date", format="DD/MM/YYYY")
+            with d2:
+                st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
+            with d3:
+                if st.button("Ultimi 15 gg", key="db_last_15_days"):
+                    st.session_state.db_end_date = datetime.date.today()
+                    st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
+                    st.rerun()
 
-            # Esegui la ricerca solo se almeno un filtro è attivo
-            if pdl_search or desc_search or imp_search or tec_search:
+
+            interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
+            st.divider()
+
+            # Messaggio informativo per chiarire il comportamento della ricerca
+            st.info("""
+            **Nota:** La ricerca mostra per impostazione predefinita solo gli interventi con uno **storico compilato**.
+            Per cercare anche le attività **pianificate ma non ancora eseguite**, deseleziona la casella "Mostra solo interventi eseguiti".
+            """)
+
+            # Esegui la ricerca se almeno un filtro è attivo o se è stato premuto il pulsante dei 15 giorni
+            search_is_active = pdl_search or desc_search or imp_search or tec_search or (st.session_state.db_start_date and st.session_state.db_end_date)
+
+            if search_is_active:
                 with st.spinner("Ricerca in corso nel database..."):
-                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, interventi_eseguiti_only)
-                
+                    risultati_df = get_filtered_archived_activities(
+                        pdl_search, desc_search, imp_search, tec_search,
+                        interventi_eseguiti_only,
+                        st.session_state.db_start_date, st.session_state.db_end_date
+                    )
+
                 if risultati_df.empty:
                     st.info("Nessun record trovato per i filtri selezionati.")
                 else:
@@ -2481,31 +2514,35 @@ def main_app(matricola_utente, ruolo):
                                     performance_df = get_technician_performance_data(start_datetime, end_datetime)
                                 st.session_state['performance_results'] = {'df': performance_df, 'start_date': pd.to_datetime(start_datetime), 'end_date': pd.to_datetime(end_datetime)}
 
-                            if 'performance_results' in st.session_state and not st.session_state['performance_results']['df'].empty:
+                            if 'performance_results' in st.session_state:
                                 results = st.session_state['performance_results']
                                 performance_df = results['df']
-                                st.markdown("---")
-                                st.markdown("### Riepilogo Performance del Team")
 
-                                total_interventions_team = performance_df['Totale Interventi'].sum()
-                                total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
-                                # Calcolo ponderato del tasso di completamento
-                                total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
-                                avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
+                                if performance_df.empty:
+                                    st.info("Nessun dato di performance trovato per il periodo selezionato.")
+                                else:
+                                    st.markdown("---")
+                                    st.markdown("### Riepilogo Performance del Team")
 
-                                st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
-                                c1, c2, c3 = st.columns(3)
-                                c1.metric("Totale Interventi", f"{total_interventions_team}")
-                                c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
-                                c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+                                    total_interventions_team = performance_df['Totale Interventi'].sum()
+                                    total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
+                                    # Calcolo ponderato del tasso di completamento
+                                    total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
+                                    avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
 
-                                st.markdown("#### Dettaglio Performance per Tecnico")
-                                for index, row in performance_df.iterrows():
-                                    st.write(f"**Tecnico:** {index}")
-                                    st.dataframe(row.to_frame().T)
-                                    if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                        st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
-                                        st.rerun()
+                                    st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
+                                    c1, c2, c3 = st.columns(3)
+                                    c1.metric("Totale Interventi", f"{total_interventions_team}")
+                                    c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
+                                    c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+
+                                    st.markdown("#### Dettaglio Performance per Tecnico")
+                                    for index, row in performance_df.iterrows():
+                                        st.write(f"**Tecnico:** {index}")
+                                        st.dataframe(row.to_frame().T)
+                                        if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
+                                            st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
+                                            st.rerun()
 
                         with caposquadra_tabs[1]: # Crea Nuovo Turno
                             with st.form("new_shift_form", clear_on_submit=True):
