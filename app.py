@@ -1338,7 +1338,7 @@ def render_situazione_impianti_tab():
     col1, col2 = st.columns(2)
 
     aree_disponibili = sorted(df['AREA'].dropna().unique()) if 'AREA' in df.columns else []
-    stati_disponibili = sorted(df['STATO_ATTIVITA'].dropna().unique()) if 'STATO_ATTIVITA' in df.columns else []
+    stati_disponibili = sorted(df['STATO_PdL'].dropna().unique()) if 'STATO_PdL' in df.columns else []
 
     with col1:
         default_aree = aree_disponibili
@@ -1346,14 +1346,14 @@ def render_situazione_impianti_tab():
 
     with col2:
         default_stati = stati_disponibili
-        stati_selezionati = st.multiselect("Filtra per Stato", options=stati_disponibili, default=default_stati)
+        stati_selezionati = st.multiselect("Filtra per Stato", options=stati_disponibili, default=default_stati, key="status_filter_situazione")
 
     # Applica filtri
     filtered_df = df.copy()
     if aree_selezionate:
         filtered_df = filtered_df[filtered_df['AREA'].isin(aree_selezionate)]
     if stati_selezionati:
-        filtered_df = filtered_df[filtered_df['STATO_ATTIVITA'].isin(stati_selezionati)]
+        filtered_df = filtered_df[filtered_df['STATO_PdL'].isin(stati_selezionati)]
 
 
     st.divider()
@@ -1365,7 +1365,8 @@ def render_situazione_impianti_tab():
     # --- Metriche ---
     st.subheader("Metriche di Riepilogo")
     total_activities = len(filtered_df)
-    completed_activities = len(filtered_df[filtered_df['STATO_ATTIVITA'] == 'TERMINATA'])
+    # Assumiamo che 'COMPLETATO' o termini simili siano gli stati finali positivi in STATO_PdL
+    completed_activities = len(filtered_df[filtered_df['STATO_PdL'].str.contains("COMPLETATO|TERMINATA", na=False, case=False)])
     pending_activities = total_activities - completed_activities
 
     c1, c2, c3 = st.columns(3)
@@ -1375,32 +1376,16 @@ def render_situazione_impianti_tab():
 
     # --- Grafici ---
     st.subheader("Visualizzazione Dati")
-    col1, col2 = st.columns(2)
 
-    with col1:
-        st.markdown("#### Stato Attività")
-        if 'STATO_ATTIVITA' in filtered_df.columns:
-            status_counts = filtered_df['STATO_ATTIVITA'].value_counts()
-            if not status_counts.empty:
-                fig, ax = plt.subplots()
-                ax.pie(status_counts, labels=status_counts.index, autopct='%1.1f%%', startangle=90)
-                ax.axis('equal')
-                st.pyplot(fig)
-            else:
-                st.info("Nessun dato per il grafico dello stato.")
+    st.markdown("#### Attività per Area")
+    if 'AREA' in filtered_df.columns:
+        area_counts = filtered_df['AREA'].value_counts()
+        if not area_counts.empty:
+            st.bar_chart(area_counts)
         else:
-            st.info("Colonna 'STATO_ATTIVITA' non trovata.")
-
-    with col2:
-        st.markdown("#### Attività per Area")
-        if 'AREA' in filtered_df.columns:
-            area_counts = filtered_df['AREA'].value_counts()
-            if not area_counts.empty:
-                st.bar_chart(area_counts)
-            else:
-                st.info("Nessun dato per il grafico dell'area.")
-        else:
-            st.info("Colonna 'AREA' non trovata.")
+            st.info("Nessun dato per il grafico dell'area.")
+    else:
+        st.info("Colonna 'AREA' non trovata.")
 
     st.divider()
 
@@ -1454,13 +1439,32 @@ def render_programmazione_tab():
         return
 
     # --- Grafico Carico di Lavoro ---
-    st.subheader("Carico di Lavoro per Area")
-    if 'AREA' in filtered_df.columns:
-        area_counts = filtered_df['AREA'].value_counts()
-        if not area_counts.empty:
-            st.bar_chart(area_counts)
-        else:
-            st.info("Nessun dato per il grafico del carico di lavoro.")
+    st.subheader("Carico di Lavoro Settimanale per Area")
+    giorni_settimana = ["LUN", "MAR", "MER", "GIO", "VEN"]
+
+    # Prepara i dati per il grafico
+    chart_data = []
+    for giorno in giorni_settimana:
+        if giorno in filtered_df.columns:
+            # Filtra le attività per il giorno corrente
+            day_activities = filtered_df[filtered_df[giorno].str.lower() == 'x']
+            if not day_activities.empty:
+                # Conta le attività per area in quel giorno
+                area_counts_for_day = day_activities['AREA'].value_counts().to_dict()
+                for area, count in area_counts_for_day.items():
+                    chart_data.append({'Giorno': giorno, 'Area': area, 'Numero di Attività': count})
+
+    if not chart_data:
+        st.info("Nessun dato disponibile per visualizzare il carico di lavoro settimanale.")
+    else:
+        # Crea un DataFrame e pivottalo per il formato corretto del grafico
+        chart_df = pd.DataFrame(chart_data)
+        pivot_df = chart_df.pivot(index='Giorno', columns='Area', values='Numero di Attività').fillna(0)
+
+        # Assicura l'ordine corretto dei giorni
+        pivot_df = pivot_df.reindex(giorni_settimana).fillna(0)
+
+        st.bar_chart(pivot_df)
 
     st.divider()
 
@@ -1473,8 +1477,12 @@ def render_programmazione_tab():
             area = row.get('AREA', 'N/D')
             stato = row.get('STATO_ATTIVITA', 'N/D')
 
+            # Trova i giorni in cui l'attività è programmata
+            giorni_programmati = [giorno for giorno in giorni_settimana if str(row.get(giorno, '')).lower() == 'x']
+            giorni_str = ", ".join(giorni_programmati) if giorni_programmati else "Non specificato"
+
             st.markdown(f"**PdL `{pdl}`** - {descrizione}")
-            st.caption(f"Area: {area} | Stato: {stato}")
+            st.caption(f"Area: {area} | Stato: {stato} | Giorno/i: **{giorni_str}**")
 
             # Storico
             storico_list = row.get('Storico', [])
@@ -2269,8 +2277,26 @@ def main_app(matricola_utente, ruolo):
                 if df_richieste_materiali.empty:
                     st.info("Nessuna richiesta di materiali inviata.")
                 else:
-                    df_richieste_materiali['Timestamp'] = pd.to_datetime(df_richieste_materiali['Timestamp'])
-                    st.dataframe(df_richieste_materiali.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+                    # Arricchisci lo storico con il nome del richiedente
+                    df_contatti = gestionale_data.get('contatti', pd.DataFrame())
+                    df_richieste_con_nome = pd.merge(
+                        df_richieste_materiali,
+                        df_contatti[['Matricola', 'Nome Cognome']],
+                        left_on='Richiedente_Matricola',
+                        right_on='Matricola',
+                        how='left'
+                    )
+                    # Gestisci i casi in cui il nome non viene trovato
+                    df_richieste_con_nome['Nome Cognome'].fillna('Sconosciuto', inplace=True)
+
+                    df_richieste_con_nome['Timestamp'] = pd.to_datetime(df_richieste_con_nome['Timestamp'])
+
+                    # Seleziona e riordina le colonne per la visualizzazione
+                    display_cols = ['Timestamp', 'Nome Cognome', 'Dettagli', 'Stato']
+                    # Assicurati che tutte le colonne esistano prima di provare a visualizzarle
+                    final_cols = [col for col in display_cols if col in df_richieste_con_nome.columns]
+
+                    st.dataframe(df_richieste_con_nome[final_cols].sort_values(by="Timestamp", ascending=False), use_container_width=True)
 
 
             # Sottomenù Assenze
