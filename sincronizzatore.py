@@ -47,10 +47,6 @@ HEADER_MAP = {
 REVERSE_HEADER_MAP = {v: k for k, v in HEADER_MAP.items()}
 DB_COLUMNS = list(HEADER_MAP.values())
 
-# --- CONFIGURAZIONE CHIAVE DELLA SINCRONIZZAZIONE ---
-# Solo le colonne in questa lista verranno aggiornate in Excel se i dati nel DB sono più recenti.
-# Aggiungi qui i nomi delle colonne (es. 'DESCRIZIONE_ATTIVITA') che vuoi sincronizzare
-# dal Database verso Excel.
 BIDIRECTIONAL_COLUMNS = [
     'STATO_PdL', 'ESE', 'SAIT', 'PONTEROSSO', 'STATO_ATTIVITA',
     'DATA_CONTROLLO', 'PERSONALE_IMPIEGATO'
@@ -98,7 +94,6 @@ def load_data_from_excel():
         master_df.drop_duplicates(subset=[PRIMARY_KEY], keep='first', inplace=True)
 
     if TIMESTAMP_COLUMN not in master_df.columns:
-        logging.info(f"La colonna timestamp '{EXCEL_TIMESTAMP_COLUMN}' non è presente. Verrà creata con valore di default.")
         master_df[TIMESTAMP_COLUMN] = datetime.datetime(2000, 1, 1)
     master_df[TIMESTAMP_COLUMN] = pd.to_datetime(master_df[TIMESTAMP_COLUMN], errors='coerce').fillna(datetime.datetime(2000, 1, 1))
 
@@ -128,13 +123,11 @@ def sync_data(df_excel, df_db):
         is_in_excel, is_in_db = key in excel_keys, key in db_keys
 
         if is_in_excel and not is_in_db:
-            logging.info(f"'{key}' trovato in Excel ma non nel DB. Inserimento nel DB.")
             row_data = df_excel.loc[key].to_dict()
             row_data[PRIMARY_KEY] = key
             row_data[TIMESTAMP_COLUMN] = now
             db_inserts.append(row_data)
         elif is_in_db and not is_in_excel:
-            logging.warning(f"'{key}' trovato nel DB ma non in Excel. Sarà rimosso dal DB.")
             pass
         elif is_in_excel and is_in_db:
             excel_row, db_row = df_excel.loc[key], df_db.loc[key]
@@ -144,14 +137,11 @@ def sync_data(df_excel, df_db):
             if pd.isna(db_ts): db_ts = datetime.datetime(2000, 1, 1)
                 
             if excel_ts.floor('s') > db_ts.floor('s'):
-                logging.info(f"'{key}': Excel è più recente. Aggiornamento completo del DB.")
                 update_data = excel_row.to_dict()
                 update_data[PRIMARY_KEY] = key
                 update_data[TIMESTAMP_COLUMN] = excel_ts
                 db_updates.append(update_data)
-
             elif db_ts.floor('s') > excel_ts.floor('s'):
-                logging.info(f"'{key}': DB è più recente. Sincronizzazione mista.")
                 db_mixed_update = {col: excel_row.get(col) for col in unidirectional_columns}
                 db_mixed_update[PRIMARY_KEY] = key
                 db_mixed_update[TIMESTAMP_COLUMN] = db_ts
@@ -160,48 +150,77 @@ def sync_data(df_excel, df_db):
                 excel_mixed_update = {col: db_row.get(col) for col in BIDIRECTIONAL_COLUMNS}
                 excel_mixed_update[PRIMARY_KEY] = key
                 excel_mixed_update[SOURCE_SHEET_COLUMN] = excel_row.get(SOURCE_SHEET_COLUMN)
-                excel_mixed_update[TIMESTAMP_COLUMN] = db_ts
                 excel_updates.append(excel_mixed_update)
 
+    logging.info(f"Calcolate {len(db_inserts)} inserimenti DB, {len(db_updates)} aggiornamenti DB, {len(excel_updates)} aggiornamenti Excel.")
     return db_inserts, db_updates, excel_updates
 
 def commit_to_db(inserts, updates):
     if not inserts and not updates:
         logging.info("Nessun aggiornamento per il database.")
         return 0
-
+    
     total_ops = 0
     with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
         try:
-            with conn:
-                for op_list, op_type in [(inserts, "INSERT"), (updates, "UPDATE")]:
-                    if not op_list: continue
-                    for row_data in op_list:
-                        pk = row_data[PRIMARY_KEY]
-                        sql_data = {k: v for k, v in row_data.items() if k in DB_COLUMNS or k == PRIMARY_KEY}
+            # --- OTTIMIZZAZIONE INSERT ---
+            if inserts:
+                insert_data = []
+                # Prepara i dati in un formato consistente per executemany
+                for row_data in inserts:
+                    # Assicurati che tutte le colonne del DB siano presenti
+                    full_row = {col: None for col in DB_COLUMNS}
+                    full_row.update(row_data)
+                    # Converti i tipi
+                    for key, value in full_row.items():
+                        if pd.isna(value): full_row[key] = None
+                        elif isinstance(value, (datetime.datetime, pd.Timestamp)): full_row[key] = value.strftime(DATETIME_FORMAT)
+                        else: full_row[key] = str(value)
+                    insert_data.append(full_row)
+                
+                cols = ', '.join(f'"{k}"' for k in DB_COLUMNS)
+                placeholders = ', '.join([f':{k}' for k in DB_COLUMNS])
+                query = f'INSERT OR IGNORE INTO {DB_TABLE_NAME} ({cols}) VALUES ({placeholders})'
+                cursor.executemany(query, insert_data)
+                logging.info(f"Eseguite {len(inserts)} operazioni di INSERT in blocco nel DB.")
+                total_ops += len(inserts)
 
-                        for key, value in sql_data.items():
-                            if pd.isna(value): sql_data[key] = None
-                            elif isinstance(value, (datetime.datetime, pd.Timestamp)): sql_data[key] = value.strftime(DATETIME_FORMAT)
-                            else: sql_data[key] = str(value)
-
-                        update_data = {k: v for k, v in sql_data.items() if k != PRIMARY_KEY}
-
-                        if op_type == "INSERT":
-                            update_data[PRIMARY_KEY] = pk
-                            cols = ', '.join(f'"{k}"' for k in update_data.keys())
-                            placeholders = ', '.join(['?'] * len(update_data))
-                            query = f'INSERT OR IGNORE INTO {DB_TABLE_NAME} ({cols}) VALUES ({placeholders})'
-                            conn.execute(query, list(update_data.values()))
-                        elif op_type == "UPDATE":
-                            set_clause = ', '.join([f'"{k}" = ?' for k in update_data.keys()])
-                            query = f'UPDATE {DB_TABLE_NAME} SET {set_clause} WHERE "{PRIMARY_KEY}" = ?'
-                            conn.execute(query, list(update_data.values()) + [pk])
+            # --- OTTIMIZZAZIONE UPDATE ---
+            if updates:
+                update_data_list = []
+                for row_data in updates:
+                    pk = row_data[PRIMARY_KEY]
+                    update_values = {}
+                    # Prepara solo le colonne da aggiornare
+                    for key, value in row_data.items():
+                        if key == PRIMARY_KEY: continue
+                        if pd.isna(value): update_values[key] = None
+                        elif isinstance(value, (datetime.datetime, pd.Timestamp)): update_values[key] = value.strftime(DATETIME_FORMAT)
+                        else: update_values[key] = str(value)
                     
-                    logging.info(f"Eseguite {len(op_list)} operazioni di {op_type} nel DB.")
-                    total_ops += len(op_list)
+                    if update_values: # Solo se c'è qualcosa da aggiornare
+                        update_values['pk'] = pk
+                        update_data_list.append(update_values)
+
+                # Raggruppa gli update per set di colonne per usare executemany
+                grouped_updates = defaultdict(list)
+                for data in update_data_list:
+                    cols_to_update = tuple(sorted(k for k in data if k != 'pk'))
+                    grouped_updates[cols_to_update].append(data)
+                
+                for cols, data_list in grouped_updates.items():
+                    set_clause = ', '.join([f'"{k}" = :{k}' for k in cols])
+                    query = f'UPDATE {DB_TABLE_NAME} SET {set_clause} WHERE "{PRIMARY_KEY}" = :pk'
+                    cursor.executemany(query, data_list)
+
+                logging.info(f"Eseguite {len(updates)} operazioni di UPDATE in blocco nel DB.")
+                total_ops += len(updates)
+            
+            conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Errore durante il commit nel DB: {e}", exc_info=True)
+            conn.rollback()
             return -1
     return total_ops
 
@@ -211,7 +230,7 @@ def commit_to_excel(updates):
         return 0
 
     if not win32 or not pythoncom:
-        logging.error("Libreria pywin32 non disponibile. Impossibile scrivere su Excel.")
+        logging.error("Libreria pywin32 non disponibile.")
         return -1
 
     excel_app = None
@@ -219,94 +238,93 @@ def commit_to_excel(updates):
     
     try:
         pythoncom.CoInitialize()
-        logging.info("COM Inizializzato per questo thread.")
-        
         excel_app = win32.DispatchEx("Excel.Application")
         excel_app.Visible = False
         excel_app.DisplayAlerts = False
+        excel_app.ScreenUpdating = False # Disabilita aggiornamento schermo per velocità
 
         file_path = os.path.abspath(EXCEL_FILE_NAME)
         if not os.path.exists(file_path):
-            logging.error(f"File Excel non trovato al percorso: {file_path}")
+            logging.error(f"File Excel non trovato: {file_path}")
             return -1
             
         workbook = excel_app.Workbooks.Open(file_path, ReadOnly=False)
-        logging.info(f"File '{EXCEL_FILE_NAME}' aperto tramite automazione COM.")
+        logging.info(f"File '{EXCEL_FILE_NAME}' aperto in modalità ottimizzata.")
 
         updates_by_sheet = defaultdict(list)
         for update in updates:
             updates_by_sheet[update[SOURCE_SHEET_COLUMN]].append(update)
 
-        total_updated_cells = 0
+        total_updated_rows = 0
         for sheet_name, sheet_updates in updates_by_sheet.items():
             ws = None
             try:
                 ws = workbook.Sheets(sheet_name)
-                logging.info(f"Processo il foglio '{sheet_name}'...")
-                
-                last_col = ws.UsedRange.Columns.Count
-                header_range = ws.Range(ws.Cells(3, 1), ws.Cells(3, last_col))
-                header = [cell.Value for cell in header_range]
+                logging.info(f"Processo il foglio '{sheet_name}' in modalità blocco...")
 
+                # --- OTTIMIZZAZIONE: LETTURA IN BLOCCO ---
+                header_row = 3
+                first_data_row = 4
+                
+                last_row = ws.Cells(ws.Rows.Count, 1).End(-4162).Row # xlUp
+                last_col = ws.Cells(header_row, ws.Columns.Count).End(-4159).Row # xlToLeft
+                
+                header = [cell.Value for cell in ws.Range(ws.Cells(header_row, 1), ws.Cells(header_row, last_col))]
+                
                 try:
-                    pdl_col_index = header.index('PdL') + 1
+                    pdl_col_idx_0based = header.index(PRIMARY_KEY)
                 except ValueError:
-                    logging.error(f"Colonna 'PdL' non trovata nell'header del foglio '{sheet_name}'. Salto.")
+                    logging.error(f"Colonna '{PRIMARY_KEY}' non trovata nel foglio '{sheet_name}'. Salto.")
                     continue
+                
+                # Leggi tutta la tabella di dati in un'unica operazione
+                data_range = ws.Range(ws.Cells(first_data_row, 1), ws.Cells(last_row, last_col))
+                data_array = list(data_range.Value)
 
-                last_row = ws.Cells(ws.Rows.Count, pdl_col_index).End(-4162).Row # xlUp
+                # Crea una mappa per ricerca rapida: Valore PdL -> indice della riga (0-based)
+                pdl_to_row_index = {str(row[pdl_col_idx_0based]): i for i, row in enumerate(data_array) if row[pdl_col_idx_0based]}
                 
-                pdl_range = ws.Range(ws.Cells(4, pdl_col_index), ws.Cells(last_row, pdl_col_index))
-                pdl_values = [str(cell.Value) if cell.Value is not None else '' for cell in pdl_range]
-                pdl_to_row_map = {val: i + 4 for i, val in enumerate(pdl_values)}
-                del pdl_range
-                
+                # --- OTTIMIZZAZIONE: MODIFICA IN MEMORIA ---
+                updated_in_sheet = 0
                 for update in sheet_updates:
                     pdl_to_find = update[PRIMARY_KEY]
-                    row_to_update = pdl_to_row_map.get(pdl_to_find)
+                    row_idx = pdl_to_row_index.get(pdl_to_find)
                     
-                    if row_to_update:
+                    if row_idx is not None:
                         for db_col, value in update.items():
+                            if db_col == TIMESTAMP_COLUMN: continue
+
                             excel_col_name = REVERSE_HEADER_MAP.get(db_col)
                             if excel_col_name in header:
-                                col_idx = header.index(excel_col_name) + 1
-                                cell = ws.Cells(row_to_update, col_idx)
-                                
-                                if isinstance(value, (datetime.datetime, pd.Timestamp)):
-                                    python_datetime = pd.to_datetime(value).to_pydatetime()
-                                    cell.Value = python_datetime
-                                    
-                                    # --- BLOCCO DI CODICE CORRETTO E RESO ROBUSTO ---
-                                    try:
-                                        # Sintassi di formattazione corretta per Excel
-                                        cell.NumberFormat = 'dd/mm/yyyy hh:mm:ss'
-                                    except pythoncom.com_error:
-                                        # Se la formattazione fallisce (es. foglio protetto),
-                                        # registra un avviso ma non bloccare lo script.
-                                        logging.warning(f"Impossibile impostare il formato data per la cella {cell.Address} nel foglio '{sheet_name}'.")
-                                    # --- FINE BLOCCO CORRETTO ---
-                                        
-                                else:
-                                    cell.Value = str(value) if value is not None else ''
-                                    
-                                total_updated_cells += 1
-                                del cell
-                        logging.info(f"Aggiornata riga {row_to_update} per PdL '{pdl_to_find}' nel foglio '{sheet_name}'.")
+                                try:
+                                    col_idx = header.index(excel_col_name)
+                                    # Modifica l'array in memoria (velocissimo)
+                                    data_array[row_idx][col_idx] = str(value) if value is not None else ''
+                                except ValueError:
+                                    pass # La colonna non esiste nell'header letto
+                        updated_in_sheet += 1
                     else:
                         logging.warning(f"PdL '{pdl_to_find}' non trovato nella mappa del foglio '{sheet_name}'.")
+                
+                # --- OTTIMIZZAZIONE: SCRITTURA IN BLOCCO ---
+                if updated_in_sheet > 0:
+                    logging.info(f"Scrittura di {len(data_array)} righe in blocco sul foglio '{sheet_name}'...")
+                    data_range.Value = data_array
+                    total_updated_rows += updated_in_sheet
+                    logging.info("Scrittura in blocco completata.")
 
             except Exception as sheet_error:
                 logging.error(f"Errore durante l'elaborazione del foglio '{sheet_name}': {sheet_error}", exc_info=True)
             finally:
                 if ws: del ws
 
-        if total_updated_cells > 0:
+        if total_updated_rows > 0:
             workbook.Save()
-            logging.info(f"File Excel salvato con successo. Celle totali aggiornate: {total_updated_cells}.")
+            logging.info(f"File Excel salvato con successo. Righe totali con modifiche: {total_updated_rows}.")
         else:
-            logging.info("Nessuna cella è stata aggiornata in Excel, salvataggio non necessario.")
+            logging.info("Nessuna riga è stata aggiornata in Excel.")
             
-        return total_updated_cells
+        return total_updated_rows
 
     except pythoncom.com_error as e:
         logging.error(f"Errore COM specifico durante l'automazione di Excel: {e}", exc_info=True)
@@ -315,6 +333,8 @@ def commit_to_excel(updates):
         logging.error(f"Errore generico durante l'automazione di Excel: {e}", exc_info=True)
         return -1
     finally:
+        if excel_app:
+            excel_app.ScreenUpdating = True
         if workbook:
             workbook.Close(SaveChanges=False)
         if excel_app:
@@ -322,7 +342,6 @@ def commit_to_excel(updates):
         
         workbook = None
         excel_app = None
-        
         pythoncom.CoUninitialize()
         logging.info("Connessione a Excel e risorse COM rilasciate correttamente.")
 
@@ -361,7 +380,7 @@ def sincronizza_db_excel():
         if db_ops == -1: return False, "Errore critico durante l'aggiornamento del database."
 
         excel_ops = commit_to_excel(excel_updates)
-        if excel_ops == -1: return False, "Errore critico durante l'aggiornamento del file Excel. Potrebbe essere aperto o corrotto."
+        if excel_ops == -1: return False, "Errore critico durante l'aggiornamento del file Excel."
 
         df_db_after_sync = load_data_from_db()
         if df_db_after_sync is None: return False, "Impossibile ricaricare lo stato del DB per la pulizia finale."
@@ -373,7 +392,7 @@ def sincronizza_db_excel():
         message = (
             f"Sincronizzazione completata.\n"
             f"- Operazioni sul DB: {db_ops} (insert/update)\n"
-            f"- Celle aggiornate in Excel: {excel_ops}\n"
+            f"- Righe con modifiche in Excel: {excel_ops}\n"
             f"- Righe rimosse dal DB: {deleted_ops}"
         )
         logging.info(message)
@@ -392,4 +411,3 @@ if __name__ == "__main__":
     else:
         print("\nOperazione fallita.")
     print(message)
-    input("\nPremi INVIO per chiudere...")
