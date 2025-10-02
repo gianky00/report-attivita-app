@@ -10,8 +10,10 @@ from collections import defaultdict
 
 try:
     import win32com.client as win32
+    import pythoncom
 except ImportError:
     win32 = None
+    pythoncom = None
     logging.warning("Libreria pywin32 non trovata. La sincronizzazione con Excel non funzionerà.")
 
 
@@ -214,13 +216,19 @@ def commit_to_excel(updates):
         logging.info("Nessun aggiornamento per Excel.")
         return 0
 
-    if not win32:
+    if not win32 or not pythoncom:
         logging.error("Libreria pywin32 non disponibile. Impossibile scrivere su Excel.")
         return -1
 
     excel_app = None
     workbook = None
+    ws = None
+    cell = None
+
     try:
+        # Inizializza il COM per questo thread
+        pythoncom.CoInitialize()
+
         excel_app = win32.DispatchEx("Excel.Application")
         excel_app.Visible = False
         excel_app.DisplayAlerts = False
@@ -241,7 +249,6 @@ def commit_to_excel(updates):
                 logging.warning(f"Foglio '{sheet_name}' non trovato nel file Excel. Aggiornamenti saltati.")
                 continue
 
-            # Correzione: Legge l'intero header fino all'ultima colonna usata per mantenere l'indice corretto
             last_col = ws.UsedRange.Columns.Count
             header = [ws.Cells(3, i).Value for i in range(1, last_col + 1)]
 
@@ -256,7 +263,7 @@ def commit_to_excel(updates):
             for update in sheet_updates:
                 pdl_to_find = update[PRIMARY_KEY]
                 found = False
-                for row in range(4, last_row + 2): # +2 per sicurezza
+                for row in range(4, last_row + 2):
                     cell_value = ws.Cells(row, pdl_col_index).Value
                     if cell_value and str(cell_value) == pdl_to_find:
                         logging.info(f"Trovato '{pdl_to_find}' nel foglio '{sheet_name}' alla riga {row}. Aggiornamento in corso...")
@@ -280,15 +287,27 @@ def commit_to_excel(updates):
         logging.info(f"File Excel salvato con {total_updated_rows} righe aggiornate tramite automazione COM.")
         return total_updated_rows
 
+    except pythoncom.com_error as e:
+        logging.error(f"Errore COM specifico durante l'automazione di Excel: {e}", exc_info=True)
+        # HRESULT -2147023170 (0x800706BE) è un errore comune che indica che il processo remoto è terminato.
+        return -1
     except Exception as e:
-        logging.error(f"Errore durante l'automazione di Excel con win32com: {e}", exc_info=True)
+        logging.error(f"Errore generico durante l'automazione di Excel con win32com: {e}", exc_info=True)
         return -1
     finally:
+        # Rilascia esplicitamente tutti gli oggetti COM
+        del cell
+        del ws
         if workbook:
             workbook.Close(SaveChanges=False)
+        del workbook
         if excel_app:
             excel_app.Quit()
-        logging.info("Connessione a Excel chiusa correttamente.")
+        del excel_app
+
+        # De-inizializza il COM per questo thread
+        pythoncom.CoUninitialize()
+        logging.info("Connessione a Excel e risorse COM rilasciate correttamente.")
 
 def delete_rows_from_db(keys_to_delete):
     if not keys_to_delete:
