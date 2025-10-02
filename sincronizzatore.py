@@ -120,6 +120,7 @@ def sync_data(df_excel, df_db):
         if is_in_excel and not is_in_db:
             logging.info(f"'{key}' trovato in Excel ma non nel DB. Inserimento nel DB.")
             row_data = df_excel.loc[key].to_dict()
+            row_data[PRIMARY_KEY] = key  # <-- ADD THIS LINE
             row_data[TIMESTAMP_COLUMN] = now
             db_inserts.append(row_data)
         elif is_in_db and not is_in_excel:
@@ -130,10 +131,10 @@ def sync_data(df_excel, df_db):
             excel_row, db_row = df_excel.loc[key], df_db.loc[key]
             excel_ts = excel_row.get(TIMESTAMP_COLUMN)
             db_ts = db_row.get(TIMESTAMP_COLUMN)
-
             if excel_ts.floor('s') > db_ts.floor('s'):
                 logging.info(f"'{key}': Excel è più recente. Aggiornamento completo del DB.")
                 update_data = excel_row.to_dict()
+                update_data[PRIMARY_KEY] = key # <-- ADD THIS LINE
                 update_data[TIMESTAMP_COLUMN] = excel_ts # Mantiene il timestamp di Excel
                 db_updates.append(update_data)
 
