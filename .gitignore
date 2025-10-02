@@ -25,3 +25,4 @@ __pycache__/
 
 # Environment files
 .env
+sync_log.log
