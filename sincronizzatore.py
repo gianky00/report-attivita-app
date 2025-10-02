@@ -4,29 +4,29 @@ import datetime
 import os
 import sys
 import logging
-from openpyxl import Workbook
+from openpyxl import load_workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
 DB_TABLE_NAME = "attivita_programmate"
 EXCEL_FILE_NAME = "ATTIVITA_PROGRAMMATE.xlsm"
 SHEETS_TO_SYNC = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-OUTPUT_EXCEL_UPDATES_FILE = "AGGIORNAMENTI_DA_DB.xlsx"
 PRIMARY_KEY = "PdL"
 TIMESTAMP_COLUMN = "row_last_modified"
+EXCEL_TIMESTAMP_COLUMN = "DataUltimaModifica"
 SOURCE_SHEET_COLUMN = "source_sheet"
 LOCK_FILE = "sync.lock"
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
-DATE_FORMAT_EXCEL = '%d/%m/%Y'
 
 # --- LOGGING ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.FileHandler("sync_v2.log", mode='w'), logging.StreamHandler()]
+    handlers=[logging.FileHandler("sync_log.log", mode='w'), logging.StreamHandler()]
 )
 
-# --- MAPPATURA HEADER ---
+# --- MAPPATURA E COLONNE ---
 HEADER_MAP = {
     'FERM': 'FERM', 'MANUT': 'MANUT', 'PS': 'PS', 'AREA ': 'AREA', 'PdL': 'PdL',
     'IMP.': 'IMP', 'DESCRIZIONE\nATTIVITA\'': 'DESCRIZIONE_ATTIVITA', 'LUN': 'LUN',
@@ -34,24 +34,30 @@ HEADER_MAP = {
     'ESE': 'ESE', 'SAIT': 'SAIT', 'PONTEROSSO': 'PONTEROSSO',
     'STATO\nATTIVITA\'': 'STATO_ATTIVITA', 'DATA\nCONTROLLO': 'DATA_CONTROLLO',
     'PERSONALE\nIMPIEGATO': 'PERSONALE_IMPIEGATO', 'PO': 'PO', 'AVVISO': 'AVVISO',
-    'DataUltimaModifica': TIMESTAMP_COLUMN,
+    EXCEL_TIMESTAMP_COLUMN: TIMESTAMP_COLUMN,
     SOURCE_SHEET_COLUMN: SOURCE_SHEET_COLUMN
 }
 REVERSE_HEADER_MAP = {v: k for k, v in HEADER_MAP.items()}
-DB_COLUMNS = list(HEADER_MAP.values()) + ['Storico']
+DB_COLUMNS = list(HEADER_MAP.values())
+
+# Colonne a sincronizzazione bidirezionale (basate sui nomi DB)
+BIDIRECTIONAL_COLUMNS = [
+    'STATO_PdL', 'ESE', 'SAIT', 'PONTEROSSO', 'STATO_ATTIVITA',
+    'DATA_CONTROLLO', 'PERSONALE_IMPIEGATO'
+]
 
 def create_lock():
     if os.path.exists(LOCK_FILE):
-        logging.warning("Lock file exists.")
+        logging.warning("Lock file exists. Impossibile avviare una nuova sincronizzazione.")
         return False
     with open(LOCK_FILE, 'w') as f: f.write(str(os.getpid()))
-    logging.info("Lock file created.")
+    logging.info("Lock file creato.")
     return True
 
 def remove_lock():
     if os.path.exists(LOCK_FILE):
         os.remove(LOCK_FILE)
-        logging.info("Lock file removed.")
+        logging.info("Lock file rimosso.")
 
 def load_data_from_excel():
     all_dfs = []
@@ -59,96 +65,101 @@ def load_data_from_excel():
     for sheet in SHEETS_TO_SYNC:
         try:
             df = pd.read_excel(EXCEL_FILE_NAME, sheet_name=sheet, header=2, engine='openpyxl', dtype=str).where(pd.notnull, None)
-            if df.empty:
-                logging.warning(f"Il foglio '{sheet}' è vuoto. Sarà saltato.")
+            if df.empty or 'PdL' not in df.columns:
+                logging.warning(f"Il foglio '{sheet}' è vuoto o non ha la colonna 'PdL'. Sarà saltato.")
                 continue
+            df.dropna(subset=['PdL'], inplace=True)
             df[SOURCE_SHEET_COLUMN] = sheet
             all_dfs.append(df)
-            logging.info(f"Letto {len(df)} righe dal foglio '{sheet}'.")
+            logging.info(f"Caricate {len(df)} righe dal foglio '{sheet}'.")
         except Exception as e:
             logging.warning(f"Impossibile leggere il foglio '{sheet}'. Errore: {e}")
 
     if not all_dfs:
-        logging.error("Nessun dato caricato da Excel.")
+        logging.error("Nessun dato valido caricato da Excel.")
         return None
 
     master_df = pd.concat(all_dfs, ignore_index=True)
     master_df.rename(columns=HEADER_MAP, inplace=True)
 
-    master_df.dropna(subset=[PRIMARY_KEY], inplace=True)
     duplicates = master_df[master_df.duplicated(subset=[PRIMARY_KEY], keep=False)]
     if not duplicates.empty:
-        logging.warning(f"Trovati {len(duplicates)} PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: {duplicates[PRIMARY_KEY].tolist()}")
-    master_df.drop_duplicates(subset=[PRIMARY_KEY], keep='first', inplace=True)
+        logging.warning(f"Trovati PdL duplicati. Verrà mantenuta solo la prima occorrenza. Duplicati: {duplicates[PRIMARY_KEY].tolist()}")
+        master_df.drop_duplicates(subset=[PRIMARY_KEY], keep='first', inplace=True)
 
     if TIMESTAMP_COLUMN not in master_df.columns:
-        logging.info(f"Colonna timestamp '{TIMESTAMP_COLUMN}' non trovata in Excel. Verrà creata in memoria con il valore di default.")
-        master_df[TIMESTAMP_COLUMN] = "2025-09-30 20:00:00"
-    master_df[TIMESTAMP_COLUMN] = pd.to_datetime(master_df[TIMESTAMP_COLUMN], errors='coerce')
+        logging.info(f"La colonna timestamp '{EXCEL_TIMESTAMP_COLUMN}' non è presente. Verrà creata con valore di default.")
+        master_df[TIMESTAMP_COLUMN] = datetime.datetime(2000, 1, 1)
+    master_df[TIMESTAMP_COLUMN] = pd.to_datetime(master_df[TIMESTAMP_COLUMN], errors='coerce').fillna(datetime.datetime(2000, 1, 1))
 
     master_df[PRIMARY_KEY] = master_df[PRIMARY_KEY].astype(str)
-
     return master_df.set_index(PRIMARY_KEY)
 
 def load_data_from_db():
     try:
         with sqlite3.connect(DB_NAME) as conn:
-            return pd.read_sql_query(f"SELECT * FROM {DB_TABLE_NAME}", conn, index_col=PRIMARY_KEY, parse_dates=[TIMESTAMP_COLUMN])
+            query = f"SELECT * FROM {DB_TABLE_NAME}"
+            df = pd.read_sql_query(query, conn, index_col=PRIMARY_KEY, parse_dates=[TIMESTAMP_COLUMN])
+            df[TIMESTAMP_COLUMN] = pd.to_datetime(df[TIMESTAMP_COLUMN], errors='coerce').fillna(datetime.datetime(2000, 1, 1))
+            return df
     except Exception as e:
-        logging.error(f"Errore caricamento dati dal DB: {e}", exc_info=True)
+        logging.error(f"Errore durante il caricamento dati dal DB: {e}", exc_info=True)
         return None
 
 def sync_data(df_excel, df_db):
     excel_keys, db_keys = set(df_excel.index), set(df_db.index)
-    db_inserts, db_updates, excel_actions = [], [], []
+    db_inserts, db_updates, excel_updates = [], [], []
     now = datetime.datetime.now()
+
+    all_db_columns = [col for col in DB_COLUMNS if col in df_excel.columns]
+    unidirectional_columns = [col for col in all_db_columns if col not in BIDIRECTIONAL_COLUMNS and col != TIMESTAMP_COLUMN]
 
     for key in excel_keys.union(db_keys):
         is_in_excel, is_in_db = key in excel_keys, key in db_keys
 
         if is_in_excel and not is_in_db:
+            logging.info(f"'{key}' trovato in Excel ma non nel DB. Inserimento nel DB.")
             row_data = df_excel.loc[key].to_dict()
             row_data[TIMESTAMP_COLUMN] = now
             db_inserts.append(row_data)
         elif is_in_db and not is_in_excel:
-            row_data = df_db.loc[key].to_dict()
-            row_data['AZIONE_RICHIESTA'] = 'AGGIUNGERE A EXCEL'
-            excel_actions.append(row_data)
+            logging.warning(f"'{key}' trovato nel DB ma non in Excel. Sarà rimosso dal DB.")
+            # La logica di cancellazione gestirà questo caso dopo la sincronizzazione.
+            pass
         elif is_in_excel and is_in_db:
             excel_row, db_row = df_excel.loc[key], df_db.loc[key]
-            excel_ts = pd.to_datetime(excel_row.get(TIMESTAMP_COLUMN), errors='coerce')
-            db_ts = pd.to_datetime(db_row.get(TIMESTAMP_COLUMN), errors='coerce')
+            excel_ts = excel_row.get(TIMESTAMP_COLUMN)
+            db_ts = db_row.get(TIMESTAMP_COLUMN)
 
-            # Logica di confronto intelligente
-            if pd.isna(excel_ts) and not pd.isna(db_ts):
-                are_different = False
-                for col in excel_row.index:
-                    if col not in [TIMESTAMP_COLUMN, SOURCE_SHEET_COLUMN]:
-                        excel_val = str(excel_row.get(col, ''))
-                        db_val = str(db_row.get(col, ''))
-                        if excel_val != db_val:
-                            are_different = True
-                            break
-                if are_different:
-                    row_data = db_row.to_dict()
-                    row_data['AZIONE_RICHIESTA'] = 'AGGIORNARE IN EXCEL (Contenuto Diverso)'
-                    excel_actions.append(row_data)
-            elif not pd.isna(excel_ts) and not pd.isna(db_ts):
-                 if excel_ts.floor('s') > db_ts.floor('s'):
-                    row_data = excel_row.to_dict()
-                    row_data[TIMESTAMP_COLUMN] = excel_ts
-                    db_updates.append(row_data)
-                 elif db_ts.floor('s') > excel_ts.floor('s'):
-                    row_data = db_row.to_dict()
-                    row_data['AZIONE_RICHIESTA'] = 'AGGIORNARE IN EXCEL'
-                    excel_actions.append(row_data)
+            if excel_ts.floor('s') > db_ts.floor('s'):
+                logging.info(f"'{key}': Excel è più recente. Aggiornamento completo del DB.")
+                update_data = excel_row.to_dict()
+                update_data[TIMESTAMP_COLUMN] = excel_ts # Mantiene il timestamp di Excel
+                db_updates.append(update_data)
 
-        if 'row_data' in locals() and row_data: row_data[PRIMARY_KEY] = key
+            elif db_ts.floor('s') > excel_ts.floor('s'):
+                logging.info(f"'{key}': DB è più recente. Sincronizzazione mista.")
+                # 1. Aggiorna DB con colonne unidirezionali da Excel
+                db_mixed_update = {col: excel_row.get(col) for col in unidirectional_columns}
+                db_mixed_update[PRIMARY_KEY] = key
+                db_mixed_update[TIMESTAMP_COLUMN] = db_ts # Mantiene il timestamp del DB
+                db_updates.append(db_mixed_update)
 
-    if db_inserts or db_updates: commit_to_db(db_inserts, db_updates)
-    if excel_actions: export_updates_to_excel(excel_actions)
+                # 2. Prepara aggiornamento per Excel con colonne bidirezionali da DB
+                excel_mixed_update = {col: db_row.get(col) for col in BIDIRECTIONAL_COLUMNS}
+                excel_mixed_update[PRIMARY_KEY] = key
+                excel_mixed_update[SOURCE_SHEET_COLUMN] = excel_row.get(SOURCE_SHEET_COLUMN)
+                excel_mixed_update[TIMESTAMP_COLUMN] = db_ts
+                excel_updates.append(excel_mixed_update)
+
+    return db_inserts, db_updates, excel_updates
 
 def commit_to_db(inserts, updates):
+    if not inserts and not updates:
+        logging.info("Nessun aggiornamento per il database.")
+        return 0
+
+    total_ops = 0
     with sqlite3.connect(DB_NAME) as conn:
         try:
             with conn:
@@ -156,83 +167,170 @@ def commit_to_db(inserts, updates):
                     if not op_list: continue
                     for row_data in op_list:
                         pk = row_data[PRIMARY_KEY]
-                        sql_data = {}
-                        for key, value in row_data.items():
-                            if key in DB_COLUMNS or key == PRIMARY_KEY:
-                                if pd.isna(value): sql_data[key] = None
-                                elif isinstance(value, (datetime.datetime, pd.Timestamp)): sql_data[key] = value.strftime(DATETIME_FORMAT)
-                                else: sql_data[key] = str(value)
+
+                        # Filtra solo le colonne che esistono nella tabella del DB
+                        sql_data = {k: v for k, v in row_data.items() if k in DB_COLUMNS or k == PRIMARY_KEY}
+
+                        for key, value in sql_data.items():
+                            if pd.isna(value): sql_data[key] = None
+                            elif isinstance(value, (datetime.datetime, pd.Timestamp)): sql_data[key] = value.strftime(DATETIME_FORMAT)
+                            else: sql_data[key] = str(value)
 
                         update_data = {k: v for k, v in sql_data.items() if k != PRIMARY_KEY}
+
                         if op_type == "INSERT":
                             update_data[PRIMARY_KEY] = pk
-                            cols = ', '.join(f'"{k}"' for k in update_data.keys()); placeholders = ', '.join(['?'] * len(update_data))
-                            conn.execute(f"INSERT INTO {DB_TABLE_NAME} ({cols}) VALUES ({placeholders})", list(update_data.values()))
+                            cols = ', '.join(f'"{k}"' for k in update_data.keys())
+                            placeholders = ', '.join(['?'] * len(update_data))
+                            query = f'INSERT OR IGNORE INTO {DB_TABLE_NAME} ({cols}) VALUES ({placeholders})'
+                            conn.execute(query, list(update_data.values()))
                         elif op_type == "UPDATE":
                             set_clause = ', '.join([f'"{k}" = ?' for k in update_data.keys()])
-                            conn.execute(f'UPDATE {DB_TABLE_NAME} SET {set_clause} WHERE "{PRIMARY_KEY}" = ?', list(update_data.values()) + [pk])
+                            query = f'UPDATE {DB_TABLE_NAME} SET {set_clause} WHERE "{PRIMARY_KEY}" = ?'
+                            conn.execute(query, list(update_data.values()) + [pk])
+
                     logging.info(f"Eseguite {len(op_list)} operazioni di {op_type} nel DB.")
-        except sqlite3.Error as e: logging.error(f"Errore DB: {e}", exc_info=True)
+                    total_ops += len(op_list)
+        except sqlite3.Error as e:
+            logging.error(f"Errore durante il commit nel DB: {e}", exc_info=True)
+            return -1
+    return total_ops
 
-def export_updates_to_excel(actions):
-    if not actions: return
-    logging.info(f"Creazione del file di aggiornamento '{OUTPUT_EXCEL_UPDATES_FILE}' con {len(actions)} azioni.")
-    df_out = pd.DataFrame(actions)
-
-    if 'DATA_CONTROLLO' in df_out.columns:
-        df_out['DATA_CONTROLLO'] = pd.to_datetime(df_out['DATA_CONTROLLO'], errors='coerce').dt.strftime(DATE_FORMAT_EXCEL)
-
-    df_out.rename(columns=REVERSE_HEADER_MAP, inplace=True)
-
-    final_cols = ['AZIONE_RICHIESTA']
-    for db_col_name in HEADER_MAP.values():
-        excel_header = REVERSE_HEADER_MAP.get(db_col_name)
-        if excel_header and excel_header in df_out.columns:
-            final_cols.append(excel_header)
-
-    df_out = df_out[[col for col in final_cols if col in df_out.columns]]
+def commit_to_excel(updates):
+    if not updates:
+        logging.info("Nessun aggiornamento per Excel.")
+        return 0
 
     try:
-        df_out.to_excel(OUTPUT_EXCEL_UPDATES_FILE, index=False, engine='openpyxl')
-        logging.info(f"File '{OUTPUT_EXCEL_UPDATES_FILE}' creato con successo.")
+        wb = load_workbook(EXCEL_FILE_NAME, keep_vba=True)
+        updates_by_sheet = {}
+        for update in updates:
+            sheet_name = update[SOURCE_SHEET_COLUMN]
+            if sheet_name not in updates_by_sheet:
+                updates_by_sheet[sheet_name] = []
+            updates_by_sheet[sheet_name].append(update)
+
+        total_updated_rows = 0
+        for sheet_name, sheet_updates in updates_by_sheet.items():
+            if sheet_name not in wb.sheetnames:
+                logging.warning(f"Foglio '{sheet_name}' non trovato nel file Excel. Aggiornamenti saltati.")
+                continue
+
+            ws = wb[sheet_name]
+            header = [cell.value for cell in ws[3]] # Header è alla riga 3
+            pdl_col_index = header.index('PdL') + 1
+
+            for update in sheet_updates:
+                pdl_to_find = update[PRIMARY_KEY]
+                found = False
+                for row in range(4, ws.max_row + 1): # I dati iniziano dalla riga 4
+                    if str(ws.cell(row=row, column=pdl_col_index).value) == pdl_to_find:
+                        logging.info(f"Trovato '{pdl_to_find}' nel foglio '{sheet_name}' alla riga {row}. Aggiornamento...")
+                        for db_col, value in update.items():
+                            excel_col_name = REVERSE_HEADER_MAP.get(db_col)
+                            if excel_col_name in header:
+                                col_idx = header.index(excel_col_name) + 1
+                                cell = ws.cell(row=row, column=col_idx)
+                                if isinstance(value, datetime.datetime):
+                                    cell.value = value
+                                    cell.number_format = 'DD/MM/YYYY HH:MM:SS'
+                                else:
+                                    cell.value = value
+
+                        # Aggiorna il timestamp di Excel
+                        ts_col_name = REVERSE_HEADER_MAP[TIMESTAMP_COLUMN]
+                        if ts_col_name in header:
+                            ts_col_idx = header.index(ts_col_name) + 1
+                            cell = ws.cell(row=row, column=ts_col_idx)
+                            cell.value = update[TIMESTAMP_COLUMN]
+                            cell.number_format = 'DD/MM/YYYY HH:MM:SS'
+
+                        total_updated_rows += 1
+                        found = True
+                        break
+                if not found:
+                    logging.warning(f"PdL '{pdl_to_find}' non trovato nel foglio '{sheet_name}' per l'aggiornamento.")
+
+        wb.save(EXCEL_FILE_NAME)
+        logging.info(f"File Excel '{EXCEL_FILE_NAME}' salvato con {total_updated_rows} righe aggiornate.")
+        return total_updated_rows
+
     except Exception as e:
-        logging.error(f"Impossibile creare il file di aggiornamento Excel: {e}", exc_info=True)
+        logging.error(f"Errore durante l'aggiornamento del file Excel: {e}", exc_info=True)
+        return -1
 
-def main():
-    if not create_lock(): sys.exit(1)
+def delete_rows_from_db(keys_to_delete):
+    if not keys_to_delete:
+        return 0
+
+    logging.info(f"Rimozione di {len(keys_to_delete)} righe dal DB perché non più presenti in Excel.")
+    with sqlite3.connect(DB_NAME) as conn:
+        try:
+            with conn:
+                for key in keys_to_delete:
+                    conn.execute(f'DELETE FROM {DB_TABLE_NAME} WHERE "{PRIMARY_KEY}" = ?', (key,))
+            return len(keys_to_delete)
+        except sqlite3.Error as e:
+            logging.error(f"Errore durante la cancellazione di righe dal DB: {e}", exc_info=True)
+            return -1
+
+def sincronizza_db_excel():
+    if not create_lock():
+        return False, "Processo di sincronizzazione già in corso."
+
     try:
-        logging.info("--- Inizio Sincronizzazione v2.2 ---")
+        logging.info("--- INIZIO SINCRONIZZAZIONE BIDIREZIONALE ---")
+
+        # 1. Carica dati
         df_excel = load_data_from_excel()
-        if df_excel is None: return
+        if df_excel is None:
+            return False, "Impossibile caricare i dati da Excel. Controlla il file e i log."
+
         df_db = load_data_from_db()
-        if df_db is None: return
+        if df_db is None:
+            return False, "Impossibile caricare i dati dal Database. Controlla la connessione e i log."
 
-        sync_data(df_excel, df_db)
+        # 2. Logica di sincronizzazione
+        db_inserts, db_updates, excel_updates = sync_data(df_excel, df_db)
 
-        logging.info("--- Controllo cancellazioni da Excel ---")
-        df_excel_after = load_data_from_excel()
-        df_db_after = load_data_from_db()
-        if df_excel_after is not None and df_db_after is not None:
-            excel_keys = set(df_excel_after.index)
-            db_keys = set(df_db_after.index)
-            deleted_from_excel = db_keys - excel_keys
-            if deleted_from_excel:
-                logging.info(f"Trovate {len(deleted_from_excel)} righe cancellate da Excel. Rimozione dal DB.")
-                with sqlite3.connect(DB_NAME) as conn:
-                    for key in deleted_from_excel:
-                        conn.execute(f'DELETE FROM {DB_TABLE_NAME} WHERE "{PRIMARY_KEY}" = ?', (key,))
+        # 3. Commit su DB
+        db_ops = commit_to_db(db_inserts, db_updates)
+        if db_ops == -1:
+            return False, "Errore critico durante l'aggiornamento del database."
 
-            deleted_from_db = excel_keys - db_keys
-            if deleted_from_db:
-                logging.info(f"Trovate {len(deleted_from_db)} righe cancellate dal DB. Aggiunte al file di aggiornamento.")
-                actions_to_export = [{'AZIONE_RICHIESTA': 'CANCELLARE DA EXCEL', PRIMARY_KEY: key, SOURCE_SHEET_COLUMN: df_excel_after.loc[key, SOURCE_SHEET_COLUMN]} for key in deleted_from_db]
-                export_updates_to_excel(actions_to_export)
+        # 4. Commit su Excel
+        excel_ops = commit_to_excel(excel_updates)
+        if excel_ops == -1:
+            return False, "Errore critico durante l'aggiornamento del file Excel. Potrebbe essere aperto o corrotto."
 
-        logging.info("--- Sincronizzazione Completata ---")
+        # 5. Gestione righe cancellate da Excel
+        excel_keys_after_sync = set(df_excel.index)
+        db_keys_after_sync = set(load_data_from_db().index)
+        deleted_from_excel = db_keys_after_sync - excel_keys_after_sync
+
+        deleted_ops = delete_rows_from_db(list(deleted_from_excel))
+        if deleted_ops == -1:
+             return False, "Errore durante la rimozione di righe obsolete dal database."
+
+        message = (
+            f"Sincronizzazione completata.\n"
+            f"- Operazioni sul DB: {db_ops} (insert/update)\n"
+            f"- Righe aggiornate in Excel: {excel_ops}\n"
+            f"- Righe rimosse dal DB: {deleted_ops}"
+        )
+        logging.info(message)
+        return True, message
+
     except Exception as e:
-        logging.critical(f"Errore critico nel processo principale: {e}", exc_info=True)
+        logging.critical(f"Errore non gestito nel processo di sincronizzazione: {e}", exc_info=True)
+        return False, f"Errore non gestito: {e}"
     finally:
         remove_lock()
 
 if __name__ == "__main__":
-    main()
+    success, message = sincronizza_db_excel()
+    if success:
+        print("Operazione completata con successo.")
+    else:
+        print("Operazione fallita.")
+    print(message)

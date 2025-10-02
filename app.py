@@ -10,10 +10,13 @@ import uuid
 from collections import defaultdict
 import requests
 import google.generativeai as genai
-import win32com.client as win32
+try:
+    import win32com.client as win32
+except ImportError:
+    win32 = None
+    pythoncom = None
 import matplotlib.pyplot as plt
 import threading
-import pythoncom # Necessario per la gestione di Outlook in un thread
 import learning_module
 import bcrypt
 import qrcode
@@ -32,8 +35,7 @@ from modules.data_manager import (
     carica_archivio_completo,
     trova_attivita,
     scrivi_o_aggiorna_risposta,
-    carica_dati_attivita_programmate,
-    consolida_report_giornalieri
+    carica_dati_attivita_programmate
 )
 from modules.db_manager import (
     get_shifts_by_type, get_filtered_activities, get_technician_performance_data,
@@ -2518,41 +2520,27 @@ def main_app(matricola_utente, ruolo):
 
                         with caposquadra_tabs[2]: # Gestione Dati
                             st.header("Gestione e Sincronizzazione Dati")
-                            st.info("Usa questa sezione per gestire il flusso di dati tra il file Excel di pianificazione e il database dell'applicazione.")
-                            st.divider()
-
-                            # --- 1. Sincronizzazione da Excel a Database ---
-                            st.subheader("1. Sincronizza Pianificazione da Excel")
-                            st.warning(
-                                "**Azione:** Copia i dati dal file `attivita_programmate.xlsm` al database.\n\n"
-                                "**Uso:** Eseguire questa azione quando il file di pianificazione è stato aggiornato con nuove attività o programmazioni settimanali."
+                            st.info(
+                                "Questa sezione permette di avviare la sincronizzazione bidirezionale "
+                                "tra il file Excel `ATTIVITA_PROGRAMMATE.xlsm` e il database interno."
                             )
-                            if st.button("🚀 Sincronizza Pianificazione da Excel", help="Sovrascrive la tabella delle attività nel DB con i dati del file Excel."):
-                                from sincronizzatore import sincronizza_dati
-                                with st.spinner("Sincronizzazione da Excel in corso..."):
-                                    success, message = sincronizza_dati()
+                            st.warning(
+                                "**Funzionamento:**\n"
+                                "- **Bidirezionale per colonne di stato:** `STATO PdL`, `ESE`, `SAIT`, `PONTEROSSO`, `STATO ATTIVITA'`, `DATA CONTROLLO`, `PERSONALE IMPIEGATO` vengono sincronizzate in base al timestamp più recente.\n"
+                                "- **Unidirezionale (Excel -> DB) per le altre colonne:** Tutti gli altri dati di pianificazione vengono aggiornati solo da Excel verso il database.\n"
+                                "- Il processo aggiornerà sia il database che il file Excel nella stessa operazione."
+                            )
+
+                            if st.button("🔄 Sincronizza DB <-> EXCEL", type="primary", help="Avvia la sincronizzazione bidirezionale completa."):
+                                from sincronizzatore import sincronizza_db_excel
+                                with st.spinner("Sincronizzazione in corso... Non chiudere la pagina."):
+                                    success, message = sincronizza_db_excel()
                                     if success:
-                                        st.success(f"Sincronizzazione completata! {message}")
-                                        st.cache_data.clear()
-                                        st.rerun()
+                                        st.success("Sincronizzazione completata con successo!")
+                                        st.info(message)
+                                        st.cache_data.clear() # Pulisce la cache per riflettere i nuovi dati
                                     else:
                                         st.error(f"Errore durante la sincronizzazione: {message}")
-
-                            st.divider()
-
-                            # --- 2. Consolidamento da Database a Excel ---
-                            st.subheader("2. Consolida Report in Excel")
-                            st.warning(
-                                "**Azione:** Aggiorna il file `attivita_programmate.xlsm` con gli ultimi report compilati dai tecnici nel database.\n\n"
-                                "**Uso:** Eseguire questa azione per salvare i progressi dal database al file master di pianificazione."
-                            )
-                            if st.button("⚙️ Consolida Report in Excel", help="Aggiorna il file Excel con i dati dei report presenti nel database."):
-                                with st.spinner("Consolidamento dei report in Excel in corso..."):
-                                    success, message = consolida_report_giornalieri()
-                                    if success:
-                                        st.success(message)
-                                    else:
-                                        st.error(message)
 
                         with caposquadra_tabs[3]: # Validazione Report
                             render_report_validation_tab(matricola_utente)

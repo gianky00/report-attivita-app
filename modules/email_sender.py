@@ -1,10 +1,22 @@
 import threading
-import pythoncom
-import win32com.client as win32
 import config
+
+try:
+    import pythoncom
+    import win32com.client as win32
+    outlook_enabled = True
+except ImportError:
+    outlook_enabled = False
+    # Definisci placeholder se le librerie non sono disponibili
+    pythoncom = None
+    win32 = None
 
 def _invia_email_con_outlook_backend(subject, html_body):
     """Funzione sicura per essere eseguita in un thread, gestisce CoInitialize."""
+    if not outlook_enabled:
+        print("ATTENZIONE: Modulo pywin32 non trovato. Invio email disabilitato.")
+        return
+
     pythoncom.CoInitialize()
     with config.OUTLOOK_LOCK:
         try:
