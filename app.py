@@ -2148,55 +2148,62 @@ def main_app(matricola_utente, ruolo):
 
             # Messaggio informativo per chiarire il comportamento della ricerca
             st.info("""
-            **Nota:** La ricerca mostra per impostazione predefinita solo gli interventi con uno **storico compilato**.
-            Per cercare anche le attività **pianificate ma non ancora eseguite**, deseleziona la casella "Mostra solo interventi eseguiti".
+            **Nota:** Vengono visualizzate le 30 attività più recenti con uno storico compilato.
+            Usa i filtri per una ricerca più specifica. Per cercare anche le attività pianificate ma non ancora eseguite, deseleziona la casella "Mostra solo interventi eseguiti".
             """)
 
             # Esegui la ricerca se almeno un filtro è attivo o se è stato premuto il pulsante dei 15 giorni
             search_is_active = pdl_search or desc_search or imp_search or tec_search or (st.session_state.db_start_date and st.session_state.db_end_date)
 
-            if search_is_active:
-                with st.spinner("Ricerca in corso nel database..."):
-                    risultati_df = get_filtered_archived_activities(
-                        pdl_search, desc_search, imp_search, tec_search,
-                        interventi_eseguiti_only,
-                        st.session_state.db_start_date, st.session_state.db_end_date
-                    )
+            # Esegui sempre la ricerca, con o senza filtri
+            with st.spinner("Ricerca in corso nel database..."):
+                risultati_df = get_filtered_archived_activities(
+                    pdl_search, desc_search, imp_search, tec_search,
+                    interventi_eseguiti_only,
+                    st.session_state.db_start_date, st.session_state.db_end_date
+                )
 
-                if risultati_df.empty:
-                    st.info("Nessun record trovato per i filtri selezionati.")
+            if risultati_df.empty:
+                st.info("Nessun record trovato.")
+            else:
+                if not search_is_active:
+                    # Caricamento di default: mostra le ultime 30, senza paginazione
+                    display_df = risultati_df.head(30)
+                    st.info(f"Visualizzazione delle {len(display_df)} attività più recenti.")
+                    for _, row in display_df.iterrows():
+                        pdl = row['PdL']
+                        impianto = row.get('IMP', 'N/D')
+                        descrizione = row.get('DESCRIZIONE_ATTIVITA', 'N/D')
+                        storico = row.get('Storico', [])
+                        expander_title = f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."
+                        with st.expander(expander_title):
+                            visualizza_storico_organizzato(storico, pdl)
                 else:
-                    st.info(f"Trovati {len(risultati_df)} PdL corrispondenti.")
-
-                    # Usa st.session_state per la paginazione
+                    # Caricamento con filtri: mostra i risultati con paginazione
+                    st.info(f"Trovati {len(risultati_df)} PdL corrispondenti ai filtri.")
                     ITEMS_PER_PAGE = 20
                     if 'db_search_page' not in st.session_state:
                         st.session_state.db_search_page = 0
 
                     start_idx = st.session_state.db_search_page * ITEMS_PER_PAGE
                     end_idx = start_idx + ITEMS_PER_PAGE
-
                     items_to_display_df = risultati_df.iloc[start_idx:end_idx]
 
                     for _, row in items_to_display_df.iterrows():
                         pdl = row['PdL']
-                        impianto = row.get('IMP', 'N/D') # Usa .get per sicurezza
+                        impianto = row.get('IMP', 'N/D')
                         descrizione = row.get('DESCRIZIONE_ATTIVITA', 'N/D')
                         storico = row.get('Storico', [])
-
                         expander_title = f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."
                         with st.expander(expander_title):
                             visualizza_storico_organizzato(storico, pdl)
 
-                    # Logica di paginazione
                     total_results = len(risultati_df)
                     if end_idx < total_results:
                         st.divider()
                         if st.button("Carica Altri Risultati..."):
                             st.session_state.db_search_page += 1
                             st.rerun()
-            else:
-                st.info("Inserisci almeno un criterio per avviare la ricerca.")
 
         # Scheda 3: Gestione Turni (precedentemente indice 4)
         with tabs[3]:
