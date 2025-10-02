@@ -47,6 +47,10 @@ HEADER_MAP = {
 REVERSE_HEADER_MAP = {v: k for k, v in HEADER_MAP.items()}
 DB_COLUMNS = list(HEADER_MAP.values())
 
+# --- CONFIGURAZIONE CHIAVE DELLA SINCRONIZZAZIONE ---
+# Solo le colonne in questa lista verranno aggiornate in Excel se i dati nel DB sono più recenti.
+# Aggiungi qui i nomi delle colonne (es. 'DESCRIZIONE_ATTIVITA') che vuoi sincronizzare
+# dal Database verso Excel.
 BIDIRECTIONAL_COLUMNS = [
     'STATO_PdL', 'ESE', 'SAIT', 'PONTEROSSO', 'STATO_ATTIVITA',
     'DATA_CONTROLLO', 'PERSONALE_IMPIEGATO'
@@ -148,13 +152,11 @@ def sync_data(df_excel, df_db):
 
             elif db_ts.floor('s') > excel_ts.floor('s'):
                 logging.info(f"'{key}': DB è più recente. Sincronizzazione mista.")
-                # 1. Aggiorna DB con colonne unidirezionali da Excel
                 db_mixed_update = {col: excel_row.get(col) for col in unidirectional_columns}
                 db_mixed_update[PRIMARY_KEY] = key
                 db_mixed_update[TIMESTAMP_COLUMN] = db_ts
                 db_updates.append(db_mixed_update)
 
-                # 2. Prepara aggiornamento per Excel con colonne bidirezionali da DB
                 excel_mixed_update = {col: db_row.get(col) for col in BIDIRECTIONAL_COLUMNS}
                 excel_mixed_update[PRIMARY_KEY] = key
                 excel_mixed_update[SOURCE_SHEET_COLUMN] = excel_row.get(SOURCE_SHEET_COLUMN)
@@ -228,7 +230,7 @@ def commit_to_excel(updates):
             logging.error(f"File Excel non trovato al percorso: {file_path}")
             return -1
             
-        workbook = excel_app.Workbooks.Open(file_path)
+        workbook = excel_app.Workbooks.Open(file_path, ReadOnly=False)
         logging.info(f"File '{EXCEL_FILE_NAME}' aperto tramite automazione COM.")
 
         updates_by_sheet = defaultdict(list)
@@ -242,7 +244,6 @@ def commit_to_excel(updates):
                 ws = workbook.Sheets(sheet_name)
                 logging.info(f"Processo il foglio '{sheet_name}'...")
                 
-                # Ottimizzazione: Leggi l'header e la colonna PdL una sola volta
                 last_col = ws.UsedRange.Columns.Count
                 header_range = ws.Range(ws.Cells(3, 1), ws.Cells(3, last_col))
                 header = [cell.Value for cell in header_range]
@@ -255,11 +256,10 @@ def commit_to_excel(updates):
 
                 last_row = ws.Cells(ws.Rows.Count, pdl_col_index).End(-4162).Row # xlUp
                 
-                # Crea una mappa per ricerca rapida: Valore PdL -> numero di riga
                 pdl_range = ws.Range(ws.Cells(4, pdl_col_index), ws.Cells(last_row, pdl_col_index))
                 pdl_values = [str(cell.Value) if cell.Value is not None else '' for cell in pdl_range]
                 pdl_to_row_map = {val: i + 4 for i, val in enumerate(pdl_values)}
-                del pdl_range # Rilascia oggetto COM
+                del pdl_range
                 
                 for update in sheet_updates:
                     pdl_to_find = update[PRIMARY_KEY]
@@ -271,13 +271,26 @@ def commit_to_excel(updates):
                             if excel_col_name in header:
                                 col_idx = header.index(excel_col_name) + 1
                                 cell = ws.Cells(row_to_update, col_idx)
+                                
                                 if isinstance(value, (datetime.datetime, pd.Timestamp)):
-                                    cell.Value = value
-                                    cell.NumberFormat = 'DD/MM/YYYY HH:MM:SS'
+                                    python_datetime = pd.to_datetime(value).to_pydatetime()
+                                    cell.Value = python_datetime
+                                    
+                                    # --- BLOCCO DI CODICE CORRETTO E RESO ROBUSTO ---
+                                    try:
+                                        # Sintassi di formattazione corretta per Excel
+                                        cell.NumberFormat = 'dd/mm/yyyy hh:mm:ss'
+                                    except pythoncom.com_error:
+                                        # Se la formattazione fallisce (es. foglio protetto),
+                                        # registra un avviso ma non bloccare lo script.
+                                        logging.warning(f"Impossibile impostare il formato data per la cella {cell.Address} nel foglio '{sheet_name}'.")
+                                    # --- FINE BLOCCO CORRETTO ---
+                                        
                                 else:
                                     cell.Value = str(value) if value is not None else ''
+                                    
                                 total_updated_cells += 1
-                                del cell # Rilascia oggetto COM
+                                del cell
                         logging.info(f"Aggiornata riga {row_to_update} per PdL '{pdl_to_find}' nel foglio '{sheet_name}'.")
                     else:
                         logging.warning(f"PdL '{pdl_to_find}' non trovato nella mappa del foglio '{sheet_name}'.")
@@ -285,7 +298,7 @@ def commit_to_excel(updates):
             except Exception as sheet_error:
                 logging.error(f"Errore durante l'elaborazione del foglio '{sheet_name}': {sheet_error}", exc_info=True)
             finally:
-                if ws: del ws # Rilascia oggetto COM
+                if ws: del ws
 
         if total_updated_cells > 0:
             workbook.Save()
@@ -307,7 +320,6 @@ def commit_to_excel(updates):
         if excel_app:
             excel_app.Quit()
         
-        # Rilascia esplicitamente le variabili per aiutare il garbage collector con gli oggetti COM
         workbook = None
         excel_app = None
         
@@ -351,7 +363,6 @@ def sincronizza_db_excel():
         excel_ops = commit_to_excel(excel_updates)
         if excel_ops == -1: return False, "Errore critico durante l'aggiornamento del file Excel. Potrebbe essere aperto o corrotto."
 
-        # Ricarica lo stato del DB dopo gli aggiornamenti per un confronto pulito
         df_db_after_sync = load_data_from_db()
         if df_db_after_sync is None: return False, "Impossibile ricaricare lo stato del DB per la pulizia finale."
 
