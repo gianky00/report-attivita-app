@@ -4,8 +4,15 @@ import datetime
 import os
 import sys
 import logging
-from openpyxl import load_workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
+# from openpyxl import load_workbook # Sostituito da win32com
+# from openpyxl.utils.dataframe import dataframe_to_rows
+
+try:
+    import win32com.client as win32
+except ImportError:
+    win32 = None
+    logging.warning("Libreria pywin32 non trovata. La sincronizzazione con Excel non funzionerà.")
+
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
@@ -198,67 +205,86 @@ def commit_to_db(inserts, updates):
     return total_ops
 
 def commit_to_excel(updates):
+    """
+    Scrive le modifiche sul file Excel .xlsm utilizzando l'automazione COM di Windows
+    per garantire l'integrità di macro e codice VBA.
+    """
     if not updates:
         logging.info("Nessun aggiornamento per Excel.")
         return 0
 
+    if not win32:
+        logging.error("Libreria pywin32 non disponibile. Impossibile scrivere su Excel.")
+        return -1
+
+    excel_app = None
+    workbook = None
     try:
-        wb = load_workbook(EXCEL_FILE_NAME, keep_vba=True)
-        updates_by_sheet = {}
+        excel_app = win32.DispatchEx("Excel.Application")
+        excel_app.Visible = False
+        excel_app.DisplayAlerts = False
+
+        file_path = os.path.abspath(EXCEL_FILE_NAME)
+        workbook = excel_app.Workbooks.Open(file_path)
+        logging.info(f"File '{EXCEL_FILE_NAME}' aperto tramite automazione COM.")
+
+        updates_by_sheet = defaultdict(list)
         for update in updates:
-            sheet_name = update[SOURCE_SHEET_COLUMN]
-            if sheet_name not in updates_by_sheet:
-                updates_by_sheet[sheet_name] = []
-            updates_by_sheet[sheet_name].append(update)
+            updates_by_sheet[update[SOURCE_SHEET_COLUMN]].append(update)
 
         total_updated_rows = 0
         for sheet_name, sheet_updates in updates_by_sheet.items():
-            if sheet_name not in wb.sheetnames:
+            try:
+                ws = workbook.Sheets(sheet_name)
+            except Exception:
                 logging.warning(f"Foglio '{sheet_name}' non trovato nel file Excel. Aggiornamenti saltati.")
                 continue
 
-            ws = wb[sheet_name]
-            header = [cell.value for cell in ws[3]] # Header è alla riga 3
-            pdl_col_index = header.index('PdL') + 1
+            header = [cell.Value for cell in ws.Rows(3).Cells if cell.Value is not None]
+            try:
+                pdl_col_index = header.index('PdL') + 1
+            except ValueError:
+                logging.error(f"Colonna 'PdL' non trovata nell'header del foglio '{sheet_name}'.")
+                continue
+
+            last_row = ws.Cells(ws.Rows.Count, pdl_col_index).End(-4162).Row # xlUp
 
             for update in sheet_updates:
                 pdl_to_find = update[PRIMARY_KEY]
                 found = False
-                for row in range(4, ws.max_row + 1): # I dati iniziano dalla riga 4
-                    if str(ws.cell(row=row, column=pdl_col_index).value) == pdl_to_find:
-                        logging.info(f"Trovato '{pdl_to_find}' nel foglio '{sheet_name}' alla riga {row}. Aggiornamento...")
+                for row in range(4, last_row + 2): # +2 per sicurezza
+                    cell_value = ws.Cells(row, pdl_col_index).Value
+                    if cell_value and str(cell_value) == pdl_to_find:
+                        logging.info(f"Trovato '{pdl_to_find}' nel foglio '{sheet_name}' alla riga {row}. Aggiornamento in corso...")
                         for db_col, value in update.items():
                             excel_col_name = REVERSE_HEADER_MAP.get(db_col)
                             if excel_col_name in header:
                                 col_idx = header.index(excel_col_name) + 1
-                                cell = ws.cell(row=row, column=col_idx)
-                                if isinstance(value, datetime.datetime):
-                                    cell.value = value
-                                    cell.number_format = 'DD/MM/YYYY HH:MM:SS'
+                                cell = ws.Cells(row, col_idx)
+                                if isinstance(value, (datetime.datetime, pd.Timestamp)):
+                                    cell.Value = value
+                                    cell.NumberFormat = 'DD/MM/YYYY HH:MM:SS'
                                 else:
-                                    cell.value = value
-
-                        # Aggiorna il timestamp di Excel
-                        ts_col_name = REVERSE_HEADER_MAP[TIMESTAMP_COLUMN]
-                        if ts_col_name in header:
-                            ts_col_idx = header.index(ts_col_name) + 1
-                            cell = ws.cell(row=row, column=ts_col_idx)
-                            cell.value = update[TIMESTAMP_COLUMN]
-                            cell.number_format = 'DD/MM/YYYY HH:MM:SS'
-
+                                    cell.Value = value
                         total_updated_rows += 1
                         found = True
                         break
                 if not found:
-                    logging.warning(f"PdL '{pdl_to_find}' non trovato nel foglio '{sheet_name}' per l'aggiornamento.")
+                    logging.warning(f"PdL '{pdl_to_find}' non trovato nel foglio '{sheet_name}'.")
 
-        wb.save(EXCEL_FILE_NAME)
-        logging.info(f"File Excel '{EXCEL_FILE_NAME}' salvato con {total_updated_rows} righe aggiornate.")
+        workbook.Save()
+        logging.info(f"File Excel salvato con {total_updated_rows} righe aggiornate tramite automazione COM.")
         return total_updated_rows
 
     except Exception as e:
-        logging.error(f"Errore durante l'aggiornamento del file Excel: {e}", exc_info=True)
+        logging.error(f"Errore durante l'automazione di Excel con win32com: {e}", exc_info=True)
         return -1
+    finally:
+        if workbook:
+            workbook.Close(SaveChanges=False)
+        if excel_app:
+            excel_app.Quit()
+        logging.info("Connessione a Excel chiusa correttamente.")
 
 def delete_rows_from_db(keys_to_delete):
     if not keys_to_delete:

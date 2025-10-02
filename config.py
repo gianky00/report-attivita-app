@@ -38,7 +38,7 @@ PATH_KNOWLEDGE_CORE = "knowledge_core.json"
 # --- SPREADSHEET & EMAIL ---
 NOME_FOGLIO_RISPOSTE = secrets.get("nome_foglio_risposte", "Report Attività Giornaliera (Risposte)")
 EMAIL_DESTINATARIO = "gianky.allegretti@gmail.com"
-EMAIL_CC = ""
+EMAIL_CC = "francesco.millo@coemi.it"
 
 # --- THREADING LOCKS ---
 EXCEL_LOCK = threading.Lock()

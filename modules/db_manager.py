@@ -277,8 +277,8 @@ def process_and_commit_validated_reports(validated_data: list):
                 if report_found_and_updated:
                     new_storico_json = json.dumps(storico_list)
                     cursor.execute(
-                        "UPDATE attivita_programmate SET Storico = ?, STATO_ATTIVITA = ?, STATO_PdL = ?, db_last_modified = NULL WHERE PdL = ?",
-                        (new_storico_json, new_status, new_status, pdl)
+                        "UPDATE attivita_programmate SET Storico = ?, Stato = ?, db_last_modified = NULL WHERE PdL = ?",
+                        (new_storico_json, new_status, pdl)
                     )
         return True
     except sqlite3.Error as e:
