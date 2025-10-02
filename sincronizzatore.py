@@ -5,15 +5,14 @@ import os
 import sys
 import logging
 from collections import defaultdict
-# from openpyxl import load_workbook # Sostituito da win32com
-# from openpyxl.utils.dataframe import dataframe_to_rows
 
 try:
     import win32com.client as win32
+    import pythoncom
 except ImportError:
     win32 = None
+    pythoncom = None
     logging.warning("Libreria pywin32 non trovata. La sincronizzazione con Excel non funzionerà.")
-
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
@@ -48,7 +47,6 @@ HEADER_MAP = {
 REVERSE_HEADER_MAP = {v: k for k, v in HEADER_MAP.items()}
 DB_COLUMNS = list(HEADER_MAP.values())
 
-# Colonne a sincronizzazione bidirezionale (basate sui nomi DB)
 BIDIRECTIONAL_COLUMNS = [
     'STATO_PdL', 'ESE', 'SAIT', 'PONTEROSSO', 'STATO_ATTIVITA',
     'DATA_CONTROLLO', 'PERSONALE_IMPIEGATO'
@@ -128,22 +126,24 @@ def sync_data(df_excel, df_db):
         if is_in_excel and not is_in_db:
             logging.info(f"'{key}' trovato in Excel ma non nel DB. Inserimento nel DB.")
             row_data = df_excel.loc[key].to_dict()
-            row_data[PRIMARY_KEY] = key  # <-- ADD THIS LINE
+            row_data[PRIMARY_KEY] = key
             row_data[TIMESTAMP_COLUMN] = now
             db_inserts.append(row_data)
         elif is_in_db and not is_in_excel:
             logging.warning(f"'{key}' trovato nel DB ma non in Excel. Sarà rimosso dal DB.")
-            # La logica di cancellazione gestirà questo caso dopo la sincronizzazione.
             pass
         elif is_in_excel and is_in_db:
             excel_row, db_row = df_excel.loc[key], df_db.loc[key]
             excel_ts = excel_row.get(TIMESTAMP_COLUMN)
             db_ts = db_row.get(TIMESTAMP_COLUMN)
+            if pd.isna(excel_ts): excel_ts = datetime.datetime(2000, 1, 1)
+            if pd.isna(db_ts): db_ts = datetime.datetime(2000, 1, 1)
+                
             if excel_ts.floor('s') > db_ts.floor('s'):
                 logging.info(f"'{key}': Excel è più recente. Aggiornamento completo del DB.")
                 update_data = excel_row.to_dict()
-                update_data[PRIMARY_KEY] = key # <-- ADD THIS LINE
-                update_data[TIMESTAMP_COLUMN] = excel_ts # Mantiene il timestamp di Excel
+                update_data[PRIMARY_KEY] = key
+                update_data[TIMESTAMP_COLUMN] = excel_ts
                 db_updates.append(update_data)
 
             elif db_ts.floor('s') > excel_ts.floor('s'):
@@ -151,7 +151,7 @@ def sync_data(df_excel, df_db):
                 # 1. Aggiorna DB con colonne unidirezionali da Excel
                 db_mixed_update = {col: excel_row.get(col) for col in unidirectional_columns}
                 db_mixed_update[PRIMARY_KEY] = key
-                db_mixed_update[TIMESTAMP_COLUMN] = db_ts # Mantiene il timestamp del DB
+                db_mixed_update[TIMESTAMP_COLUMN] = db_ts
                 db_updates.append(db_mixed_update)
 
                 # 2. Prepara aggiornamento per Excel con colonne bidirezionali da DB
@@ -176,8 +176,6 @@ def commit_to_db(inserts, updates):
                     if not op_list: continue
                     for row_data in op_list:
                         pk = row_data[PRIMARY_KEY]
-
-                        # Filtra solo le colonne che esistono nella tabella del DB
                         sql_data = {k: v for k, v in row_data.items() if k in DB_COLUMNS or k == PRIMARY_KEY}
 
                         for key, value in sql_data.items():
@@ -197,7 +195,7 @@ def commit_to_db(inserts, updates):
                             set_clause = ', '.join([f'"{k}" = ?' for k in update_data.keys()])
                             query = f'UPDATE {DB_TABLE_NAME} SET {set_clause} WHERE "{PRIMARY_KEY}" = ?'
                             conn.execute(query, list(update_data.values()) + [pk])
-
+                    
                     logging.info(f"Eseguite {len(op_list)} operazioni di {op_type} nel DB.")
                     total_ops += len(op_list)
         except sqlite3.Error as e:
@@ -206,26 +204,30 @@ def commit_to_db(inserts, updates):
     return total_ops
 
 def commit_to_excel(updates):
-    """
-    Scrive le modifiche sul file Excel .xlsm utilizzando l'automazione COM di Windows
-    per garantire l'integrità di macro e codice VBA.
-    """
     if not updates:
         logging.info("Nessun aggiornamento per Excel.")
         return 0
 
-    if not win32:
+    if not win32 or not pythoncom:
         logging.error("Libreria pywin32 non disponibile. Impossibile scrivere su Excel.")
         return -1
 
     excel_app = None
     workbook = None
+    
     try:
+        pythoncom.CoInitialize()
+        logging.info("COM Inizializzato per questo thread.")
+        
         excel_app = win32.DispatchEx("Excel.Application")
         excel_app.Visible = False
         excel_app.DisplayAlerts = False
 
         file_path = os.path.abspath(EXCEL_FILE_NAME)
+        if not os.path.exists(file_path):
+            logging.error(f"File Excel non trovato al percorso: {file_path}")
+            return -1
+            
         workbook = excel_app.Workbooks.Open(file_path)
         logging.info(f"File '{EXCEL_FILE_NAME}' aperto tramite automazione COM.")
 
@@ -233,59 +235,84 @@ def commit_to_excel(updates):
         for update in updates:
             updates_by_sheet[update[SOURCE_SHEET_COLUMN]].append(update)
 
-        total_updated_rows = 0
+        total_updated_cells = 0
         for sheet_name, sheet_updates in updates_by_sheet.items():
+            ws = None
             try:
                 ws = workbook.Sheets(sheet_name)
-            except Exception:
-                logging.warning(f"Foglio '{sheet_name}' non trovato nel file Excel. Aggiornamenti saltati.")
-                continue
+                logging.info(f"Processo il foglio '{sheet_name}'...")
+                
+                # Ottimizzazione: Leggi l'header e la colonna PdL una sola volta
+                last_col = ws.UsedRange.Columns.Count
+                header_range = ws.Range(ws.Cells(3, 1), ws.Cells(3, last_col))
+                header = [cell.Value for cell in header_range]
 
-            header = [cell.Value for cell in ws.Rows(3).Cells if cell.Value is not None]
-            try:
-                pdl_col_index = header.index('PdL') + 1
-            except ValueError:
-                logging.error(f"Colonna 'PdL' non trovata nell'header del foglio '{sheet_name}'.")
-                continue
+                try:
+                    pdl_col_index = header.index('PdL') + 1
+                except ValueError:
+                    logging.error(f"Colonna 'PdL' non trovata nell'header del foglio '{sheet_name}'. Salto.")
+                    continue
 
-            last_row = ws.Cells(ws.Rows.Count, pdl_col_index).End(-4162).Row # xlUp
-
-            for update in sheet_updates:
-                pdl_to_find = update[PRIMARY_KEY]
-                found = False
-                for row in range(4, last_row + 2): # +2 per sicurezza
-                    cell_value = ws.Cells(row, pdl_col_index).Value
-                    if cell_value and str(cell_value) == pdl_to_find:
-                        logging.info(f"Trovato '{pdl_to_find}' nel foglio '{sheet_name}' alla riga {row}. Aggiornamento in corso...")
+                last_row = ws.Cells(ws.Rows.Count, pdl_col_index).End(-4162).Row # xlUp
+                
+                # Crea una mappa per ricerca rapida: Valore PdL -> numero di riga
+                pdl_range = ws.Range(ws.Cells(4, pdl_col_index), ws.Cells(last_row, pdl_col_index))
+                pdl_values = [str(cell.Value) if cell.Value is not None else '' for cell in pdl_range]
+                pdl_to_row_map = {val: i + 4 for i, val in enumerate(pdl_values)}
+                del pdl_range # Rilascia oggetto COM
+                
+                for update in sheet_updates:
+                    pdl_to_find = update[PRIMARY_KEY]
+                    row_to_update = pdl_to_row_map.get(pdl_to_find)
+                    
+                    if row_to_update:
                         for db_col, value in update.items():
                             excel_col_name = REVERSE_HEADER_MAP.get(db_col)
                             if excel_col_name in header:
                                 col_idx = header.index(excel_col_name) + 1
-                                cell = ws.Cells(row, col_idx)
+                                cell = ws.Cells(row_to_update, col_idx)
                                 if isinstance(value, (datetime.datetime, pd.Timestamp)):
                                     cell.Value = value
                                     cell.NumberFormat = 'DD/MM/YYYY HH:MM:SS'
                                 else:
-                                    cell.Value = value
-                        total_updated_rows += 1
-                        found = True
-                        break
-                if not found:
-                    logging.warning(f"PdL '{pdl_to_find}' non trovato nel foglio '{sheet_name}'.")
+                                    cell.Value = str(value) if value is not None else ''
+                                total_updated_cells += 1
+                                del cell # Rilascia oggetto COM
+                        logging.info(f"Aggiornata riga {row_to_update} per PdL '{pdl_to_find}' nel foglio '{sheet_name}'.")
+                    else:
+                        logging.warning(f"PdL '{pdl_to_find}' non trovato nella mappa del foglio '{sheet_name}'.")
 
-        workbook.Save()
-        logging.info(f"File Excel salvato con {total_updated_rows} righe aggiornate tramite automazione COM.")
-        return total_updated_rows
+            except Exception as sheet_error:
+                logging.error(f"Errore durante l'elaborazione del foglio '{sheet_name}': {sheet_error}", exc_info=True)
+            finally:
+                if ws: del ws # Rilascia oggetto COM
 
+        if total_updated_cells > 0:
+            workbook.Save()
+            logging.info(f"File Excel salvato con successo. Celle totali aggiornate: {total_updated_cells}.")
+        else:
+            logging.info("Nessuna cella è stata aggiornata in Excel, salvataggio non necessario.")
+            
+        return total_updated_cells
+
+    except pythoncom.com_error as e:
+        logging.error(f"Errore COM specifico durante l'automazione di Excel: {e}", exc_info=True)
+        return -1
     except Exception as e:
-        logging.error(f"Errore durante l'automazione di Excel con win32com: {e}", exc_info=True)
+        logging.error(f"Errore generico durante l'automazione di Excel: {e}", exc_info=True)
         return -1
     finally:
         if workbook:
             workbook.Close(SaveChanges=False)
         if excel_app:
             excel_app.Quit()
-        logging.info("Connessione a Excel chiusa correttamente.")
+        
+        # Rilascia esplicitamente le variabili per aiutare il garbage collector con gli oggetti COM
+        workbook = None
+        excel_app = None
+        
+        pythoncom.CoUninitialize()
+        logging.info("Connessione a Excel e risorse COM rilasciate correttamente.")
 
 def delete_rows_from_db(keys_to_delete):
     if not keys_to_delete:
@@ -295,8 +322,9 @@ def delete_rows_from_db(keys_to_delete):
     with sqlite3.connect(DB_NAME) as conn:
         try:
             with conn:
-                for key in keys_to_delete:
-                    conn.execute(f'DELETE FROM {DB_TABLE_NAME} WHERE "{PRIMARY_KEY}" = ?', (key,))
+                placeholders = ','.join('?' for _ in keys_to_delete)
+                query = f'DELETE FROM {DB_TABLE_NAME} WHERE "{PRIMARY_KEY}" IN ({placeholders})'
+                conn.execute(query, list(keys_to_delete))
             return len(keys_to_delete)
         except sqlite3.Error as e:
             logging.error(f"Errore durante la cancellazione di righe dal DB: {e}", exc_info=True)
@@ -309,41 +337,32 @@ def sincronizza_db_excel():
     try:
         logging.info("--- INIZIO SINCRONIZZAZIONE BIDIREZIONALE ---")
 
-        # 1. Carica dati
         df_excel = load_data_from_excel()
-        if df_excel is None:
-            return False, "Impossibile caricare i dati da Excel. Controlla il file e i log."
+        if df_excel is None: return False, "Impossibile caricare i dati da Excel."
 
         df_db = load_data_from_db()
-        if df_db is None:
-            return False, "Impossibile caricare i dati dal Database. Controlla la connessione e i log."
+        if df_db is None: return False, "Impossibile caricare i dati dal Database."
 
-        # 2. Logica di sincronizzazione
         db_inserts, db_updates, excel_updates = sync_data(df_excel, df_db)
 
-        # 3. Commit su DB
         db_ops = commit_to_db(db_inserts, db_updates)
-        if db_ops == -1:
-            return False, "Errore critico durante l'aggiornamento del database."
+        if db_ops == -1: return False, "Errore critico durante l'aggiornamento del database."
 
-        # 4. Commit su Excel
         excel_ops = commit_to_excel(excel_updates)
-        if excel_ops == -1:
-            return False, "Errore critico durante l'aggiornamento del file Excel. Potrebbe essere aperto o corrotto."
+        if excel_ops == -1: return False, "Errore critico durante l'aggiornamento del file Excel. Potrebbe essere aperto o corrotto."
 
-        # 5. Gestione righe cancellate da Excel
-        excel_keys_after_sync = set(df_excel.index)
-        db_keys_after_sync = set(load_data_from_db().index)
-        deleted_from_excel = db_keys_after_sync - excel_keys_after_sync
+        # Ricarica lo stato del DB dopo gli aggiornamenti per un confronto pulito
+        df_db_after_sync = load_data_from_db()
+        if df_db_after_sync is None: return False, "Impossibile ricaricare lo stato del DB per la pulizia finale."
 
+        deleted_from_excel = set(df_db_after_sync.index) - set(df_excel.index)
         deleted_ops = delete_rows_from_db(list(deleted_from_excel))
-        if deleted_ops == -1:
-             return False, "Errore durante la rimozione di righe obsolete dal database."
+        if deleted_ops == -1: return False, "Errore durante la rimozione di righe obsolete dal database."
 
         message = (
             f"Sincronizzazione completata.\n"
             f"- Operazioni sul DB: {db_ops} (insert/update)\n"
-            f"- Righe aggiornate in Excel: {excel_ops}\n"
+            f"- Celle aggiornate in Excel: {excel_ops}\n"
             f"- Righe rimosse dal DB: {deleted_ops}"
         )
         logging.info(message)
@@ -358,7 +377,8 @@ def sincronizza_db_excel():
 if __name__ == "__main__":
     success, message = sincronizza_db_excel()
     if success:
-        print("Operazione completata con successo.")
+        print("\nOperazione completata con successo.")
     else:
-        print("Operazione fallita.")
+        print("\nOperazione fallita.")
     print(message)
+    input("\nPremi INVIO per chiudere...")
