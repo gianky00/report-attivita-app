@@ -241,7 +241,10 @@ def commit_to_excel(updates):
                 logging.warning(f"Foglio '{sheet_name}' non trovato nel file Excel. Aggiornamenti saltati.")
                 continue
 
-            header = [cell.Value for cell in ws.Rows(3).Cells if cell.Value is not None]
+            # Correzione: Legge l'intero header fino all'ultima colonna usata per mantenere l'indice corretto
+            last_col = ws.UsedRange.Columns.Count
+            header = [ws.Cells(3, i).Value for i in range(1, last_col + 1)]
+
             try:
                 pdl_col_index = header.index('PdL') + 1
             except ValueError:

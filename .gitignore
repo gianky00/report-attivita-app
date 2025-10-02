@@ -1,14 +1,27 @@
-# Credenziali e segreti
-credentials.json
-# File eseguibili e di dati sensibili
-ngrok.exe
+# Database
+schedario.db
+schedario.db-journal
 
-# File di ambiente Python e cache
+# Log files
+*.log
+
+# Session files
+sessions/
+
+# Lock files
+*.lock
+
+# Excel temporary files
+~$*.xlsx
+~$*.xlsm
+
+# Python cache
 __pycache__/
 *.pyc
-.env
-venv/
 
-# File di database locali
-*.db
-sync_log.log
+# IDE files
+.idea/
+.vscode/
+
+# Environment files
+.env
