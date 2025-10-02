@@ -4,6 +4,7 @@ import datetime
 import os
 import sys
 import logging
+from collections import defaultdict
 # from openpyxl import load_workbook # Sostituito da win32com
 # from openpyxl.utils.dataframe import dataframe_to_rows
 
