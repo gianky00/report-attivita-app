@@ -11,3 +11,4 @@ venv/
 
 # File di database locali
 *.db
+sync_log.log
