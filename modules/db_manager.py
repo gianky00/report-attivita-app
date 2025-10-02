@@ -247,8 +247,6 @@ def get_unvalidated_reports():
         if conn:
             conn.close()
 
-import datetime
-
 def process_and_commit_validated_reports(validated_data: list):
     """Processa i report validati, aggiornandoli nel DB e marcandoli come validati."""
     conn = get_db_connection()
@@ -259,20 +257,13 @@ def process_and_commit_validated_reports(validated_data: list):
                 pdl = report.get('PdL')
                 report_text = report.get('Report')
                 new_status = report.get('Stato')
-                technician_full_name = report.get('Tecnico', '')
                 compilation_date = report.get('Data_Compilazione')
 
-                if not all([pdl, report_text, new_status, compilation_date]):
-                    continue
-
-                # Estrai il cognome del tecnico
-                technician_last_name = technician_full_name.split()[-1] if technician_full_name else ''
-                validation_date = datetime.date.today().strftime('%Y-%m-%d')
+                if not all([pdl, report_text, new_status, compilation_date]): continue
 
                 cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
                 result = cursor.fetchone()
-                if not result or not result['Storico']:
-                    continue
+                if not result or not result['Storico']: continue
 
                 storico_list = json.loads(result['Storico'])
                 report_found_and_updated = False
@@ -285,30 +276,10 @@ def process_and_commit_validated_reports(validated_data: list):
 
                 if report_found_and_updated:
                     new_storico_json = json.dumps(storico_list)
-
-                    # Query di aggiornamento corretta
-                    update_query = """
-                        UPDATE attivita_programmate
-                        SET
-                            Storico = ?,
-                            STATO_ATTIVITA = ?,
-                            STATO_PdL = ?,
-                            DATA_CONTROLLO = ?,
-                            PERSONALE_IMPIEGATO = ?,
-                            db_last_modified = NULL
-                        WHERE PdL = ?
-                    """
-
-                    params = (
-                        new_storico_json,
-                        report_text,          # STATO_ATTIVITA' ora contiene il report
-                        new_status,           # STATO_PdL contiene lo stato (es. TERMINATA)
-                        validation_date,      # DATA_CONTROLLO
-                        technician_last_name, # PERSONALE_IMPIEGATO
-                        pdl
+                    cursor.execute(
+                        "UPDATE attivita_programmate SET Storico = ?, STATO_ATTIVITA = ?, STATO_PdL = ?, db_last_modified = NULL WHERE PdL = ?",
+                        (new_storico_json, new_status, new_status, pdl)
                     )
-
-                    cursor.execute(update_query, params)
         return True
     except sqlite3.Error as e:
         print(f"Errore durante il salvataggio dei report validati: {e}")

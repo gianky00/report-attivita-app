@@ -1886,7 +1886,7 @@ def main_app(matricola_utente, ruolo):
 
             pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
 
-            for i in range(1, 8):
+            for i in range(1, 31):
                 giorno_controllo = oggi - datetime.timedelta(days=i)
                 attivita_del_giorno = trova_attivita(matricola_utente, giorno_controllo.day, giorno_controllo.month, giorno_controllo.year, gestionale_data['contatti'])
 
@@ -1913,7 +1913,7 @@ def main_app(matricola_utente, ruolo):
                         pdl_gia_recuperati.add(pdl)
 
             if attivita_da_recuperare:
-                st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 7 giorni non rendicontate.")
+                st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 30 giorni non rendicontate.")
 
         main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
         if ruolo == "Amministratore":
@@ -1922,7 +1922,7 @@ def main_app(matricola_utente, ruolo):
         tabs = st.tabs(main_tabs_list)
         
         with tabs[0]:
-            sub_tab_list = ["Attività di Oggi", "Recupero Attività Non rendicontate (Ultimi 7gg)"]
+            sub_tab_list = ["Attività di Oggi", "Recupero Attività Non rendicontate (Ultimi 30gg)"]
             if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
             sub_tabs = st.tabs(sub_tab_list)
@@ -1942,7 +1942,7 @@ def main_app(matricola_utente, ruolo):
                 disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
             with sub_tabs[1]:
-                st.header("Recupero Attività Non Rendicontate (Ultimi 7 Giorni)")
+                st.header("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             # Contenuto per la nuova scheda "Compila Relazione"
