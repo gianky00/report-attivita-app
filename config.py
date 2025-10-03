@@ -37,8 +37,12 @@ PATH_KNOWLEDGE_CORE = "knowledge_core.json"
 
 # --- SPREADSHEET & EMAIL ---
 NOME_FOGLIO_RISPOSTE = secrets.get("nome_foglio_risposte", "Report Attività Giornaliera (Risposte)")
-EMAIL_DESTINATARIO = "gianky.allegretti@gmail.com"
-EMAIL_CC = "francesco.millo@coemi.it"
+EMAIL_DESTINATARIO = secrets.get("email_destinatario", "gianky.allegretti@gmail.com")
+
+# Gestisce una lista di indirizzi CC, separati da virgola.
+# Se la chiave non esiste, usa un valore di default per mantenere la compatibilità.
+email_cc_string = secrets.get("email_cc", "francesco.millo@coemi.it")
+EMAIL_CC = [email.strip() for email in email_cc_string.split(',') if email.strip()]
 
 # --- THREADING LOCKS ---
 EXCEL_LOCK = threading.Lock()
