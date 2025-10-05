@@ -33,7 +33,7 @@ from modules.data_manager import (
     carica_gestionale,
     salva_gestionale_async,
     carica_archivio_completo,
-    trova_attivita,
+    trova_attivita, # Mantenuto per compatibilità se usato altrove, ma il flusso principale ora usa la versione DB
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate
 )
@@ -2113,6 +2113,12 @@ def main_app(matricola_utente, ruolo):
             # Carica le opzioni per i filtri in modo efficiente
             filter_options = get_archive_filter_options()
 
+            # --- CALLBACKS ---
+            def set_date_range_15_days():
+                """Callback per impostare il range di date agli ultimi 15 giorni."""
+                st.session_state.db_end_date = datetime.date.today()
+                st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
+
             # Inizializza le date in session_state se non presenti
             if 'db_start_date' not in st.session_state:
                 st.session_state.db_start_date = None
@@ -2137,10 +2143,7 @@ def main_app(matricola_utente, ruolo):
             with d2:
                 st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
             with d3:
-                if st.button("Ultimi 15 gg", key="db_last_15_days"):
-                    st.session_state.db_end_date = datetime.date.today()
-                    st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
-                    st.rerun()
+                st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
 
 
             interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")

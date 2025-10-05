@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 import os
 import json
+import streamlit as st
 
 DB_NAME = "schedario.db"
 
@@ -24,6 +25,7 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
     finally:
         if conn:
             conn.close()
+
 
 
 def get_archive_filter_options():

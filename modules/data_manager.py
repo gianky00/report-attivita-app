@@ -308,7 +308,19 @@ def _match_partial_name(partial_name, full_name):
 
     return True
 
+@st.cache_data(ttl=300)
 def trova_attivita(matricola, giorno, mese, anno, df_contatti):
+    # Funzione interna cachata per caricare il file Excel una sola volta per mese/anno
+    @st.cache_data(ttl=3600)
+    def _carica_giornaliera_mese(path):
+        try:
+            return pd.read_excel(path, sheet_name=None, header=None)
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            st.error(f"Errore imprevisto durante la lettura di {path}: {e}")
+            return None
+
     try:
         # --- FASE 1: Trova il nome completo dell'utente dalla matricola ---
         if df_contatti is None or df_contatti.empty:
@@ -321,28 +333,31 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             return []
         utente_completo = user_series.iloc[0]['Nome Cognome']
 
-
         path_giornaliera_mensile = os.path.join(config.PATH_GIORNALIERA_BASE, f"Giornaliera {mese:02d}-{anno}.xlsm")
 
-        target_sheet = str(giorno)
-        try:
-            workbook = openpyxl.load_workbook(path_giornaliera_mensile, read_only=True)
-            day_str = str(giorno)
-            for sheet_name in workbook.sheetnames:
-                if day_str in sheet_name.split():
-                    target_sheet = sheet_name
-                    break
-        except Exception:
-            pass
+        # Carica l'intero workbook in memoria (cachato)
+        workbook_sheets = _carica_giornaliera_mese(path_giornaliera_mensile)
+        if workbook_sheets is None:
+            return [] # File non trovato per il mese/anno
 
-        df_giornaliera = pd.read_excel(path_giornaliera_mensile, sheet_name=target_sheet, engine='openpyxl', header=None)
+        # Trova il nome corretto del foglio per il giorno richiesto
+        target_sheet_name = None
+        day_str = str(giorno)
+        for sheet_name in workbook_sheets.keys():
+            if day_str in sheet_name.split():
+                target_sheet_name = sheet_name
+                break
+
+        if not target_sheet_name:
+            return [] # Foglio per il giorno non trovato
+
+        df_giornaliera = workbook_sheets[target_sheet_name]
         df_range = df_giornaliera.iloc[3:45]
 
         pdls_utente = set()
         for _, riga in df_range.iterrows():
             if 5 < len(riga) and 9 < len(riga):
                 nome_in_giornaliera = str(riga[5]).strip()
-                # Usa la funzione di matching intelligente per trovare le attività dell'utente
                 if nome_in_giornaliera and _match_partial_name(nome_in_giornaliera, utente_completo):
                     pdl_text = str(riga[9])
                     if not pd.isna(pdl_text):
@@ -352,12 +367,14 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
         if not pdls_utente:
             return []
 
-        attivita_collezionate = {}
-        df_storico_db = carica_archivio_completo()
+        # Ottimizzazione: Carica lo storico una sola volta
+        df_storico_db = carica_dati_attivita_programmate()
 
+        attivita_collezionate = {}
         for _, riga in df_range.iterrows():
             pdl_text = str(riga[9])
             if pd.isna(pdl_text): continue
+
             lista_pdl_riga = re.findall(r'(\d{6}/[CS]|\d{6})', pdl_text)
             if not any(pdl in pdls_utente for pdl in lista_pdl_riga):
                 continue
@@ -367,33 +384,33 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             start_time = str(riga[10])
             end_time = str(riga[11])
             orario = f"{start_time}-{end_time}"
+
             if pd.isna(desc_text) or not nome_membro or nome_membro.lower() == 'nan':
                 continue
+
             lista_descrizioni_riga = [line.strip() for line in desc_text.splitlines() if line.strip()]
+
             for pdl, desc in zip(lista_pdl_riga, lista_descrizioni_riga):
                 if pdl not in pdls_utente: continue
+
                 activity_key = (pdl, desc)
                 if activity_key not in attivita_collezionate:
-                    storico = []
-                    if not df_storico_db.empty:
-                        storico_df_pdl = df_storico_db[df_storico_db['PdL'] == pdl].copy()
-                        if not storico_df_pdl.empty:
-                            storico_df_pdl['Data_Riferimento'] = pd.to_datetime(storico_df_pdl['Data_Riferimento_dt']).dt.strftime('%d/%m/%Y')
-                            storico = storico_df_pdl.to_dict('records')
+                    # Filtra lo storico per il PdL corrente
+                    storico_pdl = df_storico_db[df_storico_db['PdL'] == pdl].to_dict('records')
+
                     attivita_collezionate[activity_key] = {
                         'pdl': pdl,
                         'attivita': desc,
-                        'storico': storico,
+                        'storico': storico_pdl[0]['Storico'] if storico_pdl and 'Storico' in storico_pdl[0] else [],
                         'team_members': {}
                     }
+
                 if nome_membro not in attivita_collezionate[activity_key]['team_members']:
                     ruolo_membro = "Sconosciuto"
-                    if df_contatti is not None and not df_contatti.empty:
-                        for _, contact_row in df_contatti.iterrows():
-                            full_name = contact_row['Nome Cognome']
-                            if _match_partial_name(nome_membro, full_name):
-                                ruolo_membro = contact_row.get('Ruolo', 'Tecnico')
-                                break
+                    for _, contact_row in df_contatti.iterrows():
+                        if _match_partial_name(nome_membro, contact_row['Nome Cognome']):
+                            ruolo_membro = contact_row.get('Ruolo', 'Tecnico')
+                            break
                     attivita_collezionate[activity_key]['team_members'][nome_membro] = {
                         'ruolo': ruolo_membro,
                         'orari': set()
@@ -412,11 +429,13 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             activity_data['team'] = team_list
             del activity_data['team_members']
             lista_attivita_finale.append(activity_data)
+
         return lista_attivita_finale
-    except FileNotFoundError:
-        return []
+
     except Exception as e:
-        st.error(f"Errore lettura giornaliera: {e}")
+        # Evita di mostrare errori se il file non esiste (comportamento atteso per giorni futuri)
+        if not isinstance(e, FileNotFoundError):
+            st.error(f"Errore durante la ricerca attività per il {giorno}/{mese}/{anno}: {e}")
         return []
 
 @st.cache_data(ttl=600)
