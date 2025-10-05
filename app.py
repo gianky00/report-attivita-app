@@ -42,8 +42,7 @@ from modules.db_manager import (
     get_interventions_for_technician, get_unvalidated_reports,
     create_validation_session, get_active_validation_session,
     update_validation_session_data, delete_validation_session,
-    process_and_commit_validated_reports,
-    trova_attivita_e_recuperi_db # <-- Funzione ottimizzata
+    process_and_commit_validated_reports
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -1874,14 +1873,44 @@ def main_app(matricola_utente, ruolo):
 
         oggi = datetime.date.today()
         
-        # Caricamento ottimizzato delle attività
-        lista_attivita_oggi = []
+        # Carica i dati delle attività una sola volta
+        dati_programmati_df = carica_dati_attivita_programmate()
         attivita_da_recuperare = []
+        pdl_gia_recuperati = set()
 
         if ruolo in ["Amministratore", "Tecnico"]:
-            with st.spinner("Caricamento attività in corso..."):
-                # Chiamata unica e cachata al DB che restituisce già le liste separate
-                lista_attivita_oggi, attivita_da_recuperare = trova_attivita_e_recuperi_db(str(matricola_utente))
+            stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
+            status_dict = {}
+            if not dati_programmati_df.empty:
+                status_dict = dati_programmati_df.set_index('PdL')['STATO_ATTIVITA'].to_dict()
+
+            pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
+
+            for i in range(1, 31):
+                giorno_controllo = oggi - datetime.timedelta(days=i)
+                attivita_del_giorno = trova_attivita(matricola_utente, giorno_controllo.day, giorno_controllo.month, giorno_controllo.year, gestionale_data['contatti'])
+
+                if attivita_del_giorno:
+                    for task in attivita_del_giorno:
+                        pdl = task['pdl']
+                        if pdl in pdl_gia_recuperati or pdl in pdl_compilati_sessione:
+                            continue
+
+                        stato_attuale = status_dict.get(pdl, 'Pianificato')
+                        if stato_attuale in stati_finali:
+                            continue
+
+                        # Logica Falsi Positivi Avanzata: controlla se esiste un intervento successivo o uguale
+                        gia_rendicontato_dopo = any(
+                            pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= giorno_controllo
+                            for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
+                        )
+                        if gia_rendicontato_dopo:
+                            continue
+
+                        task['data_attivita'] = giorno_controllo
+                        attivita_da_recuperare.append(task)
+                        pdl_gia_recuperati.add(pdl)
 
             if attivita_da_recuperare:
                 st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 30 giorni non rendicontate.")
@@ -1900,8 +1929,17 @@ def main_app(matricola_utente, ruolo):
 
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-                # La logica di ricerca e filtro è ora gestita dalla funzione ottimizzata
-                disegna_sezione_attivita(lista_attivita_oggi, "today", ruolo)
+                lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+
+                # Applica la logica dei falsi positivi anche per le attività di oggi
+                lista_attivita_filtrata = [
+                    task for task in lista_attivita_raw
+                    if not any(
+                        pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= oggi
+                        for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
+                    )
+                ]
+                disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
             with sub_tabs[1]:
                 st.header("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
