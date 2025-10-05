@@ -1880,31 +1880,11 @@ def main_app(matricola_utente, ruolo):
 
         if ruolo in ["Amministratore", "Tecnico"]:
             with st.spinner("Caricamento attività in corso..."):
-                # Chiamata unica e cachata al DB
-                df_attivita = trova_attivita_e_recuperi_db(str(matricola_utente))
-
-            if not df_attivita.empty:
-                today_iso = oggi.isoformat()
-                # Converte le colonne in un formato più maneggevole (dict)
-                all_tasks = df_attivita.to_dict('records')
-
-                for task in all_tasks:
-                    # Rinomina le colonne per coerenza con l'UI
-                    task['pdl'] = task.get('PdL')
-                    task['attivita'] = task.get('DESCRIZIONE_ATTIVITA')
-                    task['storico'] = task.get('Storico', [])
-
-                    # Separa le attività di oggi da quelle da recuperare
-                    if task.get('data_attivita_calcolata') == today_iso:
-                        lista_attivita_oggi.append(task)
-                    else:
-                        # Per le attività da recuperare, impostiamo la data per la visualizzazione
-                        if task.get('data_attivita_calcolata'):
-                            task['data_attivita'] = datetime.datetime.fromisoformat(task['data_attivita_calcolata']).date()
-                        attivita_da_recuperare.append(task)
+                # Chiamata unica e cachata al DB che restituisce già le liste separate
+                lista_attivita_oggi, attivita_da_recuperare = trova_attivita_e_recuperi_db(str(matricola_utente))
 
             if attivita_da_recuperare:
-                 st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 30 giorni non rendicontate.")
+                st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 30 giorni non rendicontate.")
 
         main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
         if ruolo == "Amministratore":

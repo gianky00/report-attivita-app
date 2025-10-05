@@ -31,90 +31,96 @@ def trova_attivita_e_recuperi_db(_matricola_utente: str):
     """
     Funzione ottimizzata per trovare le attività di oggi e quelle da recuperare
     per un dato tecnico, direttamente dal database e con caching.
+    Restituisce due liste di dizionari: (tasks_today, tasks_recovery)
     """
     import datetime
     conn = get_db_connection()
     try:
-        # Prende il nome completo dalla matricola
+        # 1. Get user's full name
         cursor = conn.cursor()
         cursor.execute("SELECT \"Nome Cognome\" FROM contatti WHERE Matricola = ?", (_matricola_utente,))
         user_result = cursor.fetchone()
         if not user_result:
-            return pd.DataFrame() # Utente non trovato
+            return [], []
         nome_utente_completo = user_result['Nome Cognome']
 
-        # Prepara le date
+        # 2. Fetch all potential activities for the user
+        query = "SELECT * FROM attivita_programmate WHERE Squadra LIKE ?"
+        df_attivita = pd.read_sql_query(query, conn, params=(f"%{nome_utente_completo}%",))
+
+        if df_attivita.empty:
+            return [], []
+
+        # 3. Process dates and filter in Python
         today = datetime.date.today()
-        trenta_giorni_fa = today - datetime.timedelta(days=30)
-        giorno_settimana_oggi = today.strftime('%a').upper() # Es: 'MON', 'TUE' -> 'LUN', 'MAR'
-        giorni_map = {'MON': 'LUN', 'TUE': 'MAR', 'WED': 'MER', 'THU': 'GIO', 'FRI': 'VEN', 'SAT': 'SAB', 'SUN': 'DOM'}
-        giorno_settimana_oggi_it = giorni_map.get(giorno_settimana_oggi, "")
+        giorni_map = {0: 'LUN', 1: 'MAR', 2: 'MER', 3: 'GIO', 4: 'VEN', 5: 'SAB', 6: 'DOM'}
+        stati_finali = {'TERMINATA', 'Completato', 'Annullato', 'Non Svolta'}
 
-        # Query per trovare le attività assegnate al tecnico per il giorno corrente
-        # e quelle non completate negli ultimi 30 giorni.
-        query = f"""
-        WITH TecnicoAttivita AS (
-            SELECT
-                ap.PdL,
-                ap.DESCRIZIONE_ATTIVITA,
-                ap.Storico,
-                ap.STATO_ATTIVITA,
-                ap.Squadra,
-                CASE
-                    WHEN (ap."{giorno_settimana_oggi_it}" = 'x') THEN '{today.isoformat()}'
-                    ELSE NULL
-                END AS data_attivita_calcolata
-            FROM attivita_programmate ap
-            WHERE
-                -- Condizione per le attività di oggi
-                (ap."{giorno_settimana_oggi_it}" = 'x' AND (ap.Squadra LIKE ? OR ap.Squadra IS NULL))
-                OR
-                -- Condizione per le attività da recuperare
-                (
-                    ap.STATO_ATTIVITA NOT IN ('TERMINATA', 'Completato', 'Annullato', 'Non Svolta') OR ap.STATO_ATTIVITA IS NULL
-                )
-        )
-        SELECT * FROM TecnicoAttivita WHERE Squadra LIKE ?;
-        """
+        tasks_today = []
+        tasks_recovery = []
+        processed_pdl_dates = set() # To avoid duplicates
 
-        # Esegue la query
-        df = pd.read_sql_query(query, conn, params=(f"%{nome_utente_completo}%", f"%{nome_utente_completo}%"))
-
-        if df.empty:
-            return pd.DataFrame()
-
-        # Funzione per parsare lo storico JSON
+        # Funzione per parsare lo storico JSON una sola volta
         def parse_storico_json(json_string):
             try:
-                return json.loads(json_string) if json_string else []
+                return json.loads(json_string) if json_string and json_string != '[]' else []
             except (json.JSONDecodeError, TypeError):
                 return []
-        df['Storico'] = df['Storico'].apply(parse_storico_json)
+        df_attivita['Storico'] = df_attivita['Storico'].apply(parse_storico_json)
 
-        # Filtro Falsi Positivi: rimuove le attività che hanno già un report
-        # in una data uguale o successiva a quella dell'attività programmata.
-        def is_false_positive(row):
-            data_attivita_str = row['data_attivita_calcolata']
-            if not data_attivita_str: return False
-            data_attivita = datetime.datetime.fromisoformat(data_attivita_str).date()
 
-            for intervento in row['Storico']:
-                data_intervento_str = intervento.get('Data_Riferimento_dt')
-                if data_intervento_str:
-                    data_intervento = datetime.datetime.fromisoformat(data_intervento_str).date()
-                    if data_intervento >= data_attivita:
-                        return True # Trovato intervento successivo, è un falso positivo
-            return False
+        for i in range(31): # Check today and the last 30 days
+            check_date = today - datetime.timedelta(days=i)
+            day_of_week_str = giorni_map.get(check_date.weekday())
 
-        # Applica il filtro solo alle attività di oggi
-        df['is_fp'] = df.apply(is_false_positive, axis=1)
-        df_valid = df[~df['is_fp']].drop(columns=['is_fp'])
+            if not day_of_week_str or day_of_week_str not in df_attivita.columns:
+                continue
 
-        return df_valid
+            # Filter activities scheduled for this day
+            day_activities_df = df_attivita[df_attivita[day_of_week_str].str.lower() == 'x']
+
+            for _, row in day_activities_df.iterrows():
+                pdl = row['PdL']
+
+                # Avoid processing the same activity for the same date if it appears twice
+                if (pdl, check_date) in processed_pdl_dates:
+                    continue
+
+                # Check if already completed
+                if row.get('STATO_ATTIVITA') in stati_finali:
+                    continue
+
+                # False positive check: has a report been filed on or after the scheduled date?
+                storico_list = row['Storico']
+                gia_rendicontato_dopo = any(
+                    pd.to_datetime(interv.get('Data_Riferimento_dt'), errors='coerce').date() >= check_date
+                    for interv in storico_list if interv.get('Data_Riferimento_dt')
+                )
+                if gia_rendicontato_dopo:
+                    continue
+
+                # If we reach here, the task is valid.
+                # Prepare the task dictionary.
+                task_dict = {
+                    'pdl': pdl,
+                    'attivita': row['DESCRIZIONE_ATTIVITA'],
+                    'storico': storico_list,
+                    'data_attivita': check_date
+                    # 'team' logic can be added here if needed, based on 'Squadra'
+                }
+
+                if check_date == today:
+                    tasks_today.append(task_dict)
+                else:
+                    tasks_recovery.append(task_dict)
+
+                processed_pdl_dates.add((pdl, check_date))
+
+        return tasks_today, sorted(tasks_recovery, key=lambda x: x['data_attivita'], reverse=True)
 
     except sqlite3.Error as e:
         print(f"Errore DB in trova_attivita_e_recuperi_db: {e}")
-        return pd.DataFrame()
+        return [], []
     finally:
         if conn:
             conn.close()
