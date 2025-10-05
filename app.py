@@ -33,7 +33,7 @@ from modules.data_manager import (
     carica_gestionale,
     salva_gestionale_async,
     carica_archivio_completo,
-    trova_attivita,
+    trova_attivita, # Mantenuto per compatibilità se usato altrove, ma il flusso principale ora usa la versione DB
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate
 )
@@ -42,7 +42,8 @@ from modules.db_manager import (
     get_interventions_for_technician, get_unvalidated_reports,
     create_validation_session, get_active_validation_session,
     update_validation_session_data, delete_validation_session,
-    process_and_commit_validated_reports
+    process_and_commit_validated_reports,
+    trova_attivita_e_recuperi_db # <-- Funzione ottimizzata
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -1873,47 +1874,37 @@ def main_app(matricola_utente, ruolo):
 
         oggi = datetime.date.today()
         
-        # Carica i dati delle attività una sola volta
-        dati_programmati_df = carica_dati_attivita_programmate()
+        # Caricamento ottimizzato delle attività
+        lista_attivita_oggi = []
         attivita_da_recuperare = []
-        pdl_gia_recuperati = set()
 
         if ruolo in ["Amministratore", "Tecnico"]:
-            stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
-            status_dict = {}
-            if not dati_programmati_df.empty:
-                status_dict = dati_programmati_df.set_index('PdL')['STATO_ATTIVITA'].to_dict()
+            with st.spinner("Caricamento attività in corso..."):
+                # Chiamata unica e cachata al DB
+                df_attivita = trova_attivita_e_recuperi_db(str(matricola_utente))
 
-            pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
+            if not df_attivita.empty:
+                today_iso = oggi.isoformat()
+                # Converte le colonne in un formato più maneggevole (dict)
+                all_tasks = df_attivita.to_dict('records')
 
-            for i in range(1, 31):
-                giorno_controllo = oggi - datetime.timedelta(days=i)
-                attivita_del_giorno = trova_attivita(matricola_utente, giorno_controllo.day, giorno_controllo.month, giorno_controllo.year, gestionale_data['contatti'])
+                for task in all_tasks:
+                    # Rinomina le colonne per coerenza con l'UI
+                    task['pdl'] = task.get('PdL')
+                    task['attivita'] = task.get('DESCRIZIONE_ATTIVITA')
+                    task['storico'] = task.get('Storico', [])
 
-                if attivita_del_giorno:
-                    for task in attivita_del_giorno:
-                        pdl = task['pdl']
-                        if pdl in pdl_gia_recuperati or pdl in pdl_compilati_sessione:
-                            continue
-
-                        stato_attuale = status_dict.get(pdl, 'Pianificato')
-                        if stato_attuale in stati_finali:
-                            continue
-
-                        # Logica Falsi Positivi Avanzata: controlla se esiste un intervento successivo o uguale
-                        gia_rendicontato_dopo = any(
-                            pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= giorno_controllo
-                            for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
-                        )
-                        if gia_rendicontato_dopo:
-                            continue
-
-                        task['data_attivita'] = giorno_controllo
+                    # Separa le attività di oggi da quelle da recuperare
+                    if task.get('data_attivita_calcolata') == today_iso:
+                        lista_attivita_oggi.append(task)
+                    else:
+                        # Per le attività da recuperare, impostiamo la data per la visualizzazione
+                        if task.get('data_attivita_calcolata'):
+                            task['data_attivita'] = datetime.datetime.fromisoformat(task['data_attivita_calcolata']).date()
                         attivita_da_recuperare.append(task)
-                        pdl_gia_recuperati.add(pdl)
 
             if attivita_da_recuperare:
-                st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 30 giorni non rendicontate.")
+                 st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 30 giorni non rendicontate.")
 
         main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
         if ruolo == "Amministratore":
@@ -1929,17 +1920,8 @@ def main_app(matricola_utente, ruolo):
 
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-                lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
-
-                # Applica la logica dei falsi positivi anche per le attività di oggi
-                lista_attivita_filtrata = [
-                    task for task in lista_attivita_raw
-                    if not any(
-                        pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= oggi
-                        for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
-                    )
-                ]
-                disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
+                # La logica di ricerca e filtro è ora gestita dalla funzione ottimizzata
+                disegna_sezione_attivita(lista_attivita_oggi, "today", ruolo)
 
             with sub_tabs[1]:
                 st.header("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
@@ -2113,6 +2095,12 @@ def main_app(matricola_utente, ruolo):
             # Carica le opzioni per i filtri in modo efficiente
             filter_options = get_archive_filter_options()
 
+            # --- CALLBACKS ---
+            def set_date_range_15_days():
+                """Callback per impostare il range di date agli ultimi 15 giorni."""
+                st.session_state.db_end_date = datetime.date.today()
+                st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
+
             # Inizializza le date in session_state se non presenti
             if 'db_start_date' not in st.session_state:
                 st.session_state.db_start_date = None
@@ -2137,10 +2125,7 @@ def main_app(matricola_utente, ruolo):
             with d2:
                 st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
             with d3:
-                if st.button("Ultimi 15 gg", key="db_last_15_days"):
-                    st.session_state.db_end_date = datetime.date.today()
-                    st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
-                    st.rerun()
+                st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
 
 
             interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")

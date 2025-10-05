@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 import os
 import json
+import streamlit as st
 
 DB_NAME = "schedario.db"
 
@@ -20,6 +21,99 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         return df
     except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
         print(f"Errore nel caricare i turni per tipo '{shift_type}': {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
+
+@st.cache_data(ttl=300)
+def trova_attivita_e_recuperi_db(_matricola_utente: str):
+    """
+    Funzione ottimizzata per trovare le attività di oggi e quelle da recuperare
+    per un dato tecnico, direttamente dal database e con caching.
+    """
+    import datetime
+    conn = get_db_connection()
+    try:
+        # Prende il nome completo dalla matricola
+        cursor = conn.cursor()
+        cursor.execute("SELECT \"Nome Cognome\" FROM contatti WHERE Matricola = ?", (_matricola_utente,))
+        user_result = cursor.fetchone()
+        if not user_result:
+            return pd.DataFrame() # Utente non trovato
+        nome_utente_completo = user_result['Nome Cognome']
+
+        # Prepara le date
+        today = datetime.date.today()
+        trenta_giorni_fa = today - datetime.timedelta(days=30)
+        giorno_settimana_oggi = today.strftime('%a').upper() # Es: 'MON', 'TUE' -> 'LUN', 'MAR'
+        giorni_map = {'MON': 'LUN', 'TUE': 'MAR', 'WED': 'MER', 'THU': 'GIO', 'FRI': 'VEN', 'SAT': 'SAB', 'SUN': 'DOM'}
+        giorno_settimana_oggi_it = giorni_map.get(giorno_settimana_oggi, "")
+
+        # Query per trovare le attività assegnate al tecnico per il giorno corrente
+        # e quelle non completate negli ultimi 30 giorni.
+        query = f"""
+        WITH TecnicoAttivita AS (
+            SELECT
+                ap.PdL,
+                ap.DESCRIZIONE_ATTIVITA,
+                ap.Storico,
+                ap.STATO_ATTIVITA,
+                ap.Squadra,
+                CASE
+                    WHEN (ap."{giorno_settimana_oggi_it}" = 'x') THEN '{today.isoformat()}'
+                    ELSE NULL
+                END AS data_attivita_calcolata
+            FROM attivita_programmate ap
+            WHERE
+                -- Condizione per le attività di oggi
+                (ap."{giorno_settimana_oggi_it}" = 'x' AND (ap.Squadra LIKE ? OR ap.Squadra IS NULL))
+                OR
+                -- Condizione per le attività da recuperare
+                (
+                    ap.STATO_ATTIVITA NOT IN ('TERMINATA', 'Completato', 'Annullato', 'Non Svolta') OR ap.STATO_ATTIVITA IS NULL
+                )
+        )
+        SELECT * FROM TecnicoAttivita WHERE Squadra LIKE ?;
+        """
+
+        # Esegue la query
+        df = pd.read_sql_query(query, conn, params=(f"%{nome_utente_completo}%", f"%{nome_utente_completo}%"))
+
+        if df.empty:
+            return pd.DataFrame()
+
+        # Funzione per parsare lo storico JSON
+        def parse_storico_json(json_string):
+            try:
+                return json.loads(json_string) if json_string else []
+            except (json.JSONDecodeError, TypeError):
+                return []
+        df['Storico'] = df['Storico'].apply(parse_storico_json)
+
+        # Filtro Falsi Positivi: rimuove le attività che hanno già un report
+        # in una data uguale o successiva a quella dell'attività programmata.
+        def is_false_positive(row):
+            data_attivita_str = row['data_attivita_calcolata']
+            if not data_attivita_str: return False
+            data_attivita = datetime.datetime.fromisoformat(data_attivita_str).date()
+
+            for intervento in row['Storico']:
+                data_intervento_str = intervento.get('Data_Riferimento_dt')
+                if data_intervento_str:
+                    data_intervento = datetime.datetime.fromisoformat(data_intervento_str).date()
+                    if data_intervento >= data_attivita:
+                        return True # Trovato intervento successivo, è un falso positivo
+            return False
+
+        # Applica il filtro solo alle attività di oggi
+        df['is_fp'] = df.apply(is_false_positive, axis=1)
+        df_valid = df[~df['is_fp']].drop(columns=['is_fp'])
+
+        return df_valid
+
+    except sqlite3.Error as e:
+        print(f"Errore DB in trova_attivita_e_recuperi_db: {e}")
         return pd.DataFrame()
     finally:
         if conn:
