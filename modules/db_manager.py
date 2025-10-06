@@ -26,6 +26,83 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+def process_and_commit_validated_relazioni(validated_df: pd.DataFrame, validator_id: str) -> bool:
+    """Processa le relazioni validate, aggiornandole nel DB."""
+    import datetime
+    conn = get_db_connection()
+    try:
+        with conn:
+            cursor = conn.cursor()
+            for _, row in validated_df.iterrows():
+                # Ricostruisci la data di intervento dal formato stringa
+                try:
+                    data_intervento_iso = pd.to_datetime(row['data_intervento'], format='%d/%m/%Y').isoformat()
+                except ValueError:
+                    data_intervento_iso = row['data_intervento'] # Mantieni il formato se non è valido
+
+                cursor.execute(
+                    """
+                    UPDATE relazioni SET
+                        data_intervento = ?,
+                        tecnico_compilatore = ?,
+                        partner = ?,
+                        ora_inizio = ?,
+                        ora_fine = ?,
+                        corpo_relazione = ?,
+                        stato = ?,
+                        id_validatore = ?,
+                        timestamp_validazione = ?
+                    WHERE id_relazione = ?
+                    """,
+                    (
+                        data_intervento_iso,
+                        row.get('tecnico_compilatore'),
+                        row.get('partner'),
+                        row.get('ora_inizio'),
+                        row.get('ora_fine'),
+                        row.get('corpo_relazione'),
+                        'Validata', # Imposta lo stato a Validata
+                        validator_id,
+                        datetime.datetime.now().isoformat(),
+                        row['id_relazione']
+                    )
+                )
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante il salvataggio delle relazioni validate: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_unvalidated_relazioni() -> pd.DataFrame:
+    """Carica le relazioni in attesa di validazione ('Inviata')."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM relazioni WHERE stato = 'Inviata' ORDER BY timestamp_invio ASC"
+        df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        print(f"Errore nel caricare le relazioni da validare: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_relazioni() -> pd.DataFrame:
+    """Carica tutte le relazioni dal database, ordinate dalla più recente."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM relazioni ORDER BY timestamp_invio DESC"
+        df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        print(f"Errore nel caricare le relazioni: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
+
 
 
 def get_archive_filter_options():
@@ -386,6 +463,24 @@ def get_on_call_shifts_for_period(start_date, end_date) -> pd.DataFrame:
     except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
         print(f"Errore nel caricare i turni di reperibilità: {e}")
         return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
+
+def salva_relazione(dati_relazione: dict) -> bool:
+    """Salva una nuova relazione nel database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cols = ', '.join(f'"{k}"' for k in dati_relazione.keys())
+            placeholders = ', '.join('?' for _ in dati_relazione)
+            sql = f"INSERT INTO relazioni ({cols}) VALUES ({placeholders})"
+            cursor.execute(sql, list(dati_relazione.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante il salvataggio della relazione nel DB: {e}")
+        return False
     finally:
         if conn:
             conn.close()
