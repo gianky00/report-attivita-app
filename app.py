@@ -33,7 +33,7 @@ from modules.data_manager import (
     carica_gestionale,
     salva_gestionale_async,
     carica_archivio_completo,
-    trova_attivita, # Mantenuto per compatibilità se usato altrove, ma il flusso principale ora usa la versione DB
+    trova_attivita,
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate
 )
@@ -1915,13 +1915,26 @@ def main_app(matricola_utente, ruolo):
             if attivita_da_recuperare:
                 st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 30 giorni non rendicontate.")
 
+        # Inizializza lo stato della tab principale se non esiste
+        if 'main_tab' not in st.session_state:
+            st.session_state.main_tab = "Attività Assegnate"
+
         main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
+
+        # Usa st.radio come navigazione principale per mantenere lo stato
+        selected_tab = st.radio(
+            "Menu Principale",
+            options=main_tabs_list,
+            key='main_tab',
+            horizontal=True,
+            label_visibility="collapsed"
+        )
         
-        tabs = st.tabs(main_tabs_list)
-        
-        with tabs[0]:
+        st.divider()
+
+        if selected_tab == "Attività Assegnate":
             sub_tab_list = ["Attività di Oggi", "Recupero Attività Non rendicontate (Ultimi 30gg)"]
             if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
@@ -1950,68 +1963,48 @@ def main_app(matricola_utente, ruolo):
                 with sub_tabs[2]:
                     st.header("Compila Relazione di Reperibilità")
 
-                    # Mostra il numero di documenti nella base di conoscenza
                     kb_count = get_report_knowledge_base_count()
                     if kb_count > 0:
                         st.caption(f"ℹ️ L'IA si basa su {kb_count} relazioni per la correzione.")
                     else:
                         st.caption("ℹ️ Base di conoscenza per l'IA non trovata o vuota.")
 
-                    # Inizializza lo stato della sessione se non esiste
-                    if 'relazione_testo' not in st.session_state:
-                        st.session_state.relazione_testo = ""
-                    if 'relazione_partner' not in st.session_state:
-                        st.session_state.relazione_partner = None
-                    if 'relazione_revisionata' not in st.session_state:
-                        st.session_state.relazione_revisionata = ""
-                    if 'technical_suggestions' not in st.session_state:
-                        st.session_state.technical_suggestions = []
+                    if 'relazione_testo' not in st.session_state: st.session_state.relazione_testo = ""
+                    if 'relazione_partner' not in st.session_state: st.session_state.relazione_partner = None
+                    if 'relazione_revisionata' not in st.session_state: st.session_state.relazione_revisionata = ""
+                    if 'technical_suggestions' not in st.session_state: st.session_state.technical_suggestions = []
 
-                    # Carica la lista dei contatti per il selettore del partner
                     contatti_df = gestionale_data.get('contatti', pd.DataFrame())
-                    # Escludi l'utente corrente dalla lista dei partner selezionabili
                     lista_partner = contatti_df[contatti_df['Matricola'] != str(matricola_utente)]['Nome Cognome'].tolist()
 
                     with st.form("form_relazione"):
                         col_tech, col_partner = st.columns(2)
-                        with col_tech:
-                            st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
-                        with col_partner:
-                             partner_selezionato = st.selectbox(
-                                "Seleziona Partner (opzionale)",
-                                options=["Nessuno"] + sorted(lista_partner),
-                                index=0
-                            )
+                        with col_tech: st.text_input("Tecnico Compilatore", value=nome_utente_autenticato, disabled=True)
+                        with col_partner: partner_selezionato = st.selectbox("Seleziona Partner (opzionale)", options=["Nessuno"] + sorted(lista_partner), index=0)
 
                         c1, c2, c3 = st.columns(3)
                         data_intervento = c1.date_input("Data Intervento*", help="Questo campo è obbligatorio.")
                         ora_inizio = c2.text_input("Ora Inizio")
                         ora_fine = c3.text_input("Ora Fine")
 
-                        # Assegnazione della key per risolvere il bug del caching
                         st.session_state.relazione_testo = st.text_area("Corpo della Relazione", height=250, key="relazione_text_area", value=st.session_state.get('relazione_testo', ''))
 
-                        # Pulsanti del form
                         b1, b2, b3 = st.columns(3)
                         submit_ai_button = b1.form_submit_button("🤖 Correggi con IA")
                         submit_suggestion_button = b2.form_submit_button("💡 Suggerimento Tecnico")
                         submit_save_button = b3.form_submit_button("✅ Invia Relazione", type="primary")
 
-                    # Logica dopo la sottomissione del form
+                    # Logica dopo la sottomissione del form, con formattazione corretta
                     if submit_ai_button:
-                        # Legge sempre il valore più aggiornato dallo stato della sessione
                         testo_da_revisionare = st.session_state.get('relazione_text_area', '')
-                        st.session_state.relazione_testo = testo_da_revisionare # Sincronizza lo stato
-
+                        st.session_state.relazione_testo = testo_da_revisionare
                         if not testo_da_revisionare.strip():
                             st.warning("Per favore, scrivi il corpo della relazione prima di chiedere la correzione.")
                         elif not data_intervento:
                             st.error("Il campo 'Data Intervento' è obbligatorio.")
                         else:
                             with st.spinner("L'IA sta analizzando la relazione..."):
-                                # La funzione di revisione ora gestisce autonomamente il recupero degli esempi
-                                result = revisiona_relazione_con_ia(testo_da_revisionare, None) # Usa il testo più recente
-
+                                result = revisiona_relazione_con_ia(testo_da_revisionare, None)
                                 if result.get("success"):
                                     st.session_state.relazione_revisionata = result["text"]
                                     st.success("Relazione corretta con successo!")
@@ -2032,14 +2025,12 @@ def main_app(matricola_utente, ruolo):
                             st.warning("Scrivi qualcosa nella relazione per ricevere suggerimenti.")
 
                     if submit_save_button:
-                        # Legge sempre il valore più aggiornato dallo stato della sessione
                         testo_da_inviare = st.session_state.get('relazione_text_area', '')
                         if not data_intervento:
                             st.error("Il campo 'Data Intervento' è obbligatorio prima di inviare.")
                         elif not testo_da_inviare.strip():
                             st.error("Il corpo della relazione non può essere vuoto prima di inviare.")
                         else:
-                            # Prepara e invia l'email
                             partner_text = f" in coppia con {partner_selezionato}" if partner_selezionato != "Nessuno" else ""
                             titolo_email = f"Relazione di Reperibilità del {data_intervento.strftime('%d/%m/%Y')} - {nome_utente_autenticato}"
                             html_body = f"""
@@ -2056,23 +2047,19 @@ def main_app(matricola_utente, ruolo):
 
                             # --- Logica di salvataggio per apprendimento continuo ---
                             try:
-                                # Crea la cartella se non esiste
                                 reports_dir = "relazioni_inviate"
                                 os.makedirs(reports_dir, exist_ok=True)
 
-                                # Crea un nome file univoco
-                                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                                filename = os.path.join(reports_dir, f"relazione_{timestamp}.txt")
+                                # FIX: Usa la data dell'intervento per il timestamp del file, non la data corrente.
+                                # Aggiunge anche l'ora corrente per evitare sovrascritture se ci sono più report nello stesso giorno.
+                                timestamp_str = data_intervento.strftime("%Y%m%d") + "_" + datetime.datetime.now().strftime("%H%M%S")
+                                filename = os.path.join(reports_dir, f"relazione_{timestamp_str}.txt")
 
-                                # Salva il contenuto della relazione
                                 with open(filename, "w", encoding="utf-8") as f:
                                     f.write(testo_da_inviare)
-
                                 st.toast("Relazione salvata per l'apprendimento futuro dell'IA.")
-
                             except Exception as e:
                                 st.warning(f"Non è stato possibile salvare la relazione per l'IA: {e}")
-                            # --- Fine logica di salvataggio ---
 
                             st.balloons()
                             # Svuota i campi dopo l'invio
@@ -2081,13 +2068,12 @@ def main_app(matricola_utente, ruolo):
                             st.session_state.technical_suggestions = []
                             st.rerun()
 
-
                     if st.session_state.get('relazione_revisionata'):
                         st.subheader("Testo corretto dall'IA")
                         st.info(st.session_state.relazione_revisionata)
                         if st.button("📝 Usa Testo Corretto"):
                             st.session_state.relazione_testo = st.session_state.relazione_revisionata
-                            st.session_state.relazione_revisionata = "" # Pulisci dopo aver copiato
+                            st.session_state.relazione_revisionata = ""
                             st.rerun()
 
                     if st.session_state.get('technical_suggestions'):
@@ -2095,121 +2081,72 @@ def main_app(matricola_utente, ruolo):
                         for suggestion in st.session_state.get('technical_suggestions', []):
                             st.info(suggestion)
 
-
-        # Scheda 1: Nuova sezione "Pianificazione e Controllo" con sotto-schede
-        with tabs[1]:
+        elif selected_tab == "Pianificazione e Controllo":
             st.header("Pianificazione e Controllo")
             sub_tabs_pianificazione = st.tabs(["Controllo", "Pianificazione"])
-            with sub_tabs_pianificazione[0]:
-                render_situazione_impianti_tab()
-            with sub_tabs_pianificazione[1]:
-                render_programmazione_tab()
+            with sub_tabs_pianificazione[0]: render_situazione_impianti_tab()
+            with sub_tabs_pianificazione[1]: render_programmazione_tab()
 
-        # Scheda 2: Database (precedentemente "Ricerca nell'Archivio")
-        with tabs[2]:
+        elif selected_tab == "Database":
             from modules.db_manager import get_archive_filter_options, get_filtered_archived_activities
             st.subheader("Ricerca nel Database")
-
-            # Carica le opzioni per i filtri in modo efficiente
             filter_options = get_archive_filter_options()
 
-            # --- CALLBACKS ---
             def set_date_range_15_days():
-                """Callback per impostare il range di date agli ultimi 15 giorni."""
                 st.session_state.db_end_date = datetime.date.today()
                 st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
 
-            # Inizializza le date in session_state se non presenti
-            if 'db_start_date' not in st.session_state:
-                st.session_state.db_start_date = None
-            if 'db_end_date' not in st.session_state:
-                st.session_state.db_end_date = None
+            if 'db_start_date' not in st.session_state: st.session_state.db_start_date = None
+            if 'db_end_date' not in st.session_state: st.session_state.db_end_date = None
 
             c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                pdl_search = st.text_input("Filtra per PdL", key="db_pdl_search")
-            with c2:
-                desc_search = st.text_input("Filtra per Descrizione", key="db_desc_search")
-            with c3:
-                imp_search = st.multiselect("Filtra per Impianto", options=filter_options['impianti'], key="db_imp_search")
-            with c4:
-                tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
+            with c1: pdl_search = st.text_input("Filtra per PdL", key="db_pdl_search")
+            with c2: desc_search = st.text_input("Filtra per Descrizione", key="db_desc_search")
+            with c3: imp_search = st.multiselect("Filtra per Impianto", options=filter_options['impianti'], key="db_imp_search")
+            with c4: tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
 
             st.divider()
             st.markdown("##### Filtra per Data Intervento")
             d1, d2, d3, d4 = st.columns([1,1,1,2])
-            with d1:
-                st.date_input("Da:", key="db_start_date", format="DD/MM/YYYY")
-            with d2:
-                st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
-            with d3:
-                st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
-
+            with d1: st.date_input("Da:", key="db_start_date", format="DD/MM/YYYY")
+            with d2: st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
+            with d3: st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
 
             interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
             st.divider()
+            st.info("""**Nota:** Vengono visualizzate le 30 attività più recenti con uno storico compilato. Usa i filtri per una ricerca più specifica. Per cercare anche le attività pianificate ma non ancora eseguite, deseleziona la casella "Mostra solo interventi eseguiti".""")
 
-            # Messaggio informativo per chiarire il comportamento della ricerca
-            st.info("""
-            **Nota:** Vengono visualizzate le 30 attività più recenti con uno storico compilato.
-            Usa i filtri per una ricerca più specifica. Per cercare anche le attività pianificate ma non ancora eseguite, deseleziona la casella "Mostra solo interventi eseguiti".
-            """)
-
-            # Esegui la ricerca se almeno un filtro è attivo o se è stato premuto il pulsante dei 15 giorni
             search_is_active = pdl_search or desc_search or imp_search or tec_search or (st.session_state.db_start_date and st.session_state.db_end_date)
 
-            # Esegui sempre la ricerca, con o senza filtri
             with st.spinner("Ricerca in corso nel database..."):
-                risultati_df = get_filtered_archived_activities(
-                    pdl_search, desc_search, imp_search, tec_search,
-                    interventi_eseguiti_only,
-                    st.session_state.db_start_date, st.session_state.db_end_date
-                )
+                risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, interventi_eseguiti_only, st.session_state.db_start_date, st.session_state.db_end_date)
 
-            if risultati_df.empty:
-                st.info("Nessun record trovato.")
+            if risultati_df.empty: st.info("Nessun record trovato.")
             else:
                 if not search_is_active:
-                    # Caricamento di default: mostra le ultime 30, senza paginazione
                     display_df = risultati_df.head(30)
                     st.info(f"Visualizzazione delle {len(display_df)} attività più recenti.")
                     for _, row in display_df.iterrows():
-                        pdl = row['PdL']
-                        impianto = row.get('IMP', 'N/D')
-                        descrizione = row.get('DESCRIZIONE_ATTIVITA', 'N/D')
-                        storico = row.get('Storico', [])
-                        expander_title = f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."
-                        with st.expander(expander_title):
+                        pdl, impianto, descrizione, storico = row['PdL'], row.get('IMP', 'N/D'), row.get('DESCRIZIONE_ATTIVITA', 'N/D'), row.get('Storico', [])
+                        with st.expander(f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."):
                             visualizza_storico_organizzato(storico, pdl)
                 else:
-                    # Caricamento con filtri: mostra i risultati con paginazione
                     st.info(f"Trovati {len(risultati_df)} PdL corrispondenti ai filtri.")
                     ITEMS_PER_PAGE = 20
-                    if 'db_search_page' not in st.session_state:
-                        st.session_state.db_search_page = 0
-
+                    if 'db_search_page' not in st.session_state: st.session_state.db_search_page = 0
                     start_idx = st.session_state.db_search_page * ITEMS_PER_PAGE
                     end_idx = start_idx + ITEMS_PER_PAGE
                     items_to_display_df = risultati_df.iloc[start_idx:end_idx]
-
                     for _, row in items_to_display_df.iterrows():
-                        pdl = row['PdL']
-                        impianto = row.get('IMP', 'N/D')
-                        descrizione = row.get('DESCRIZIONE_ATTIVITA', 'N/D')
-                        storico = row.get('Storico', [])
-                        expander_title = f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."
-                        with st.expander(expander_title):
+                        pdl, impianto, descrizione, storico = row['PdL'], row.get('IMP', 'N/D'), row.get('DESCRIZIONE_ATTIVITA', 'N/D'), row.get('Storico', [])
+                        with st.expander(f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."):
                             visualizza_storico_organizzato(storico, pdl)
-
                     total_results = len(risultati_df)
                     if end_idx < total_results:
                         st.divider()
-                        if st.button("Carica Altri Risultati..."):
-                            st.session_state.db_search_page += 1
-                            st.rerun()
+                        if st.button("Carica Altri Risultati..."): st.session_state.db_search_page += 1; st.rerun()
 
-        # Scheda 3: Gestione Turni (precedentemente indice 4)
-        with tabs[3]:
+        elif selected_tab == "📅 Gestione Turni":
             st.subheader("Gestione Turni")
             turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
             with turni_disponibili_tab:
@@ -2226,8 +2163,7 @@ def main_app(matricola_utente, ruolo):
                 st.subheader("Turni Liberi in Bacheca")
                 df_bacheca = gestionale_data.get('bacheca', pd.DataFrame())
                 turni_disponibili_bacheca = df_bacheca[df_bacheca['Stato'] == 'Disponibile'].sort_values(by='Timestamp_Pubblicazione', ascending=False)
-                if turni_disponibili_bacheca.empty:
-                    st.info("Al momento non ci sono turni liberi in bacheca.")
+                if turni_disponibili_bacheca.empty: st.info("Al momento non ci sono turni liberi in bacheca.")
                 else:
                     df_turni = gestionale_data['turni']
                     matricola_to_name = pd.Series(gestionale_data['contatti']['Nome Cognome'].values, index=gestionale_data['contatti']['Matricola'].astype(str)).to_dict()
@@ -2236,7 +2172,6 @@ def main_app(matricola_utente, ruolo):
                             turno_details = df_turni[df_turni['ID_Turno'] == bacheca_entry['ID_Turno']].iloc[0]
                             matricola_originale = str(bacheca_entry['Tecnico_Originale_Matricola'])
                             nome_originale = matricola_to_name.get(matricola_originale, f"Matricola {matricola_originale}")
-
                             with st.container(border=True):
                                 st.markdown(f"**{turno_details['Descrizione']}** ({bacheca_entry['Ruolo_Originale']})")
                                 st.caption(f"Data: {pd.to_datetime(turno_details['Data']).strftime('%d/%m/%Y')} | Orario: {turno_details['OrarioInizio']} - {turno_details['OrarioFine']}")
@@ -2245,18 +2180,13 @@ def main_app(matricola_utente, ruolo):
                                 is_eligible = not (ruolo_richiesto == 'Tecnico' and ruolo == 'Aiutante')
                                 if is_eligible:
                                     if st.button("Prendi questo turno", key=f"take_{bacheca_entry['ID_Bacheca']}"):
-                                        if prendi_turno_da_bacheca_logic(gestionale_data, matricola_utente, ruolo, bacheca_entry['ID_Bacheca']):
-                                            salva_gestionale_async(gestionale_data)
-                                            st.rerun()
-                                else:
-                                    st.info("Non hai il ruolo richiesto per questo turno.")
-                        except IndexError:
-                            st.warning(f"Dettagli non trovati per il turno ID {bacheca_entry['ID_Turno']}. Potrebbe essere stato rimosso.")
+                                        if prendi_turno_da_bacheca_logic(gestionale_data, matricola_utente, ruolo, bacheca_entry['ID_Bacheca']): salva_gestionale_async(gestionale_data); st.rerun()
+                                else: st.info("Non hai il ruolo richiesto per questo turno.")
+                        except IndexError: st.warning(f"Dettagli non trovati per il turno ID {bacheca_entry['ID_Turno']}. Potrebbe essere stato rimosso.")
             with sostituzioni_tab:
                 st.subheader("Richieste di Sostituzione")
                 df_sostituzioni = gestionale_data['sostituzioni']
                 matricola_to_name = pd.Series(gestionale_data['contatti']['Nome Cognome'].values, index=gestionale_data['contatti']['Matricola'].astype(str)).to_dict()
-
                 st.markdown("#### 📥 Richieste Ricevute")
                 richieste_ricevute = df_sostituzioni[df_sostituzioni['Ricevente_Matricola'] == str(matricola_utente)]
                 if richieste_ricevute.empty: st.info("Nessuna richiesta di sostituzione ricevuta.")
@@ -2267,12 +2197,10 @@ def main_app(matricola_utente, ruolo):
                         c1, c2 = st.columns(2)
                         with c1:
                             if st.button("✅ Accetta", key=f"acc_{richiesta['ID_Richiesta']}"):
-                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], matricola_utente, True):
-                                    salva_gestionale_async(gestionale_data); st.rerun()
+                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], matricola_utente, True): salva_gestionale_async(gestionale_data); st.rerun()
                         with c2:
                             if st.button("❌ Rifiuta", key=f"rif_{richiesta['ID_Richiesta']}"):
-                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], matricola_utente, False):
-                                    salva_gestionale_async(gestionale_data); st.rerun()
+                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], matricola_utente, False): salva_gestionale_async(gestionale_data); st.rerun()
                 st.divider()
                 st.markdown("#### 📤 Richieste Inviate")
                 richieste_inviate = df_sostituzioni[df_sostituzioni['Richiedente_Matricola'] == str(matricola_utente)]
@@ -2281,88 +2209,43 @@ def main_app(matricola_utente, ruolo):
                     ricevente_nome = matricola_to_name.get(str(richiesta['Ricevente_Matricola']), "Sconosciuto")
                     st.markdown(f"- Richiesta inviata a **{ricevente_nome}** per il turno **{richiesta['ID_Turno']}**.")
 
-        # Scheda 4: Richieste
-        with tabs[4]:
+        elif selected_tab == "Richieste":
             st.header("Richieste")
             richieste_tabs = st.tabs(["Materiali", "Assenze"])
-
-            # Sottomenù Materiali
             with richieste_tabs[0]:
                 st.subheader("Richiesta Materiali")
                 with st.form("form_richiesta_materiali", clear_on_submit=True):
                     dettagli_richiesta = st.text_area("Elenca qui i materiali necessari:", height=150)
                     submitted = st.form_submit_button("Invia Richiesta Materiali", type="primary")
-
                     if submitted:
                         if dettagli_richiesta.strip():
                             new_id = f"MAT_{int(datetime.datetime.now().timestamp())}"
                             df_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame())
-
-                            nuova_richiesta_data = {
-                                'ID_Richiesta': new_id,
-                                'Richiedente_Matricola': str(matricola_utente),
-                                'Timestamp': datetime.datetime.now(),
-                                'Stato': 'Inviata',
-                                'Dettagli': dettagli_richiesta
-                            }
-
-                            # Assicura che la nuova riga abbia le stesse colonne del DataFrame di destinazione
-                            # per prevenire problemi di disallineamento con pd.concat.
-                            if not df_materiali.columns.empty:
-                                nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data], columns=df_materiali.columns)
-                            else:
-                                nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data])
-
+                            nuova_richiesta_data = {'ID_Richiesta': new_id, 'Richiedente_Matricola': str(matricola_utente), 'Timestamp': datetime.datetime.now(), 'Stato': 'Inviata', 'Dettagli': dettagli_richiesta}
+                            if not df_materiali.columns.empty: nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data], columns=df_materiali.columns)
+                            else: nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data])
                             gestionale_data['richieste_materiali'] = pd.concat([df_materiali, nuova_richiesta_df], ignore_index=True)
-
                             if salva_gestionale_async(gestionale_data):
                                 st.success("Richiesta materiali inviata con successo!")
-                                # Invia email
                                 titolo_email = f"Nuova Richiesta Materiali da {nome_utente_autenticato}"
-                                html_body = f"""
-                                <h3>Nuova Richiesta Materiali</h3>
-                                <p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p>
-                                <p><strong>Data e Ora:</strong> {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
-                                <hr>
-                                <h4>Materiali Richiesti:</h4>
-                                <p>{dettagli_richiesta.replace('\n', '<br>')}</p>
-                                """
+                                html_body = f"""<h3>Nuova Richiesta Materiali</h3><p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p><p><strong>Data e Ora:</strong> {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}</p><hr><h4>Materiali Richiesti:</h4><p>{dettagli_richiesta.replace('\n', '<br>')}</p>"""
                                 invia_email_con_outlook_async(titolo_email, html_body)
                                 st.rerun()
-                            else:
-                                st.error("Errore durante il salvataggio della richiesta.")
-                        else:
-                            st.warning("Il campo dei materiali non può essere vuoto.")
-
+                            else: st.error("Errore durante il salvataggio della richiesta.")
+                        else: st.warning("Il campo dei materiali non può essere vuoto.")
                 st.divider()
                 st.subheader("Storico Richieste Materiali")
                 df_richieste_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame())
-                if df_richieste_materiali.empty:
-                    st.info("Nessuna richiesta di materiali inviata.")
+                if df_richieste_materiali.empty: st.info("Nessuna richiesta di materiali inviata.")
                 else:
-                    # Arricchisci lo storico con il nome del richiedente
                     df_contatti = gestionale_data.get('contatti', pd.DataFrame())
-                    df_richieste_con_nome = pd.merge(
-                        df_richieste_materiali,
-                        df_contatti[['Matricola', 'Nome Cognome']],
-                        left_on='Richiedente_Matricola',
-                        right_on='Matricola',
-                        how='left'
-                    )
-                    # Gestisci i casi in cui il nome non viene trovato
+                    df_richieste_con_nome = pd.merge(df_richieste_materiali, df_contatti[['Matricola', 'Nome Cognome']], left_on='Richiedente_Matricola', right_on='Matricola', how='left')
                     df_richieste_con_nome['Nome Cognome'] = df_richieste_con_nome['Nome Cognome'].fillna('Sconosciuto')
-
                     df_richieste_con_nome['Timestamp'] = pd.to_datetime(df_richieste_con_nome['Timestamp'])
-
-                    # Seleziona e riordina le colonne per la visualizzazione
                     display_cols = ['Timestamp', 'Nome Cognome', 'Dettagli', 'Stato']
-                    # Assicurati che tutte le colonne esistano prima di provare a visualizzarle
                     final_cols = [col for col in display_cols if col in df_richieste_con_nome.columns]
-
                     st.dataframe(df_richieste_con_nome[final_cols].sort_values(by="Timestamp", ascending=False), use_container_width=True)
 
-
-            # Sottomenù Assenze
             with richieste_tabs[1]:
                 st.subheader("Richiesta Assenze (Ferie/Permessi)")
                 with st.form("form_richiesta_assenze", clear_on_submit=True):
@@ -2372,235 +2255,163 @@ def main_app(matricola_utente, ruolo):
                     data_fine = col2.date_input("Data Fine")
                     note_assenza = st.text_area("Note (opzionale):", height=100)
                     submitted_assenza = st.form_submit_button("Invia Richiesta Assenza", type="primary")
-
                     if submitted_assenza:
                         if data_inizio and data_fine:
-                            if data_inizio > data_fine:
-                                st.error("La data di inizio non può essere successiva alla data di fine.")
+                            if data_inizio > data_fine: st.error("La data di inizio non può essere successiva alla data di fine.")
                             else:
                                 new_id = f"ASS_{int(datetime.datetime.now().timestamp())}"
-                                nuova_richiesta_assenza = pd.DataFrame([{
-                                    'ID_Richiesta': new_id,
-                                    'Richiedente_Matricola': str(matricola_utente),
-                                    'Timestamp': datetime.datetime.now(),
-                                    'Tipo_Assenza': tipo_assenza,
-                                    'Data_Inizio': pd.to_datetime(data_inizio),
-                                    'Data_Fine': pd.to_datetime(data_fine),
-                                    'Note': note_assenza,
-                                    'Stato': 'Inviata'
-                                }])
-
+                                nuova_richiesta_assenza = pd.DataFrame([{'ID_Richiesta': new_id, 'Richiedente_Matricola': str(matricola_utente), 'Timestamp': datetime.datetime.now(), 'Tipo_Assenza': tipo_assenza, 'Data_Inizio': pd.to_datetime(data_inizio), 'Data_Fine': pd.to_datetime(data_fine), 'Note': note_assenza, 'Stato': 'Inviata'}])
                                 df_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame())
                                 gestionale_data['richieste_assenze'] = pd.concat([df_assenze, nuova_richiesta_assenza], ignore_index=True)
-
                                 if salva_gestionale_async(gestionale_data):
                                     st.success("Richiesta di assenza inviata con successo!")
-                                    # Invia email
                                     titolo_email = f"Nuova Richiesta di Assenza da {nome_utente_autenticato}"
-                                    html_body = f"""
-                                    <h3>Nuova Richiesta di Assenza</h3>
-                                    <p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p>
-                                    <p><strong>Tipo:</strong> {tipo_assenza}</p>
-                                    <p><strong>Periodo:</strong> dal {data_inizio.strftime('%d/%m/%Y')} al {data_fine.strftime('%d/%m/%Y')}</p>
-                                    <hr>
-                                    <h4>Note:</h4>
-                                    <p>{note_assenza.replace('\n', '<br>') if note_assenza else 'Nessuna nota.'}</p>
-                                    """
+                                    html_body = f"""<h3>Nuova Richiesta di Assenza</h3><p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p><p><strong>Tipo:</strong> {tipo_assenza}</p><p><strong>Periodo:</strong> dal {data_inizio.strftime('%d/%m/%Y')} al {data_fine.strftime('%d/%m/%Y')}</p><hr><h4>Note:</h4><p>{note_assenza.replace('\n', '<br>') if note_assenza else 'Nessuna nota.'}</p>"""
                                     invia_email_con_outlook_async(titolo_email, html_body)
                                     st.rerun()
-                                else:
-                                    st.error("Errore durante il salvataggio della richiesta.")
-                        else:
-                            st.warning("Le date di inizio e fine sono obbligatorie.")
-
-                # Visualizzazione storico solo per admin
+                                else: st.error("Errore durante il salvataggio della richiesta.")
+                        else: st.warning("Le date di inizio e fine sono obbligatorie.")
                 if ruolo == "Amministratore":
                     st.divider()
                     st.subheader("Storico Richieste Assenze (Visibile solo agli Admin)")
                     df_richieste_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame())
-                    if df_richieste_assenze.empty:
-                        st.info("Nessuna richiesta di assenza inviata.")
+                    if df_richieste_assenze.empty: st.info("Nessuna richiesta di assenza inviata.")
                     else:
                         df_richieste_assenze['Timestamp'] = pd.to_datetime(df_richieste_assenze['Timestamp'])
                         df_richieste_assenze['Data_Inizio'] = pd.to_datetime(df_richieste_assenze['Data_Inizio']).dt.strftime('%d/%m/%Y')
                         df_richieste_assenze['Data_Fine'] = pd.to_datetime(df_richieste_assenze['Data_Fine']).dt.strftime('%d/%m/%Y')
                         st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), use_container_width=True)
 
-
-        # Scheda 5: Guida
-        with tabs[5]:
+        elif selected_tab == "❓ Guida":
             render_guida_tab(ruolo)
 
-        if ruolo == "Amministratore":
-            with tabs[6]: # Indice aggiornato per la dashboard admin
+        elif selected_tab == "Dashboard Admin" and ruolo == "Amministratore":
+            st.subheader("Dashboard di Controllo")
+            if st.session_state.get('detail_technician_matricola'): render_technician_detail_view()
+            else:
                 st.subheader("Dashboard di Controllo")
-
-                # Se è stata selezionata la vista di dettaglio, mostrala
-                if st.session_state.get('detail_technician_matricola'):
-                    render_technician_detail_view()
-                else:
-                    # Nuova struttura a due livelli per la dashboard admin
-                    st.subheader("Dashboard di Controllo")
-                    main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
-
-                    # --- Dashboard Caposquadra ---
-                    with main_admin_tabs[0]:
-                        caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
-
-                        with caposquadra_tabs[0]: # Performance Team
-                            st.markdown("#### Seleziona Intervallo Temporale")
-                            if 'perf_start_date' not in st.session_state:
-                                st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
-                            if 'perf_end_date' not in st.session_state:
-                                st.session_state.perf_end_date = datetime.date.today()
-
-                            c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
-                            if c1.button("Oggi"): st.session_state.perf_start_date = st.session_state.perf_end_date = datetime.date.today()
-                            if c2.button("Ultimi 7 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7); st.session_state.perf_end_date = datetime.date.today()
-                            if c3.button("Ultimi 30 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30); st.session_state.perf_end_date = datetime.date.today()
-
+                main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
+                with main_admin_tabs[0]:
+                    caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
+                    with caposquadra_tabs[0]:
+                        st.markdown("#### Seleziona Intervallo Temporale")
+                        if 'perf_start_date' not in st.session_state: st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
+                        if 'perf_end_date' not in st.session_state: st.session_state.perf_end_date = datetime.date.today()
+                        c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
+                        if c1.button("Oggi"): st.session_state.perf_start_date = st.session_state.perf_end_date = datetime.date.today()
+                        if c2.button("Ultimi 7 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7); st.session_state.perf_end_date = datetime.date.today()
+                        if c3.button("Ultimi 30 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30); st.session_state.perf_end_date = datetime.date.today()
+                        col1, col2 = st.columns(2)
+                        with col1: st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
+                        with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
+                        start_datetime, end_datetime = st.session_state.perf_start_date, st.session_state.perf_end_date
+                        if st.button("📊 Calcola Performance", type="primary"):
+                            with st.spinner("Calcolo delle performance in corso..."): performance_df = get_technician_performance_data(start_datetime, end_datetime)
+                            st.session_state['performance_results'] = {'df': performance_df, 'start_date': pd.to_datetime(start_datetime), 'end_date': pd.to_datetime(end_datetime)}
+                        if 'performance_results' in st.session_state:
+                            results = st.session_state['performance_results']
+                            performance_df = results['df']
+                            if performance_df.empty: st.info("Nessun dato di performance trovato per il periodo selezionato.")
+                            else:
+                                st.markdown("---")
+                                st.markdown("### Riepilogo Performance del Team")
+                                total_interventions_team = performance_df['Totale Interventi'].sum()
+                                total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
+                                total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
+                                avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
+                                st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
+                                c1, c2, c3 = st.columns(3)
+                                c1.metric("Totale Interventi", f"{total_interventions_team}")
+                                c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
+                                c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
+                                st.markdown("#### Dettaglio Performance per Tecnico")
+                                for index, row in performance_df.iterrows():
+                                    st.write(f"**Tecnico:** {index}")
+                                    st.dataframe(row.to_frame().T)
+                                    if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
+                                        st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
+                                        st.rerun()
+                    with caposquadra_tabs[1]:
+                        with st.form("new_shift_form", clear_on_submit=True):
+                            st.subheader("Dettagli Nuovo Turno")
+                            tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
+                            desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
+                            data_turno = st.date_input("Data Turno")
                             col1, col2 = st.columns(2)
-                            with col1: st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
-                            with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
-
-                            start_datetime, end_datetime = st.session_state.perf_start_date, st.session_state.perf_end_date
-
-                            if st.button("📊 Calcola Performance", type="primary"):
-                                with st.spinner("Calcolo delle performance in corso..."):
-                                    performance_df = get_technician_performance_data(start_datetime, end_datetime)
-                                st.session_state['performance_results'] = {'df': performance_df, 'start_date': pd.to_datetime(start_datetime), 'end_date': pd.to_datetime(end_datetime)}
-
-                            if 'performance_results' in st.session_state:
-                                results = st.session_state['performance_results']
-                                performance_df = results['df']
-
-                                if performance_df.empty:
-                                    st.info("Nessun dato di performance trovato per il periodo selezionato.")
+                            with col1: ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
+                            with col2: ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
+                            col3, col4 = st.columns(2)
+                            with col3: posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
+                            with col4: posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
+                            if st.form_submit_button("Crea Turno"):
+                                if not desc_turno: st.error("La descrizione non può essere vuota.")
                                 else:
-                                    st.markdown("---")
-                                    st.markdown("### Riepilogo Performance del Team")
-
-                                    total_interventions_team = performance_df['Totale Interventi'].sum()
-                                    total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
-                                    # Calcolo ponderato del tasso di completamento
-                                    total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
-                                    avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
-
-                                    st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
-                                    c1, c2, c3 = st.columns(3)
-                                    c1.metric("Totale Interventi", f"{total_interventions_team}")
-                                    c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
-                                    c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
-
-                                    st.markdown("#### Dettaglio Performance per Tecnico")
-                                    for index, row in performance_df.iterrows():
-                                        st.write(f"**Tecnico:** {index}")
-                                        st.dataframe(row.to_frame().T)
-                                        if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                            st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
-                                            st.rerun()
-
-                        with caposquadra_tabs[1]: # Crea Nuovo Turno
-                            with st.form("new_shift_form", clear_on_submit=True):
-                                st.subheader("Dettagli Nuovo Turno")
-                                tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
-                                desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
-                                data_turno = st.date_input("Data Turno")
-                                col1, col2 = st.columns(2)
-                                with col1: ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
-                                with col2: ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
-                                col3, col4 = st.columns(2)
-                                with col3: posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
-                                with col4: posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
-                                if st.form_submit_button("Crea Turno"):
-                                    if not desc_turno: st.error("La descrizione non può essere vuota.")
-                                    else:
-                                        new_id = f"T_{int(datetime.datetime.now().timestamp())}"
-                                        nuovo_turno = pd.DataFrame([{'ID_Turno': new_id, 'Descrizione': desc_turno, 'Data': pd.to_datetime(data_turno), 'OrarioInizio': ora_inizio.strftime('%H:%M'), 'OrarioFine': ora_fine.strftime('%H:%M'), 'PostiTecnico': posti_tech, 'PostiAiutante': posti_aiut, 'Tipo': tipo_turno}])
-                                        gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
-                                        df_contatti = gestionale_data.get('contatti')
-                                        if df_contatti is not None:
-                                            utenti_da_notificare = df_contatti['Matricola'].tolist()
-                                            messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
-                                            for matricola in utenti_da_notificare: crea_notifica(gestionale_data, matricola, messaggio)
-                                        if salva_gestionale_async(gestionale_data):
-                                            st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
-                                            st.rerun()
-                                        else: st.error("Errore nel salvataggio del nuovo turno.")
-
-                        with caposquadra_tabs[2]: # Gestione Dati
-                            st.header("Gestione e Sincronizzazione Dati")
-                            st.info(
-                                "Questa sezione permette di avviare la sincronizzazione bidirezionale "
-                                "tra il file Excel `ATTIVITA_PROGRAMMATE.xlsm` e il database interno."
-                            )
-                            st.warning(
-                                "**Funzionamento:**\n"
-                                "- **Bidirezionale per colonne di stato:** `STATO PdL`, `ESE`, `SAIT`, `PONTEROSSO`, `STATO ATTIVITA'`, `DATA CONTROLLO`, `PERSONALE IMPIEGATO` vengono sincronizzate in base al timestamp più recente.\n"
-                                "- **Unidirezionale (Excel -> DB) per le altre colonne:** Tutti gli altri dati di pianificazione vengono aggiornati solo da Excel verso il database.\n"
-                                "- Il processo aggiornerà sia il database che il file Excel nella stessa operazione."
-                            )
-
-                            if st.button("🔄 Sincronizza DB <-> EXCEL", type="primary", help="Avvia la sincronizzazione bidirezionale completa."):
-                                from sincronizzatore import sincronizza_db_excel
-                                with st.spinner("Sincronizzazione in corso... Non chiudere la pagina."):
-                                    success, message = sincronizza_db_excel()
-                                    if success:
-                                        st.success("Sincronizzazione completata con successo!")
-                                        st.info(message)
-                                        st.cache_data.clear() # Pulisce la cache per riflettere i nuovi dati
-                                    else:
-                                        st.error(f"Errore durante la sincronizzazione: {message}")
-
-                        with caposquadra_tabs[3]: # Validazione Report
-                            render_report_validation_tab(matricola_utente)
-
-                    # --- Dashboard Tecnica ---
-                    with main_admin_tabs[1]:
-                        tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
-
-                        with tecnica_tabs[0]: # Gestione Account
-                            render_gestione_account(gestionale_data)
-
-                        with tecnica_tabs[1]: # Cronologia Accessi
-                            render_access_logs_tab(gestionale_data)
-
-                        with tecnica_tabs[2]: # Gestione IA
-                            st.header("Gestione Intelligenza Artificiale")
-                            ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
-                            with ia_sub_tabs[0]: # Revisione Conoscenze
-                                st.markdown("### 🧠 Revisione Voci del Knowledge Core")
-                                unreviewed_entries = learning_module.load_unreviewed_knowledge()
-                                pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
-                                if not pending_entries: st.success("🎉 Nessuna nuova voce da revisionare!")
-                                else: st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
-                                for i, entry in enumerate(pending_entries):
-                                    with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
-                                        st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
-                                        st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
-                                        st.write("**Dettagli del report compilato:**"); st.json(entry['dettagli_report'])
-                                        st.markdown("---"); st.markdown("**Azione di Integrazione**")
-                                        col1, col2 = st.columns(2)
-                                        with col1:
-                                            new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
-                                            new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
-                                        with col2:
-                                            if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
-                                                if new_equipment_key and new_display_name:
-                                                    first_question = {"id": "sintomo_iniziale", "text": "Qual era il sintomo principale?", "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}}
-                                                    details = {"equipment_key": new_equipment_key, "display_name": new_display_name, "new_question": first_question}
-                                                    result = learning_module.integrate_knowledge(entry['id'], details)
-                                                    if result.get("success"): st.success(f"Voce '{entry['id']}' integrata con successo!"); st.cache_data.clear(); st.rerun()
-                                                    else: st.error(f"Errore integrazione: {result.get('error')}")
-                                                else: st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
-                            with ia_sub_tabs[1]: # Memoria IA
-                                st.subheader("Gestione Modello IA")
-                                st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
-                                if st.button("🧠 Aggiorna Memoria IA", type="primary"):
-                                    with st.spinner("Ricostruzione dell'indice in corso..."):
-                                        result = learning_module.build_knowledge_base()
-                                    if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
-                                    else: st.error(result.get("message"))
+                                    new_id = f"T_{int(datetime.datetime.now().timestamp())}"
+                                    nuovo_turno = pd.DataFrame([{'ID_Turno': new_id, 'Descrizione': desc_turno, 'Data': pd.to_datetime(data_turno), 'OrarioInizio': ora_inizio.strftime('%H:%M'), 'OrarioFine': ora_fine.strftime('%H:%M'), 'PostiTecnico': posti_tech, 'PostiAiutante': posti_aiut, 'Tipo': tipo_turno}])
+                                    gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
+                                    df_contatti = gestionale_data.get('contatti')
+                                    if df_contatti is not None:
+                                        utenti_da_notificare = df_contatti['Matricola'].tolist()
+                                        messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
+                                        for matricola in utenti_da_notificare: crea_notifica(gestionale_data, matricola, messaggio)
+                                    if salva_gestionale_async(gestionale_data):
+                                        st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
+                                        st.rerun()
+                                    else: st.error("Errore nel salvataggio del nuovo turno.")
+                    with caposquadra_tabs[2]:
+                        st.header("Gestione e Sincronizzazione Dati")
+                        st.info("Questa sezione permette di avviare la sincronizzazione bidirezionale tra il file Excel `ATTIVITA_PROGRAMMATE.xlsm` e il database interno.")
+                        st.warning("**Funzionamento:**\n- **Bidirezionale per colonne di stato:** `STATO PdL`, `ESE`, `SAIT`, `PONTEROSSO`, `STATO ATTIVITA'`, `DATA CONTROLLO`, `PERSONALE IMPIEGATO` vengono sincronizzate in base al timestamp più recente.\n- **Unidirezionale (Excel -> DB) per le altre colonne:** Tutti gli altri dati di pianificazione vengono aggiornati solo da Excel verso il database.\n- Il processo aggiornerà sia il database che il file Excel nella stessa operazione.")
+                        if st.button("🔄 Sincronizza DB <-> EXCEL", type="primary", help="Avvia la sincronizzazione bidirezionale completa."):
+                            from sincronizzatore import sincronizza_db_excel
+                            with st.spinner("Sincronizzazione in corso... Non chiudere la pagina."):
+                                success, message = sincronizza_db_excel()
+                                if success:
+                                    st.success("Sincronizzazione completata con successo!")
+                                    st.info(message)
+                                    st.cache_data.clear()
+                                else: st.error(f"Errore durante la sincronizzazione: {message}")
+                    with caposquadra_tabs[3]: render_report_validation_tab(matricola_utente)
+                with main_admin_tabs[1]:
+                    tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
+                    with tecnica_tabs[0]: render_gestione_account(gestionale_data)
+                    with tecnica_tabs[1]: render_access_logs_tab(gestionale_data)
+                    with tecnica_tabs[2]:
+                        st.header("Gestione Intelligenza Artificiale")
+                        ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
+                        with ia_sub_tabs[0]:
+                            st.markdown("### 🧠 Revisione Voci del Knowledge Core")
+                            unreviewed_entries = learning_module.load_unreviewed_knowledge()
+                            pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
+                            if not pending_entries: st.success("🎉 Nessuna nuova voce da revisionare!")
+                            else: st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
+                            for i, entry in enumerate(pending_entries):
+                                with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
+                                    st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
+                                    st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
+                                    st.write("**Dettagli del report compilato:**"); st.json(entry['dettagli_report'])
+                                    st.markdown("---"); st.markdown("**Azione di Integrazione**")
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
+                                        new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
+                                    with col2:
+                                        if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
+                                            if new_equipment_key and new_display_name:
+                                                first_question = {"id": "sintomo_iniziale", "text": "Qual era il sintomo principale?", "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}}
+                                                details = {"equipment_key": new_equipment_key, "display_name": new_display_name, "new_question": first_question}
+                                                result = learning_module.integrate_knowledge(entry['id'], details)
+                                                if result.get("success"): st.success(f"Voce '{entry['id']}' integrata con successo!"); st.cache_data.clear(); st.rerun()
+                                                else: st.error(f"Errore integrazione: {result.get('error')}")
+                                            else: st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
+                        with ia_sub_tabs[1]:
+                            st.subheader("Gestione Modello IA")
+                            st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
+                            if st.button("🧠 Aggiorna Memoria IA", type="primary"):
+                                with st.spinner("Ricostruzione dell'indice in corso..."):
+                                    result = learning_module.build_knowledge_base()
+                                if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
+                                else: st.error(result.get("message"))
 
 
 # --- GESTIONE LOGIN ---
