@@ -96,6 +96,9 @@ def _save_to_db_backend(data):
                     # Converte le colonne di tipo datetime in stringhe ISO 8601
                     if pd.api.types.is_datetime64_any_dtype(df_to_save[col]):
                         df_to_save[col] = df_to_save[col].apply(lambda x: x.isoformat() if pd.notna(x) else None)
+                    # Aggiunge un controllo per celle singole che potrebbero essere Timestamp
+                    elif df_to_save[col].dtype == 'object':
+                        df_to_save[col] = df_to_save[col].apply(lambda x: x.isoformat() if isinstance(x, pd.Timestamp) else x)
 
                 # Sovrascrive completamente la tabella con i nuovi dati sanificati
                 df_to_save.to_sql(table_name, conn, if_exists='replace', index=False)
