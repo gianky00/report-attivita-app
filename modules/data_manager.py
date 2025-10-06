@@ -261,7 +261,12 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
             <tr><th>Attività</th><td>{dati_da_scrivere['descrizione']}</td></tr>
             <tr><th>Stato Finale</th><td><b>{dati_da_scrivere['stato']}</b></td></tr>
             <tr><th>Report Compilato</th><td class="report-content">{report_html}</td></tr>
-        </table></body></html>
+        </table>
+        <br><hr>
+        <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
+        <p><strong>Gianky Allegretti</strong><br>
+        Direttore Tecnico</p>
+        </body></html>
         """
         invia_email_con_outlook_async(titolo_email, html_body)
 

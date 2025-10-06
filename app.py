@@ -42,7 +42,8 @@ from modules.db_manager import (
     get_interventions_for_technician, get_unvalidated_reports,
     create_validation_session, get_active_validation_session,
     update_validation_session_data, delete_validation_session,
-    process_and_commit_validated_reports
+    process_and_commit_validated_reports, salva_relazione, get_all_relazioni,
+    get_unvalidated_relazioni, process_and_commit_validated_relazioni
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -63,17 +64,6 @@ from modules.notifications import (
 from modules.email_sender import invia_email_con_outlook_async
 
 
-# --- CONFIGURAZIONE ---
-# Caricamento sicuro dei secrets
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
-
-# --- CONFIGURAZIONE IA ---
-if GEMINI_API_KEY:
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-    except Exception as e:
-        st.error(f"Errore nella configurazione di Gemini: {e}")
-
 # --- FUNZIONI DI SUPPORTO E CARICAMENTO DATI ---
 @st.cache_resource
 def autorizza_google():
@@ -84,60 +74,6 @@ def autorizza_google():
         client.login()
     return client
 
-
-# --- FUNZIONI DI ANALISI IA ---
-@st.cache_data(show_spinner=False)
-def analizza_storico_con_ia(_storico_df):
-    if not GEMINI_API_KEY:
-        return {"error": "La chiave API di Gemini non è configurata."}
-    if _storico_df.empty or len(_storico_df) < 2 or _storico_df['Report'].dropna().empty:
-        return {"info": "Dati storici insufficienti per un'analisi avanzata."}
-    
-    try:
-        model = genai.GenerativeModel('models/gemini-flash-latest')
-        base_prompt = """Sei un Direttore Tecnico di Manutenzione. Analizza la seguente cronologia di interventi e fornisci una diagnosi strategica in formato JSON con le chiavi "profilo", "diagnosi_tematica", "rischio_predittivo", "azione_strategica".
-
-CRONOLOGIA:
-"""
-        storico_markdown = _storico_df[['Data_Riferimento', 'Tecnico', 'Stato', 'Report']].to_markdown(index=False)
-        prompt = base_prompt + storico_markdown
-
-        response = model.generate_content(prompt)
-        cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
-        return json.loads(cleaned_response)
-    except Exception as e:
-        return {"error": f"Errore durante l'analisi IA: {str(e)}"}
-
-@st.cache_data(show_spinner=False)
-def get_relevant_examples(user_text):
-    """
-    Carica l'indice della base di conoscenza e restituisce i 3 esempi più pertinenti.
-    """
-    import pickle
-    from sklearn.metrics.pairwise import cosine_similarity
-
-    index_filename = "knowledge_base_index.pkl"
-    if not os.path.exists(index_filename):
-        return None # L'indice non esiste
-
-    with open(index_filename, 'rb') as f:
-        data = pickle.load(f)
-
-    vectorizer = data['vectorizer']
-    matrix = data['matrix']
-    sentences = data['sentences']
-
-    # Vettorizza il testo dell'utente e trova i più simili
-    user_vector = vectorizer.transform([user_text])
-    similarities = cosine_similarity(user_vector, matrix).flatten()
-
-    # Prendi i 3 indici più alti (escludendo somiglianze a zero)
-    top_indices = similarities.argsort()[-3:][::-1]
-
-    relevant_examples = [sentences[i] for i in top_indices if similarities[i] > 0]
-
-    return "\n".join(relevant_examples)
-
 from modules.instrumentation_logic import find_and_analyze_tags, get_technical_suggestions, analyze_domain_terminology
 
 def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
@@ -145,6 +81,8 @@ def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
     Usa l'IA per revisionare una relazione tecnica, arricchendo la richiesta
     con analisi semantica della strumentazione basata su standard ISA S5.1.
     """
+    # Funzione mantenuta per la revisione delle relazioni, ma non più per i report
+    GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
     if not GEMINI_API_KEY:
         return {"error": "La chiave API di Gemini non è configurata."}
     if not _testo_originale.strip():
@@ -177,42 +115,30 @@ def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
 
     # 2. Costruzione del prompt per l'IA
     try:
+        genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel('models/gemini-flash-latest')
 
         if technical_summary:
-            # Prompt avanzato con contesto tecnico
             prompt = f"""
             Sei un Direttore Tecnico di Manutenzione con profonda conoscenza della strumentazione (standard ISA S5.1) e della terminologia di impianto. Il tuo compito è riformulare la seguente relazione scritta da un tecnico, trasformandola in un report professionale, chiaro e tecnicamente consapevole.
-
             **INFORMAZIONI TECNICHE E TERMINOLOGICHE DA USARE (Know-How):**
             ---
             {technical_summary}
             ---
             Usa queste informazioni per interpretare correttamente le sigle (es. CTG, FCV301) e le relazioni tra i componenti. Riformula il testo per riflettere questa comprensione approfondita.
-
             **RELAZIONE ORIGINALE DA RIFORMULARE:**
             ---
             {_testo_originale}
             ---
-
             **RELAZIONE RIFORMULATA (restituisci solo il testo corretto, senza aggiungere titoli o commenti):**
             """
         else:
-            # Prompt standard se non viene trovato nessun tag strumentale
-            knowledge_sample = get_relevant_examples(_testo_originale) or "Nessun esempio specifico trovato."
             prompt = f"""
-            Sei un revisore esperto di relazioni tecniche in ambito industriale. Il tuo compito è revisionare e migliorare il seguente testo scritto da un tecnico, mantenendo un tono professionale, chiaro e conciso. Correggi eventuali errori grammaticali o di battitura e assicurati che lo stile sia coerente con gli esempi forniti.
-
-            **STILE E TERMINOLOGIA DA SEGUIRE (ESEMPI):**
-            ---
-            {knowledge_sample}
-            ---
-
+            Sei un revisore esperto di relazioni tecniche in ambito industriale. Il tuo compito è revisionare e migliorare il seguente testo scritto da un tecnico, mantenendo un tono professionale, chiaro e conciso. Correggi eventuali errori grammaticali o di battitura.
             **RELAZIONE DA REVISIONARE:**
             ---
             {_testo_originale}
             ---
-
             **RELAZIONE REVISIONATA (restituisci solo il testo corretto, senza aggiungere titoli o commenti):**
             """
 
@@ -293,31 +219,12 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
             # --- FINE LOGICA TEAM ---
             
             visualizza_storico_organizzato(task.get('storico', []), task['pdl'])
-            if task.get('storico'):
-                if st.button("🤖 Genera Diagnosi Avanzata", key=f"ia_{section_key}_{i}", help="Usa l'IA per analizzare lo storico"):
-                    with st.spinner("L'analista IA sta esaminando lo storico..."):
-                        analisi = analizza_storico_con_ia(pd.DataFrame(task['storico']))
-                        st.session_state[f"analisi_{section_key}_{i}"] = analisi
-                if f"analisi_{section_key}_{i}" in st.session_state:
-                    analisi = st.session_state[f"analisi_{section_key}_{i}"]
-                    if "error" in analisi: st.error(f"**Errore IA:** {analisi['error']}")
-                    elif "info" in analisi: st.info(analisi["info"])
-                    else:
-                        st.write(f"**Profilo:** {analisi.get('profilo', 'N/D')}")
-                        st.write(f"**Diagnosi:** {analisi.get('diagnosi_tematica', 'N/D')}")
-                        st.info(f"**Azione Strategica:** {analisi.get('azione_strategica', 'N/D')}")
-            
             st.markdown("---")
             # --- LOGICA RUOLO ---
             if len(task.get('team', [])) > 1 and ruolo_utente == "Aiutante":
                 st.warning("ℹ️ Solo i tecnici possono compilare il report per questa attività di team.")
             else:
-                col1, col2 = st.columns(2)
-                if col1.button("✍️ Compila Report Guidato (IA)", key=f"guide_{section_key}_{i}"):
-                    st.session_state.debriefing_task = {**task, "section_key": section_key}
-                    st.session_state.report_mode = 'guided'
-                    st.rerun()
-                if col2.button("📝 Compila Report Manuale", key=f"manual_{section_key}_{i}"):
+                if st.button("📝 Compila Report", key=f"manual_{section_key}_{i}"):
                     st.session_state.debriefing_task = {**task, "section_key": section_key}
                     st.session_state.report_mode = 'manual'
                     st.rerun()
@@ -370,29 +277,19 @@ def render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento):
     task = st.session_state.debriefing_task
     section_key = task['section_key']
 
-    def handle_submit(report_text, stato, answers_dict=None):
+    def handle_submit(report_text, stato):
         if report_text.strip():
-            if answers_dict and 'equipment' in answers_dict and answers_dict['equipment'].startswith("Altro:"):
-                report_lines = {k: v for k, v in answers_dict.items() if k != 'equipment'}
-                learning_module.add_new_entry(
-                    pdl=task['pdl'],
-                    attivita=task['attivita'],
-                    report_lines=report_lines,
-                    tecnico=matricola_utente
-                )
-                st.info("💡 La tua segnalazione per 'Altro' è stata registrata e sarà usata per migliorare il sistema.")
-
             dati = {
                 'descrizione': f"PdL {task['pdl']} - {task['attivita']}",
                 'report': report_text,
                 'stato': stato
             }
 
-            # La nuova funzione scrive direttamente nel DB e non ha più bisogno del client_google o del row_index
+            # La nuova funzione scrive direttamente nel DB
             success = scrivi_o_aggiorna_risposta(dati, matricola_utente, data_riferimento)
 
             if success:
-                completed_task_data = {**task, 'report': report_text, 'stato': stato, 'answers': answers_dict}
+                completed_task_data = {**task, 'report': report_text, 'stato': stato}
                 
                 completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
                 completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
@@ -406,7 +303,6 @@ def render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento):
 
                 st.success("Report inviato con successo al database!")
                 del st.session_state.debriefing_task
-                if 'answers' in st.session_state: del st.session_state.answers
                 st.balloons()
                 st.rerun()
             else:
@@ -414,95 +310,19 @@ def render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento):
         else:
             st.warning("Il report non può essere vuoto.")
 
-    # Il resto della funzione 'render_debriefing_ui' continua da qui...
-    if st.session_state.report_mode == 'manual':
-        st.title("📝 Compilazione Manuale")
-        st.subheader(f"PdL `{task['pdl']}` - {task['attivita']}")
-        report_text = st.text_area("Inserisci il tuo report qui:", value=task.get('report', ''), height=200)
-        stato_options = ["TERMINATA", "SOSPESA", "IN CORSO", "NON SVOLTA"]
-        stato_index = stato_options.index(task.get('stato')) if task.get('stato') in stato_options else 0
-        stato = st.selectbox("Stato Finale", stato_options, index=stato_index, key="manual_stato")
-        
-        col1, col2 = st.columns(2)
-        if col1.button("Invia Report", type="primary"):
-            handle_submit(report_text, stato)
-        if col2.button("Annulla"):
-            del st.session_state.debriefing_task; st.rerun()
-        return
-
-    st.title("✍️ Debriefing Guidato (IA)")
+    # Interfaccia di compilazione manuale (unica modalità rimasta)
+    st.title("📝 Compila Report")
     st.subheader(f"PdL `{task['pdl']}` - {task['attivita']}")
-
-    is_editing = bool(task.get('answers'))
-
-    if 'answers' not in st.session_state:
-        st.session_state.answers = task.get('answers', {}) if is_editing else {}
-        if not st.session_state.answers:
-            for key in knowledge_core:
-                if key.replace("_", " ") in task['attivita'].lower():
-                    st.session_state.answers['equipment'] = knowledge_core[key]['display_name']; break
-    
-    answers = st.session_state.answers
-    
-    if 'equipment' not in answers:
-        st.markdown("#### 1. Attrezzatura gestita?")
-        cols = st.columns(len(knowledge_core))
-        for i, (key, value) in enumerate(knowledge_core.items()):
-            if cols[i].button(value['display_name'], key=f"eq_{key}"):
-                answers['equipment'] = value['display_name']; st.rerun()
-        other_input = st.text_input("Altra attrezzatura (specificare)", key="eq_other")
-        if st.button("Conferma Altro", key="conf_eq_other") and other_input:
-            answers['equipment'] = f"Altro: {other_input}"; st.rerun()
-        if st.button("Torna alla lista attività"):
-            del st.session_state.debriefing_task; st.rerun()
-        return
-
-    equipment_name = answers['equipment'].split(': ')[-1]
-    equipment_key = next((k for k, v in knowledge_core.items() if v['display_name'] == equipment_name), None)
-    
-    final_report_text = ""
-    
-    if not equipment_key:
-        st.info(f"Hai specificato un'attrezzatura non standard: **{equipment_name}**")
-        final_report_text = st.text_area("Descrivi l'intervento eseguito:", value=answers.get('report_text', ''), height=150, key="other_equip_report")
-    else:
-        equipment = knowledge_core[equipment_key]
-        path_key = answers.get('Tipo', 'root')
-        questions = equipment.get('questions', []) + equipment.get('paths', {}).get(path_key.lower().replace(" / ", "_").split(' ')[0], {}).get('questions', [])
-        
-        for i, q in enumerate(questions):
-            q_id = q['id']
-            if q_id.capitalize() not in answers:
-                st.markdown(f"#### {i + 2}. {q['text']}")
-                options = list(q['options'].values())
-                cols = st.columns(len(options))
-                for j, opt_val in enumerate(options):
-                    if cols[j].button(opt_val, key=f"{q_id}_{j}"):
-                        answers[q_id.capitalize()] = opt_val; st.rerun()
-                other_input = st.text_input("Altro (specificare e confermare)", key=f"{q_id}_other")
-                if st.button("Conferma Altro", key=f"conf_{q_id}") and other_input:
-                    answers[q_id.capitalize()] = f"Altro: {other_input}"; st.rerun()
-                if st.button("Torna alla lista attività"):
-                    del st.session_state.debriefing_task; st.rerun()
-                return
-        
-        st.success("Tutte le domande completate!")
-        final_report_lines = [f"- **{k}:** {v}" for k, v in answers.items() if k != 'equipment']
-        final_report_text = "\n".join(final_report_lines)
-        st.markdown("---"); st.subheader("Riepilogo Report Generato")
-        st.markdown(f"**Attrezzatura:** {answers['equipment']}\n{final_report_text}")
-
+    report_text = st.text_area("Inserisci il tuo report qui:", value=task.get('report', ''), height=200)
     stato_options = ["TERMINATA", "SOSPESA", "IN CORSO", "NON SVOLTA"]
     stato_index = stato_options.index(task.get('stato')) if task.get('stato') in stato_options else 0
-    stato = st.selectbox("Stato Finale", stato_options, index=stato_index)
+    stato = st.selectbox("Stato Finale", stato_options, index=stato_index, key="manual_stato")
     
     col1, col2 = st.columns(2)
-    if col1.button("✅ Invia Report", type="primary"):
-        full_report_str = f"Attrezzatura: {answers.get('equipment', 'N/D')}\n{final_report_text}"
-        handle_submit(full_report_str, stato, answers)
+    if col1.button("Invia Report", type="primary"):
+        handle_submit(report_text, stato)
     if col2.button("Annulla"):
-        del st.session_state.debriefing_task; 
-        if 'answers' in st.session_state: del st.session_state.answers
+        del st.session_state.debriefing_task
         st.rerun()
 
 
@@ -1842,7 +1662,9 @@ def main_app(matricola_utente, ruolo):
     elif st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
-            render_debriefing_ui(knowledge_core, matricola_utente, datetime.date.today())
+            task_info = st.session_state.debriefing_task
+            data_riferimento_attivita = task_info.get('data_attivita', datetime.date.today())
+            render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento_attivita)
     else:
         # Header con titolo, notifiche e pulsante di logout
         col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
@@ -2031,42 +1853,46 @@ def main_app(matricola_utente, ruolo):
                         elif not testo_da_inviare.strip():
                             st.error("Il corpo della relazione non può essere vuoto prima di inviare.")
                         else:
-                            partner_text = f" in coppia con {partner_selezionato}" if partner_selezionato != "Nessuno" else ""
-                            titolo_email = f"Relazione di Reperibilità del {data_intervento.strftime('%d/%m/%Y')} - {nome_utente_autenticato}"
-                            html_body = f"""
-                            <h3>Relazione di Reperibilità</h3>
-                            <p><strong>Data:</strong> {data_intervento.strftime('%d/%m/%Y')}</p>
-                            <p><strong>Tecnico:</strong> {nome_utente_autenticato}{partner_text}</p>
-                            <p><strong>Orario:</strong> Da {ora_inizio or 'N/D'} a {ora_fine or 'N/D'}</p>
-                            <hr>
-                            <h4>Testo della Relazione:</h4>
-                            <p>{testo_da_inviare.replace('\n', '<br>')}</p>
-                            """
-                            invia_email_con_outlook_async(titolo_email, html_body)
-                            st.success("Relazione inviata con successo!")
+                            id_relazione = f"REL_{int(datetime.datetime.now().timestamp())}"
+                            dati_nuova_relazione = {
+                                "id_relazione": id_relazione,
+                                "data_intervento": data_intervento.isoformat(),
+                                "tecnico_compilatore": nome_utente_autenticato,
+                                "partner": partner_selezionato if partner_selezionato != "Nessuno" else None,
+                                "ora_inizio": ora_inizio,
+                                "ora_fine": ora_fine,
+                                "corpo_relazione": testo_da_inviare,
+                                "stato": "Inviata",
+                                "timestamp_invio": datetime.datetime.now().isoformat()
+                            }
 
-                            # --- Logica di salvataggio per apprendimento continuo ---
-                            try:
-                                reports_dir = "relazioni_inviate"
-                                os.makedirs(reports_dir, exist_ok=True)
-
-                                # FIX: Usa la data dell'intervento per il timestamp del file, non la data corrente.
-                                # Aggiunge anche l'ora corrente per evitare sovrascritture se ci sono più report nello stesso giorno.
-                                timestamp_str = data_intervento.strftime("%Y%m%d") + "_" + datetime.datetime.now().strftime("%H%M%S")
-                                filename = os.path.join(reports_dir, f"relazione_{timestamp_str}.txt")
-
-                                with open(filename, "w", encoding="utf-8") as f:
-                                    f.write(testo_da_inviare)
-                                st.toast("Relazione salvata per l'apprendimento futuro dell'IA.")
-                            except Exception as e:
-                                st.warning(f"Non è stato possibile salvare la relazione per l'IA: {e}")
-
-                            st.balloons()
-                            # Svuota i campi dopo l'invio
-                            st.session_state.relazione_testo = ""
-                            st.session_state.relazione_revisionata = ""
-                            st.session_state.technical_suggestions = []
-                            st.rerun()
+                            if salva_relazione(dati_nuova_relazione):
+                                st.success("Relazione salvata e inviata con successo!")
+                                partner_text = f" in coppia con {partner_selezionato}" if partner_selezionato != "Nessuno" else ""
+                                titolo_email = f"Relazione di Reperibilità del {data_intervento.strftime('%d/%m/%Y')} - {nome_utente_autenticato}"
+                                html_body = f"""
+                                <html><head><style>body {{ font-family: Calibri, sans-serif; }}</style></head><body>
+                                <h3>Relazione di Reperibilità</h3>
+                                <p><strong>Data:</strong> {data_intervento.strftime('%d/%m/%Y')}</p>
+                                <p><strong>Tecnico:</strong> {nome_utente_autenticato}{partner_text}</p>
+                                <p><strong>Orario:</strong> Da {ora_inizio or 'N/D'} a {ora_fine or 'N/D'}</p>
+                                <hr>
+                                <h4>Testo della Relazione:</h4>
+                                <p>{testo_da_inviare.replace('\n', '<br>')}</p>
+                                <br><hr>
+                                <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
+                                <p><strong>Gianky Allegretti</strong><br>Direttore Tecnico</p>
+                                </body></html>
+                                """
+                                invia_email_con_outlook_async(titolo_email, html_body)
+                                st.balloons()
+                                # Svuota i campi dopo l'invio
+                                st.session_state.relazione_testo = ""
+                                st.session_state.relazione_revisionata = ""
+                                st.session_state.technical_suggestions = []
+                                st.rerun()
+                            else:
+                                st.error("Errore durante il salvataggio della relazione nel database.")
 
                     if st.session_state.get('relazione_revisionata'):
                         st.subheader("Testo corretto dall'IA")
@@ -2089,62 +1915,76 @@ def main_app(matricola_utente, ruolo):
 
         elif selected_tab == "Database":
             from modules.db_manager import get_archive_filter_options, get_filtered_archived_activities
-            st.subheader("Ricerca nel Database")
-            filter_options = get_archive_filter_options()
+            st.header("Archivio Storico")
+            db_tab1, db_tab2 = st.tabs(["Ricerca Attività", "Elenco Relazioni"])
 
-            def set_date_range_15_days():
-                st.session_state.db_end_date = datetime.date.today()
-                st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
+            with db_tab1:
+                st.subheader("Ricerca nel Database Attività")
+                filter_options = get_archive_filter_options()
 
-            if 'db_start_date' not in st.session_state: st.session_state.db_start_date = None
-            if 'db_end_date' not in st.session_state: st.session_state.db_end_date = None
+                def set_date_range_15_days():
+                    st.session_state.db_end_date = datetime.date.today()
+                    st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
 
-            c1, c2, c3, c4 = st.columns(4)
-            with c1: pdl_search = st.text_input("Filtra per PdL", key="db_pdl_search")
-            with c2: desc_search = st.text_input("Filtra per Descrizione", key="db_desc_search")
-            with c3: imp_search = st.multiselect("Filtra per Impianto", options=filter_options['impianti'], key="db_imp_search")
-            with c4: tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
+                if 'db_start_date' not in st.session_state: st.session_state.db_start_date = None
+                if 'db_end_date' not in st.session_state: st.session_state.db_end_date = None
 
-            st.divider()
-            st.markdown("##### Filtra per Data Intervento")
-            d1, d2, d3, d4 = st.columns([1,1,1,2])
-            with d1: st.date_input("Da:", key="db_start_date", format="DD/MM/YYYY")
-            with d2: st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
-            with d3: st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
+                c1, c2, c3, c4 = st.columns(4)
+                with c1: pdl_search = st.text_input("Filtra per PdL", key="db_pdl_search")
+                with c2: desc_search = st.text_input("Filtra per Descrizione", key="db_desc_search")
+                with c3: imp_search = st.multiselect("Filtra per Impianto", options=filter_options['impianti'], key="db_imp_search")
+                with c4: tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
 
-            interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
-            st.divider()
-            st.info("""**Nota:** Vengono visualizzate le 30 attività più recenti con uno storico compilato. Usa i filtri per una ricerca più specifica. Per cercare anche le attività pianificate ma non ancora eseguite, deseleziona la casella "Mostra solo interventi eseguiti".""")
+                st.divider()
+                st.markdown("##### Filtra per Data Intervento")
+                d1, d2, d3, d4 = st.columns([1,1,1,2])
+                with d1: st.date_input("Da:", key="db_start_date", format="DD/MM/YYYY")
+                with d2: st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
+                with d3: st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
 
-            search_is_active = pdl_search or desc_search or imp_search or tec_search or (st.session_state.db_start_date and st.session_state.db_end_date)
+                interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
+                st.divider()
+                st.info("""**Nota:** Vengono visualizzate le 30 attività più recenti con uno storico compilato. Usa i filtri per una ricerca più specifica. Per cercare anche le attività pianificate ma non ancora eseguite, deseleziona la casella "Mostra solo interventi eseguiti".""")
 
-            with st.spinner("Ricerca in corso nel database..."):
-                risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, interventi_eseguiti_only, st.session_state.db_start_date, st.session_state.db_end_date)
+                search_is_active = pdl_search or desc_search or imp_search or tec_search or (st.session_state.db_start_date and st.session_state.db_end_date)
 
-            if risultati_df.empty: st.info("Nessun record trovato.")
-            else:
-                if not search_is_active:
-                    display_df = risultati_df.head(30)
-                    st.info(f"Visualizzazione delle {len(display_df)} attività più recenti.")
-                    for _, row in display_df.iterrows():
-                        pdl, impianto, descrizione, storico = row['PdL'], row.get('IMP', 'N/D'), row.get('DESCRIZIONE_ATTIVITA', 'N/D'), row.get('Storico', [])
-                        with st.expander(f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."):
-                            visualizza_storico_organizzato(storico, pdl)
+                with st.spinner("Ricerca in corso nel database..."):
+                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, interventi_eseguiti_only, st.session_state.db_start_date, st.session_state.db_end_date)
+
+                if risultati_df.empty: st.info("Nessun record trovato.")
                 else:
-                    st.info(f"Trovati {len(risultati_df)} PdL corrispondenti ai filtri.")
-                    ITEMS_PER_PAGE = 20
-                    if 'db_search_page' not in st.session_state: st.session_state.db_search_page = 0
-                    start_idx = st.session_state.db_search_page * ITEMS_PER_PAGE
-                    end_idx = start_idx + ITEMS_PER_PAGE
-                    items_to_display_df = risultati_df.iloc[start_idx:end_idx]
-                    for _, row in items_to_display_df.iterrows():
-                        pdl, impianto, descrizione, storico = row['PdL'], row.get('IMP', 'N/D'), row.get('DESCRIZIONE_ATTIVITA', 'N/D'), row.get('Storico', [])
-                        with st.expander(f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."):
-                            visualizza_storico_organizzato(storico, pdl)
-                    total_results = len(risultati_df)
-                    if end_idx < total_results:
-                        st.divider()
-                        if st.button("Carica Altri Risultati..."): st.session_state.db_search_page += 1; st.rerun()
+                    if not search_is_active:
+                        display_df = risultati_df.head(30)
+                        st.info(f"Visualizzazione delle {len(display_df)} attività più recenti.")
+                        for _, row in display_df.iterrows():
+                            pdl, impianto, descrizione, storico = row['PdL'], row.get('IMP', 'N/D'), row.get('DESCRIZIONE_ATTIVITA', 'N/D'), row.get('Storico', [])
+                            with st.expander(f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."):
+                                visualizza_storico_organizzato(storico, pdl)
+                    else:
+                        st.info(f"Trovati {len(risultati_df)} PdL corrispondenti ai filtri.")
+                        ITEMS_PER_PAGE = 20
+                        if 'db_search_page' not in st.session_state: st.session_state.db_search_page = 0
+                        start_idx = st.session_state.db_search_page * ITEMS_PER_PAGE
+                        end_idx = start_idx + ITEMS_PER_PAGE
+                        items_to_display_df = risultati_df.iloc[start_idx:end_idx]
+                        for _, row in items_to_display_df.iterrows():
+                            pdl, impianto, descrizione, storico = row['PdL'], row.get('IMP', 'N/D'), row.get('DESCRIZIONE_ATTIVITA', 'N/D'), row.get('Storico', [])
+                            with st.expander(f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."):
+                                visualizza_storico_organizzato(storico, pdl)
+                        total_results = len(risultati_df)
+                        if end_idx < total_results:
+                            st.divider()
+                            if st.button("Carica Altri Risultati..."): st.session_state.db_search_page += 1; st.rerun()
+
+            with db_tab2:
+                st.subheader("Elenco Completo Relazioni Inviate")
+                relazioni_df = get_all_relazioni()
+                if relazioni_df.empty:
+                    st.info("Nessuna relazione trovata nel database.")
+                else:
+                    relazioni_df['data_intervento'] = pd.to_datetime(relazioni_df['data_intervento']).dt.strftime('%d/%m/%Y')
+                    relazioni_df['timestamp_invio'] = pd.to_datetime(relazioni_df['timestamp_invio']).dt.strftime('%d/%m/%Y %H:%M')
+                    st.dataframe(relazioni_df, use_container_width=True)
 
         elif selected_tab == "📅 Gestione Turni":
             st.subheader("Gestione Turni")
@@ -2228,7 +2068,20 @@ def main_app(matricola_utente, ruolo):
                             if salva_gestionale_async(gestionale_data):
                                 st.success("Richiesta materiali inviata con successo!")
                                 titolo_email = f"Nuova Richiesta Materiali da {nome_utente_autenticato}"
-                                html_body = f"""<h3>Nuova Richiesta Materiali</h3><p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p><p><strong>Data e Ora:</strong> {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}</p><hr><h4>Materiali Richiesti:</h4><p>{dettagli_richiesta.replace('\n', '<br>')}</p>"""
+                                html_body = f"""
+                                <html><head><style>body {{ font-family: Calibri, sans-serif; }}</style></head><body>
+                                <h3>Nuova Richiesta Materiali</h3>
+                                <p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p>
+                                <p><strong>Data e Ora:</strong> {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+                                <hr>
+                                <h4>Materiali Richiesti:</h4>
+                                <p>{dettagli_richiesta.replace('\n', '<br>')}</p>
+                                <br><hr>
+                                <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
+                                <p><strong>Gianky Allegretti</strong><br>
+                                Direttore Tecnico</p>
+                                </body></html>
+                                """
                                 invia_email_con_outlook_async(titolo_email, html_body)
                                 st.rerun()
                             else: st.error("Errore durante il salvataggio della richiesta.")
@@ -2266,7 +2119,21 @@ def main_app(matricola_utente, ruolo):
                                 if salva_gestionale_async(gestionale_data):
                                     st.success("Richiesta di assenza inviata con successo!")
                                     titolo_email = f"Nuova Richiesta di Assenza da {nome_utente_autenticato}"
-                                    html_body = f"""<h3>Nuova Richiesta di Assenza</h3><p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p><p><strong>Tipo:</strong> {tipo_assenza}</p><p><strong>Periodo:</strong> dal {data_inizio.strftime('%d/%m/%Y')} al {data_fine.strftime('%d/%m/%Y')}</p><hr><h4>Note:</h4><p>{note_assenza.replace('\n', '<br>') if note_assenza else 'Nessuna nota.'}</p>"""
+                                    html_body = f"""
+                                    <html><head><style>body {{ font-family: Calibri, sans-serif; }}</style></head><body>
+                                    <h3>Nuova Richiesta di Assenza</h3>
+                                    <p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p>
+                                    <p><strong>Tipo:</strong> {tipo_assenza}</p>
+                                    <p><strong>Periodo:</strong> dal {data_inizio.strftime('%d/%m/%Y')} al {data_fine.strftime('%d/%m/%Y')}</p>
+                                    <hr>
+                                    <h4>Note:</h4>
+                                    <p>{note_assenza.replace('\n', '<br>') if note_assenza else 'Nessuna nota.'}</p>
+                                    <br><hr>
+                                    <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
+                                    <p><strong>Gianky Allegretti</strong><br>
+                                    Direttore Tecnico</p>
+                                    </body></html>
+                                    """
                                     invia_email_con_outlook_async(titolo_email, html_body)
                                     st.rerun()
                                 else: st.error("Errore durante il salvataggio della richiesta.")
@@ -2371,7 +2238,45 @@ def main_app(matricola_utente, ruolo):
                                     st.info(message)
                                     st.cache_data.clear()
                                 else: st.error(f"Errore durante la sincronizzazione: {message}")
-                    with caposquadra_tabs[3]: render_report_validation_tab(matricola_utente)
+                    with caposquadra_tabs[3]:
+                        validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
+                        with validation_tabs[0]:
+                            render_report_validation_tab(matricola_utente)
+                        with validation_tabs[1]:
+                            st.subheader("Validazione Relazioni Inviate")
+                            unvalidated_relazioni_df = get_unvalidated_relazioni()
+
+                            if unvalidated_relazioni_df.empty:
+                                st.success("🎉 Nessuna nuova relazione da validare al momento.")
+                            else:
+                                st.info(f"Ci sono {len(unvalidated_relazioni_df)} relazioni da validare.")
+
+                                # Convert date columns for better display in data_editor
+                                if 'data_intervento' in unvalidated_relazioni_df.columns:
+                                    unvalidated_relazioni_df['data_intervento'] = pd.to_datetime(unvalidated_relazioni_df['data_intervento'], errors='coerce').dt.strftime('%d/%m/%Y')
+                                if 'timestamp_invio' in unvalidated_relazioni_df.columns:
+                                    unvalidated_relazioni_df['timestamp_invio'] = pd.to_datetime(unvalidated_relazioni_df['timestamp_invio'], errors='coerce').dt.strftime('%d/%m/%Y %H:%M')
+
+
+                                edited_relazioni_df = st.data_editor(
+                                    unvalidated_relazioni_df,
+                                    num_rows="dynamic",
+                                    key="relazioni_editor",
+                                    use_container_width=True,
+                                    column_config={
+                                        "corpo_relazione": st.column_config.TextColumn(width="large"),
+                                        "id_relazione": st.column_config.Column(disabled=True),
+                                        "timestamp_invio": st.column_config.Column(disabled=True),
+                                    }
+                                )
+
+                                if st.button("✅ Salva Relazioni Validate", type="primary"):
+                                    with st.spinner("Salvataggio delle relazioni in corso..."):
+                                        if process_and_commit_validated_relazioni(edited_relazioni_df, matricola_utente):
+                                            st.success("Relazioni validate e salvate con successo!")
+                                            st.rerun()
+                                        else:
+                                            st.error("Si è verificato un errore durante il salvataggio delle relazioni.")
                 with main_admin_tabs[1]:
                     tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
                     with tecnica_tabs[0]: render_gestione_account(gestionale_data)

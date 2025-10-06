@@ -19,7 +19,8 @@ SHEET_TABLE_MAP = {
     "Bacheca": ("bacheca", "ID_Bacheca"),
     "Richieste Materiali": ("richieste_materiali", "ID_Richiesta"),
     "Richieste Assenze": ("richieste_assenze", "ID_Richiesta"),
-    "Access Logs": ("access_logs", None) # Append-only, no PK needed
+    "Access Logs": ("access_logs", None), # Append-only, no PK needed
+    "Relazioni": ("relazioni", "id_relazione")
 }
 
 def is_valid_bcrypt_hash(h):
@@ -275,6 +276,19 @@ def crea_tabelle_se_non_esistono():
                 data TEXT NOT NULL,
                 status TEXT NOT NULL,
                 FOREIGN KEY (user_matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )""",
+            "relazioni": """(
+                id_relazione TEXT PRIMARY KEY NOT NULL,
+                data_intervento TEXT,
+                tecnico_compilatore TEXT,
+                partner TEXT,
+                ora_inizio TEXT,
+                ora_fine TEXT,
+                corpo_relazione TEXT,
+                stato TEXT,
+                timestamp_invio TEXT,
+                id_validatore TEXT,
+                timestamp_validazione TEXT
             )"""
         }
 
