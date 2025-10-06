@@ -190,7 +190,8 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
     import sqlite3
 
     azione = "inviato"
-    timestamp = datetime.datetime.now()
+    # Utilizza la data di riferimento dell'attività per il timestamp, non la data corrente.
+    timestamp = datetime.datetime.combine(data_riferimento, datetime.datetime.min.time())
     data_riferimento_str = data_riferimento.strftime('%d/%m/%Y')
 
     conn = None
