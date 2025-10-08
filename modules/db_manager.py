@@ -371,9 +371,18 @@ def process_and_commit_validated_reports(validated_data: list):
                     stato_attivita_db = report_text.upper()
                     stato_pdl_db = status_map.get(original_status, original_status)
 
+                    # Estrai e formatta il cognome del tecnico
+                    personale_impiegato_db = ""
+                    tecnico_name = report.get('Tecnico', '')
+                    if tecnico_name and ' ' in tecnico_name:
+                        personale_impiegato_db = tecnico_name.split()[-1].upper()
+                    elif tecnico_name:
+                        personale_impiegato_db = tecnico_name.upper()
+
+
                     cursor.execute(
-                        "UPDATE attivita_programmate SET Storico = ?, STATO_ATTIVITA = ?, STATO_PdL = ?, db_last_modified = NULL WHERE PdL = ?",
-                        (new_storico_json, stato_attivita_db, stato_pdl_db, pdl)
+                        "UPDATE attivita_programmate SET Storico = ?, STATO_ATTIVITA = ?, STATO_PdL = ?, PERSONALE_IMPIEGATO = ?, db_last_modified = NULL WHERE PdL = ?",
+                        (new_storico_json, stato_attivita_db, stato_pdl_db, personale_impiegato_db, pdl)
                     )
         return True
     except sqlite3.Error as e:
