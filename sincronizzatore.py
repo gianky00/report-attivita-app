@@ -150,6 +150,7 @@ def sync_data(df_excel, df_db):
                 excel_mixed_update = {col: db_row.get(col) for col in BIDIRECTIONAL_COLUMNS}
                 excel_mixed_update[PRIMARY_KEY] = key
                 excel_mixed_update[SOURCE_SHEET_COLUMN] = excel_row.get(SOURCE_SHEET_COLUMN)
+                excel_mixed_update[TIMESTAMP_COLUMN] = db_ts
                 excel_updates.append(excel_mixed_update)
 
     logging.info(f"Calcolate {len(db_inserts)} inserimenti DB, {len(db_updates)} aggiornamenti DB, {len(excel_updates)} aggiornamenti Excel.")
@@ -293,7 +294,7 @@ def commit_to_excel(updates):
                         excel_row_num = row_idx_0based + first_data_row
                         row_updated = False
                         for db_col, value in update.items():
-                            if db_col in [PRIMARY_KEY, TIMESTAMP_COLUMN, SOURCE_SHEET_COLUMN]:
+                            if db_col in [PRIMARY_KEY, SOURCE_SHEET_COLUMN]:
                                 continue
 
                             excel_col_name = REVERSE_HEADER_MAP.get(db_col)
