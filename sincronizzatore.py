@@ -267,7 +267,7 @@ def commit_to_excel(updates):
                 first_data_row = 4
                 
                 last_row = ws.Cells(ws.Rows.Count, 1).End(-4162).Row # xlUp
-                last_col = ws.Cells(header_row, ws.Columns.Count).End(-4159).Row # xlToLeft
+                last_col = ws.Cells(header_row, ws.Columns.Count).End(-4159).Column # xlToLeft
                 
                 header = [cell.Value for cell in ws.Range(ws.Cells(header_row, 1), ws.Cells(header_row, last_col))]
                 
@@ -279,7 +279,7 @@ def commit_to_excel(updates):
                 
                 # Leggi tutta la tabella di dati in un'unica operazione
                 data_range = ws.Range(ws.Cells(first_data_row, 1), ws.Cells(last_row, last_col))
-                data_array = list(data_range.Value)
+                data_array = [list(row) for row in data_range.Value]
 
                 # Crea una mappa per ricerca rapida: Valore PdL -> indice della riga (0-based)
                 pdl_to_row_index = {str(row[pdl_col_idx_0based]): i for i, row in enumerate(data_array) if row[pdl_col_idx_0based]}
