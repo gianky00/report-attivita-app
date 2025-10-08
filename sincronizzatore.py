@@ -267,7 +267,7 @@ def commit_to_excel(updates):
                 first_data_row = 4
                 
                 last_row = ws.Cells(ws.Rows.Count, 1).End(-4162).Row # xlUp
-                last_col = ws.Cells(header_row, ws.Columns.Count).End(-4159).Row # xlToLeft
+                last_col = ws.Cells(header_row, ws.Columns.Count).End(-4159).Column # xlToLeft
                 
                 header = [cell.Value for cell in ws.Range(ws.Cells(header_row, 1), ws.Cells(header_row, last_col))]
                 

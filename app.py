@@ -868,7 +868,7 @@ def render_report_validation_tab(user_matricola):
             st.session_state.validation_df,
             num_rows="dynamic",
             key=f"data_editor_{session_id}",
-            use_container_width=True,
+            width='stretch',
             column_config={
                 "Report": st.column_config.TextColumn(width="large"),
                 "Descrizione": st.column_config.TextColumn(width="medium"),
@@ -1238,7 +1238,7 @@ def render_situazione_impianti_tab():
                 },
                 "params": []
             }
-            st.vega_lite_chart(chart_data, vega_spec, use_container_width=True)
+            st.vega_lite_chart(chart_data, vega_spec, width='stretch')
         else:
             st.info("Nessun dato per il grafico.")
     else:
@@ -1345,7 +1345,7 @@ def render_programmazione_tab():
             },
             "params": []
         }
-        st.vega_lite_chart(chart_data, vega_spec, use_container_width=True)
+        st.vega_lite_chart(chart_data, vega_spec, width='stretch')
 
     st.divider()
 
@@ -1441,7 +1441,7 @@ def render_access_logs_tab(gestionale_data):
             'status': 'Esito'
         }, inplace=True)
 
-        st.dataframe(display_df[['Data e Ora', 'Nome Utente/Matricola', 'Esito']], use_container_width=True)
+        st.dataframe(display_df[['Data e Ora', 'Nome Utente/Matricola', 'Esito']], width='stretch')
 
 
 def render_guida_tab(ruolo):
@@ -1984,7 +1984,7 @@ def main_app(matricola_utente, ruolo):
                 else:
                     relazioni_df['data_intervento'] = pd.to_datetime(relazioni_df['data_intervento']).dt.strftime('%d/%m/%Y')
                     relazioni_df['timestamp_invio'] = pd.to_datetime(relazioni_df['timestamp_invio']).dt.strftime('%d/%m/%Y %H:%M')
-                    st.dataframe(relazioni_df, use_container_width=True)
+                    st.dataframe(relazioni_df, width='stretch')
 
         elif selected_tab == "📅 Gestione Turni":
             st.subheader("Gestione Turni")
@@ -2097,7 +2097,7 @@ def main_app(matricola_utente, ruolo):
                     df_richieste_con_nome['Timestamp'] = pd.to_datetime(df_richieste_con_nome['Timestamp'])
                     display_cols = ['Timestamp', 'Nome Cognome', 'Dettagli', 'Stato']
                     final_cols = [col for col in display_cols if col in df_richieste_con_nome.columns]
-                    st.dataframe(df_richieste_con_nome[final_cols].sort_values(by="Timestamp", ascending=False), use_container_width=True)
+                    st.dataframe(df_richieste_con_nome[final_cols].sort_values(by="Timestamp", ascending=False), width='stretch')
 
             with richieste_tabs[1]:
                 st.subheader("Richiesta Assenze (Ferie/Permessi)")
@@ -2147,7 +2147,7 @@ def main_app(matricola_utente, ruolo):
                         df_richieste_assenze['Timestamp'] = pd.to_datetime(df_richieste_assenze['Timestamp'])
                         df_richieste_assenze['Data_Inizio'] = pd.to_datetime(df_richieste_assenze['Data_Inizio']).dt.strftime('%d/%m/%Y')
                         df_richieste_assenze['Data_Fine'] = pd.to_datetime(df_richieste_assenze['Data_Fine']).dt.strftime('%d/%m/%Y')
-                        st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), use_container_width=True)
+                        st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), width='stretch')
 
         elif selected_tab == "❓ Guida":
             render_guida_tab(ruolo)
@@ -2262,7 +2262,7 @@ def main_app(matricola_utente, ruolo):
                                     unvalidated_relazioni_df,
                                     num_rows="dynamic",
                                     key="relazioni_editor",
-                                    use_container_width=True,
+                                    width='stretch',
                                     column_config={
                                         "corpo_relazione": st.column_config.TextColumn(width="large"),
                                         "id_relazione": st.column_config.Column(disabled=True),
