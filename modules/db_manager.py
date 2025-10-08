@@ -327,37 +327,53 @@ def get_unvalidated_reports():
             conn.close()
 
 def process_and_commit_validated_reports(validated_data: list):
-    """Processa i report validati, aggiornandoli nel DB e marcandoli come validati."""
+    """
+    Processa i report validati, applicando le trasformazioni richieste prima
+    di aggiornarli nel DB e marcarli come validati.
+    """
     conn = get_db_connection()
+    status_map = {
+        'SOSPESA': 'INTERROTTO',
+        'TERMINATA': 'DA CHIUDERE',
+        'IN CORSO': 'EMESSO',
+        'NON SVOLTA': 'EMESSO'
+    }
     try:
         with conn:
             cursor = conn.cursor()
             for report in validated_data:
                 pdl = report.get('PdL')
                 report_text = report.get('Report')
-                new_status = report.get('Stato')
+                original_status = report.get('Stato')
                 compilation_date = report.get('Data_Compilazione')
 
-                if not all([pdl, report_text, new_status, compilation_date]): continue
+                if not all([pdl, report_text, original_status, compilation_date]):
+                    continue
 
                 cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
                 result = cursor.fetchone()
-                if not result or not result['Storico']: continue
+                if not result or not result['Storico']:
+                    continue
 
                 storico_list = json.loads(result['Storico'])
                 report_found_and_updated = False
                 for i, storico_item in enumerate(storico_list):
                     if storico_item.get('Data_Compilazione') == compilation_date:
                         storico_list[i]['Report'] = report_text
-                        storico_list[i]['Stato'] = new_status
+                        storico_list[i]['Stato'] = original_status
                         report_found_and_updated = True
                         break
 
                 if report_found_and_updated:
                     new_storico_json = json.dumps(storico_list)
+
+                    # Applica le trasformazioni richieste
+                    stato_attivita_db = report_text.upper()
+                    stato_pdl_db = status_map.get(original_status, original_status)
+
                     cursor.execute(
                         "UPDATE attivita_programmate SET Storico = ?, STATO_ATTIVITA = ?, STATO_PdL = ?, db_last_modified = NULL WHERE PdL = ?",
-                        (new_storico_json, new_status, new_status, pdl)
+                        (new_storico_json, stato_attivita_db, stato_pdl_db, pdl)
                     )
         return True
     except sqlite3.Error as e:
