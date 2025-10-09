@@ -159,6 +159,7 @@ def sync_data(df_excel, df_db):
                 excel_mixed_update = {col: db_row.get(col) for col in BIDIRECTIONAL_COLUMNS}
                 excel_mixed_update[PRIMARY_KEY] = key
                 excel_mixed_update[SOURCE_SHEET_COLUMN] = excel_row.get(SOURCE_SHEET_COLUMN)
+                excel_mixed_update[TIMESTAMP_COLUMN] = db_ts
                 excel_updates.append(excel_mixed_update)
 
     logging.info(f"Calcolate {len(db_inserts)} inserimenti DB, {len(db_updates)} aggiornamenti DB, {len(excel_updates)} aggiornamenti Excel.")
@@ -271,7 +272,7 @@ def commit_to_excel(updates):
                 ws = workbook.Sheets(sheet_name)
                 logging.info(f"Processo il foglio '{sheet_name}' in modalità blocco...")
 
-                # --- OTTIMIZZAZIONE: LETTURA IN BLOCCO ---
+                # --- SCRITTURA CELLA-PER-CELLA PER ATTIVARE MACRO VBA ---
                 header_row = 3
                 first_data_row = 4
                 
@@ -286,41 +287,44 @@ def commit_to_excel(updates):
                     logging.error(f"Colonna '{PRIMARY_KEY}' non trovata nel foglio '{sheet_name}'. Salto.")
                     continue
                 
-                # Leggi tutta la tabella di dati in un'unica operazione
+                # Leggi tutta la tabella di dati per creare la mappa di ricerca
                 data_range = ws.Range(ws.Cells(first_data_row, 1), ws.Cells(last_row, last_col))
-                data_array = [list(row) for row in data_range.Value]
+                data_array_for_mapping = list(data_range.Value)
 
                 # Crea una mappa per ricerca rapida: Valore PdL -> indice della riga (0-based)
-                pdl_to_row_index = {str(row[pdl_col_idx_0based]): i for i, row in enumerate(data_array) if row[pdl_col_idx_0based]}
+                pdl_to_row_index = {str(row[pdl_col_idx_0based]): i for i, row in enumerate(data_array_for_mapping) if row and len(row) > pdl_col_idx_0based and row[pdl_col_idx_0based]}
                 
-                # --- OTTIMIZZAZIONE: MODIFICA IN MEMORIA ---
                 updated_in_sheet = 0
                 for update in sheet_updates:
                     pdl_to_find = update[PRIMARY_KEY]
-                    row_idx = pdl_to_row_index.get(pdl_to_find)
+                    row_idx_0based = pdl_to_row_index.get(pdl_to_find)
                     
-                    if row_idx is not None:
+                    if row_idx_0based is not None:
+                        excel_row_num = row_idx_0based + first_data_row
+                        row_updated = False
                         for db_col, value in update.items():
-                            if db_col == TIMESTAMP_COLUMN: continue
+                            if db_col in [PRIMARY_KEY, SOURCE_SHEET_COLUMN]:
+                                continue
 
                             excel_col_name = REVERSE_HEADER_MAP.get(db_col)
                             if excel_col_name in header:
                                 try:
-                                    col_idx = header.index(excel_col_name)
-                                    # Modifica l'array in memoria (velocissimo)
-                                    data_array[row_idx][col_idx] = str(value) if value is not None else ''
-                                except ValueError:
-                                    pass # La colonna non esiste nell'header letto
-                        updated_in_sheet += 1
+                                    col_idx_0based = header.index(excel_col_name)
+                                    excel_col_num = col_idx_0based + 1
+
+                                    # Scrittura diretta nella cella per attivare la macro VBA
+                                    ws.Cells(excel_row_num, excel_col_num).Value = str(value) if value is not None else ''
+                                    row_updated = True
+                                except (ValueError, IndexError):
+                                    pass # La colonna non è nell'header o altro errore di indice
+                        if row_updated:
+                            updated_in_sheet += 1
                     else:
                         logging.warning(f"PdL '{pdl_to_find}' non trovato nella mappa del foglio '{sheet_name}'.")
                 
-                # --- OTTIMIZZAZIONE: SCRITTURA IN BLOCCO ---
                 if updated_in_sheet > 0:
-                    logging.info(f"Scrittura di {len(data_array)} righe in blocco sul foglio '{sheet_name}'...")
-                    data_range.Value = data_array
                     total_updated_rows += updated_in_sheet
-                    logging.info("Scrittura in blocco completata.")
+                    logging.info(f"Aggiornate {updated_in_sheet} righe cella per cella nel foglio '{sheet_name}'.")
 
             except Exception as sheet_error:
                 logging.error(f"Errore durante l'elaborazione del foglio '{sheet_name}': {sheet_error}", exc_info=True)
