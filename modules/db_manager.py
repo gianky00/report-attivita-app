@@ -339,6 +339,7 @@ def process_and_commit_validated_reports(validated_data: list):
     report come validati, e aggiornando lo stato dell'attività principale.
     """
     from collections import defaultdict
+    import datetime
     conn = get_db_connection()
     status_map = {
         'SOSPESA': 'INTERROTTO', 'TERMINATA': 'DA CHIUDERE',
@@ -387,7 +388,8 @@ def process_and_commit_validated_reports(validated_data: list):
                 new_storico_json = json.dumps(storico_list)
 
                 if has_pending_reports:
-                    cursor.execute("UPDATE attivita_programmate SET Storico = ? WHERE PdL = ?", (new_storico_json, pdl))
+                    now_iso = datetime.datetime.now().isoformat()
+                    cursor.execute("UPDATE attivita_programmate SET Storico = ?, db_last_modified = ? WHERE PdL = ?", (new_storico_json, now_iso, pdl))
                 else:
                     cursor.execute("UPDATE attivita_programmate SET Storico = ?, db_last_modified = NULL WHERE PdL = ?", (new_storico_json, pdl))
         return True

@@ -144,7 +144,8 @@ def sync_data(df_excel, df_db):
                         "Tecnico": personale,
                         "Report": row_data.get('STATO_ATTIVITA', 'Dato importato da Excel.'),
                         "Stato": row_data.get('STATO_PdL', 'TERMINATA'),
-                        "Fonte": "Excel"
+                        "Fonte": "Excel",
+                        "validated": True
                     }
                     storico_da_excel.append(nuovo_intervento)
                 except (ValueError, TypeError):
@@ -198,7 +199,8 @@ def sync_data(df_excel, df_db):
                                 "Tecnico": personale,
                                 "Report": excel_row.get('STATO_ATTIVITA', 'Dato importato da Excel.'),
                                 "Stato": excel_row.get('STATO_PdL', 'TERMINATA'),
-                                "Fonte": "Excel"
+                                "Fonte": "Excel",
+                                "validated": True
                             }
                             storico_esistente.append(nuovo_intervento)
                             logging.info(f"PdL {key}: Aggiunto nuovo intervento dallo storico Excel.")
