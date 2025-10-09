@@ -162,28 +162,26 @@ def to_csv(df):
 
 # --- FUNZIONI INTERFACCIA UTENTE ---
 def visualizza_storico_organizzato(storico_list, pdl):
+    """Mostra lo storico di un'attività in modo organizzato, usando st.toggle."""
     if storico_list:
-        with st.expander(f"Mostra cronologia interventi per PdL {pdl}", expanded=True):
-            for intervento in storico_list:
-                intervento['data_dt'] = pd.to_datetime(intervento.get('Data_Riferimento'), dayfirst=True, errors='coerce')
-            
-            storico_filtrato = [i for i in storico_list if pd.notna(i['data_dt'])]
-            if not storico_filtrato:
-                st.info("Nessun intervento con data valida trovato.")
-                return
+        with st.expander(f"Mostra cronologia interventi per PdL {pdl}", expanded=False):
+            # Assicura che lo storico sia ordinato per data, dalla più recente
+            try:
+                storico_list.sort(key=lambda x: pd.to_datetime(x.get('Data_Riferimento_dt')), reverse=True)
+            except (TypeError, ValueError):
+                pass # Ignora errori di ordinamento se le date non sono valide
 
-            interventi_per_data = defaultdict(list)
-            for intervento in storico_filtrato:
-                interventi_per_data[intervento['data_dt'].strftime('%d/%m/%Y')].append(intervento)
-            
-            date_ordinate = sorted(interventi_per_data.keys(), key=lambda x: datetime.datetime.strptime(x, '%d/%m/%Y'), reverse=True)
+            for i, intervento in enumerate(storico_list):
+                data_dt = pd.to_datetime(intervento.get('Data_Riferimento_dt'), errors='coerce')
+                if pd.notna(data_dt):
+                    # Crea una chiave unica per il toggle basata sul pdl e sull'indice
+                    toggle_key = f"toggle_{pdl}_{i}"
+                    label = f"Intervento del {data_dt.strftime('%d/%m/%Y')}"
 
-            for data in date_ordinate:
-                with st.expander(f"Interventi del **{data}**"):
-                    for intervento_singolo in interventi_per_data[data]:
-                        st.markdown(f"**Tecnico:** {intervento_singolo.get('Tecnico', 'N/D')} - **Stato:** {intervento_singolo.get('Stato', 'N/D')}")
-                        st.markdown("**Report:**")
-                        st.info(f"{intervento_singolo.get('Report', 'Nessun report.')}")
+                    # Usa st.toggle per mostrare/nascondere i dettagli
+                    if st.toggle(label, key=toggle_key):
+                        st.markdown(f"**Data:** {data_dt.strftime('%d/%m/%Y')} - **Tecnico:** {intervento.get('Tecnico', 'N/D')}")
+                        st.info(f"**Report:** {intervento.get('Report', 'Nessun report.')}")
                         st.markdown("---")
     else:
         st.markdown("*Nessuno storico disponibile per questo PdL.*")
@@ -217,7 +215,7 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                     team_details_md += f"- {member['nome']} ({member['ruolo']}) | 🕒 {orari_str}\n"
                 st.info(team_details_md)
             # --- FINE LOGICA TEAM ---
-            
+
             visualizza_storico_organizzato(task.get('storico', []), task['pdl'])
             st.markdown("---")
             # --- LOGICA RUOLO ---
@@ -229,7 +227,7 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                     st.session_state.report_mode = 'manual'
                     st.rerun()
             # --- FINE LOGICA RUOLO ---
-    
+
     st.divider()
 
     if st.session_state.get(f"completed_tasks_{section_key}", []):
@@ -290,7 +288,7 @@ def render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento):
 
             if success:
                 completed_task_data = {**task, 'report': report_text, 'stato': stato}
-                
+
                 completed_list = st.session_state.get(f"completed_tasks_{section_key}", [])
                 completed_list = [t for t in completed_list if t['pdl'] != task['pdl']]
                 completed_list.append(completed_task_data)
@@ -767,7 +765,7 @@ def render_technician_detail_view():
         performance_df = st.session_state['performance_results']['df']
         if technician_name in performance_df.index:
             technician_metrics = performance_df.loc[technician_name]
-            
+
             # Mostra le metriche specifiche per il tecnico
             st.markdown("#### Riepilogo Metriche")
             c1, c2, c3, c4 = st.columns(4)
@@ -806,7 +804,7 @@ def render_technician_detail_view():
     # --- ANALISI AVANZATA ---
     st.markdown("---")
     st.markdown("### Analisi Avanzata")
-    
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1694,7 +1692,7 @@ def main_app(matricola_utente, ruolo):
                 st.rerun()
 
         oggi = datetime.date.today()
-        
+
         # Carica i dati delle attività una sola volta
         dati_programmati_df = carica_dati_attivita_programmate()
         attivita_da_recuperare = []
@@ -1753,7 +1751,7 @@ def main_app(matricola_utente, ruolo):
             horizontal=True,
             label_visibility="collapsed"
         )
-        
+
         st.divider()
 
         if selected_tab == "Attività Assegnate":
@@ -1942,38 +1940,65 @@ def main_app(matricola_utente, ruolo):
                 with d2: st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
                 with d3: st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
 
+                interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
                 st.divider()
-                st.info("""**Nota:** La ricerca mostra tutte le attività che hanno almeno un intervento registrato, ordinate per data dell'intervento più recente.""")
+                st.info("""**Nota:** Per impostazione predefinita, vengono visualizzate le 40 attività più recenti. Usa i filtri per una ricerca più specifica o il pulsante "Carica Altri" per visualizzare più risultati.""")
 
-                search_is_active = pdl_search or desc_search or imp_search or tec_search or (st.session_state.db_start_date and st.session_state.db_end_date)
+                # --- Logica Paginazione e Filtri Unificata ---
+                if 'db_page' not in st.session_state:
+                    st.session_state.db_page = 0
+
+                # Usiamo una chiave diversa per i filtri per non interferire con altri stati
+                current_db_filters = (
+                    pdl_search, desc_search, tuple(sorted(imp_search)),
+                    tuple(sorted(tec_search)), interventi_eseguiti_only,
+                    st.session_state.db_start_date, st.session_state.db_end_date
+                )
+
+                if st.session_state.get('last_db_filters') != current_db_filters:
+                    st.session_state.db_page = 0
+                    st.session_state.last_db_filters = current_db_filters
 
                 with st.spinner("Ricerca in corso nel database..."):
-                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, st.session_state.db_start_date, st.session_state.db_end_date)
+                    risultati_df = get_filtered_archived_activities(
+                        pdl_search, desc_search, imp_search, tec_search,
+                        interventi_eseguiti_only, st.session_state.db_start_date,
+                        st.session_state.db_end_date
+                    )
 
-                if risultati_df.empty: st.info("Nessun record trovato.")
+                if risultati_df.empty:
+                    st.info("Nessun record trovato.")
                 else:
-                    if not search_is_active:
-                        display_df = risultati_df.head(30)
-                        st.info(f"Visualizzazione delle {len(display_df)} attività più recenti.")
-                        for _, row in display_df.iterrows():
-                            pdl, impianto, descrizione, storico = row['PdL'], row.get('IMP', 'N/D'), row.get('DESCRIZIONE_ATTIVITA', 'N/D'), row.get('Storico', [])
-                            with st.expander(f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."):
-                                visualizza_storico_organizzato(storico, pdl)
+                    ITEMS_PER_PAGE = 40
+                    total_results = len(risultati_df)
+
+                    # Calcola l'indice di fine basato sulla pagina corrente
+                    end_idx = (st.session_state.db_page + 1) * ITEMS_PER_PAGE
+                    items_to_display_df = risultati_df.iloc[0:end_idx]
+
+                    search_is_active = any(current_db_filters[:-2]) or all(current_db_filters[-2:])
+                    if search_is_active:
+                        st.info(f"Trovati {total_results} risultati. Visualizzati {len(items_to_display_df)}.")
                     else:
-                        st.info(f"Trovati {len(risultati_df)} PdL corrispondenti ai filtri.")
-                        ITEMS_PER_PAGE = 20
-                        if 'db_search_page' not in st.session_state: st.session_state.db_search_page = 0
-                        start_idx = st.session_state.db_search_page * ITEMS_PER_PAGE
-                        end_idx = start_idx + ITEMS_PER_PAGE
-                        items_to_display_df = risultati_df.iloc[start_idx:end_idx]
-                        for _, row in items_to_display_df.iterrows():
-                            pdl, impianto, descrizione, storico = row['PdL'], row.get('IMP', 'N/D'), row.get('DESCRIZIONE_ATTIVITA', 'N/D'), row.get('Storico', [])
-                            with st.expander(f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."):
-                                visualizza_storico_organizzato(storico, pdl)
-                        total_results = len(risultati_df)
-                        if end_idx < total_results:
-                            st.divider()
-                            if st.button("Carica Altri Risultati..."): st.session_state.db_search_page += 1; st.rerun()
+                        st.info(f"Visualizzati {len(items_to_display_df)} dei {total_results} interventi più recenti.")
+
+                    # Visualizzazione con expander
+                    for index, row in items_to_display_df.iterrows():
+                        pdl = row['PdL']
+                        impianto = row.get('IMP', 'N/D')
+                        descrizione = row.get('DESCRIZIONE_ATTIVITA', 'N/D')
+                        storico = row.get('Storico', [])
+
+                        expander_label = f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."
+                        with st.expander(expander_label):
+                            visualizza_storico_organizzato(storico, pdl)
+
+                    # Pulsante per caricare altri risultati
+                    if end_idx < total_results:
+                        st.divider()
+                        if st.button("Carica Altri", key="db_load_more"):
+                            st.session_state.db_page += 1
+                            st.rerun()
 
             with db_tab2:
                 st.subheader("Elenco Completo Relazioni Inviate")

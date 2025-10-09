@@ -4,16 +4,8 @@ import datetime
 import os
 import sys
 import logging
+import json
 from collections import defaultdict
-import warnings
-
-# Sopprime il warning specifico di openpyxl relativo alla "Print area"
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    module="openpyxl.reader.workbook",
-    message="Print area cannot be set to Defined name: .*."
-)
 
 try:
     import win32com.client as win32
@@ -55,6 +47,8 @@ HEADER_MAP = {
 }
 REVERSE_HEADER_MAP = {v: k for k, v in HEADER_MAP.items()}
 DB_COLUMNS = list(HEADER_MAP.values())
+if 'Storico' not in DB_COLUMNS:
+    DB_COLUMNS.append('Storico')
 
 BIDIRECTIONAL_COLUMNS = [
     'STATO_PdL', 'ESE', 'SAIT', 'PONTEROSSO', 'STATO_ATTIVITA',
@@ -135,6 +129,31 @@ def sync_data(df_excel, df_db):
             row_data = df_excel.loc[key].to_dict()
             row_data[PRIMARY_KEY] = key
             row_data[TIMESTAMP_COLUMN] = now
+
+            # --- Logica per creare lo storico da Excel ---
+            storico_da_excel = []
+            data_controllo = row_data.get('DATA_CONTROLLO')
+            personale = row_data.get('PERSONALE_IMPIEGATO')
+
+            if pd.notna(data_controllo) and pd.notna(personale):
+                try:
+                    data_controllo_dt = pd.to_datetime(data_controllo)
+                    nuovo_intervento = {
+                        "Data_Riferimento": data_controllo_dt.strftime('%d/%m/%Y'),
+                        "Data_Riferimento_dt": data_controllo_dt.isoformat(),
+                        "Tecnico": personale,
+                        "Report": row_data.get('STATO_ATTIVITA', 'Dato importato da Excel.'),
+                        "Stato": row_data.get('STATO_PdL', 'TERMINATA'),
+                        "Fonte": "Excel"
+                    }
+                    storico_da_excel.append(nuovo_intervento)
+                except (ValueError, TypeError):
+                    logging.warning(f"PdL {key}: formato data non valido per DATA_CONTROLLO '{data_controllo}'. Salto creazione storico.")
+
+            # Inizializza sempre la colonna Storico
+            row_data['Storico'] = json.dumps(storico_da_excel)
+            # --- Fine logica storico ---
+
             db_inserts.append(row_data)
         elif is_in_db and not is_in_excel:
             pass
@@ -144,12 +163,54 @@ def sync_data(df_excel, df_db):
             db_ts = db_row.get(TIMESTAMP_COLUMN)
             if pd.isna(excel_ts): excel_ts = datetime.datetime(2000, 1, 1)
             if pd.isna(db_ts): db_ts = datetime.datetime(2000, 1, 1)
-                
+
             if excel_ts.floor('s') > db_ts.floor('s'):
                 update_data = excel_row.to_dict()
                 update_data[PRIMARY_KEY] = key
                 update_data[TIMESTAMP_COLUMN] = excel_ts
+
+                # --- Logica per creare e unire lo storico ---
+                storico_esistente_str = db_row.get('Storico', '[]')
+                try:
+                    storico_esistente = json.loads(storico_esistente_str) if storico_esistente_str and pd.notna(storico_esistente_str) else []
+                    if not isinstance(storico_esistente, list): storico_esistente = []
+                except (json.JSONDecodeError, TypeError):
+                    storico_esistente = []
+
+                data_controllo = excel_row.get('DATA_CONTROLLO')
+                personale = excel_row.get('PERSONALE_IMPIEGATO')
+
+                if pd.notna(data_controllo) and pd.notna(personale):
+                    try:
+                        data_controllo_dt = pd.to_datetime(data_controllo)
+                        data_controllo_str = data_controllo_dt.strftime('%d/%m/%Y')
+
+                        # Controlla se un intervento simile (stessa data e fonte) esiste già per evitare duplicati
+                        intervento_esiste = any(
+                            interv.get('Data_Riferimento') == data_controllo_str and interv.get('Fonte') == 'Excel'
+                            for interv in storico_esistente
+                        )
+
+                        if not intervento_esiste:
+                            nuovo_intervento = {
+                                "Data_Riferimento": data_controllo_str,
+                                "Data_Riferimento_dt": data_controllo_dt.isoformat(),
+                                "Tecnico": personale,
+                                "Report": excel_row.get('STATO_ATTIVITA', 'Dato importato da Excel.'),
+                                "Stato": excel_row.get('STATO_PdL', 'TERMINATA'),
+                                "Fonte": "Excel"
+                            }
+                            storico_esistente.append(nuovo_intervento)
+                            logging.info(f"PdL {key}: Aggiunto nuovo intervento dallo storico Excel.")
+                    except (ValueError, TypeError):
+                        logging.warning(f"PdL {key}: formato data non valido per DATA_CONTROLLO '{data_controllo}'. Salto creazione storico.")
+
+                # Serializza lo storico aggiornato
+                update_data['Storico'] = json.dumps(storico_esistente)
+                # --- Fine logica storico ---
+
                 db_updates.append(update_data)
+
             elif db_ts.floor('s') > excel_ts.floor('s'):
                 db_mixed_update = {col: excel_row.get(col) for col in unidirectional_columns}
                 db_mixed_update[PRIMARY_KEY] = key
@@ -168,7 +229,7 @@ def commit_to_db(inserts, updates):
     if not inserts and not updates:
         logging.info("Nessun aggiornamento per il database.")
         return 0
-    
+
     total_ops = 0
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
@@ -187,7 +248,7 @@ def commit_to_db(inserts, updates):
                         elif isinstance(value, (datetime.datetime, pd.Timestamp)): full_row[key] = value.strftime(DATETIME_FORMAT)
                         else: full_row[key] = str(value)
                     insert_data.append(full_row)
-                
+
                 cols = ', '.join(f'"{k}"' for k in DB_COLUMNS)
                 placeholders = ', '.join([f':{k}' for k in DB_COLUMNS])
                 query = f'INSERT OR IGNORE INTO {DB_TABLE_NAME} ({cols}) VALUES ({placeholders})'
@@ -207,7 +268,7 @@ def commit_to_db(inserts, updates):
                         if pd.isna(value): update_values[key] = None
                         elif isinstance(value, (datetime.datetime, pd.Timestamp)): update_values[key] = value.strftime(DATETIME_FORMAT)
                         else: update_values[key] = str(value)
-                    
+
                     if update_values: # Solo se c'è qualcosa da aggiornare
                         update_values['pk'] = pk
                         update_data_list.append(update_values)
@@ -217,7 +278,7 @@ def commit_to_db(inserts, updates):
                 for data in update_data_list:
                     cols_to_update = tuple(sorted(k for k in data if k != 'pk'))
                     grouped_updates[cols_to_update].append(data)
-                
+
                 for cols, data_list in grouped_updates.items():
                     set_clause = ', '.join([f'"{k}" = :{k}' for k in cols])
                     query = f'UPDATE {DB_TABLE_NAME} SET {set_clause} WHERE "{PRIMARY_KEY}" = :pk'
@@ -256,7 +317,7 @@ def commit_to_excel(updates):
         if not os.path.exists(file_path):
             logging.error(f"File Excel non trovato: {file_path}")
             return -1
-            
+
         workbook = excel_app.Workbooks.Open(file_path, ReadOnly=False)
         logging.info(f"File '{EXCEL_FILE_NAME}' aperto in modalità ottimizzata.")
 
@@ -274,31 +335,31 @@ def commit_to_excel(updates):
                 # --- OTTIMIZZAZIONE: LETTURA IN BLOCCO ---
                 header_row = 3
                 first_data_row = 4
-                
+
                 last_row = ws.Cells(ws.Rows.Count, 1).End(-4162).Row # xlUp
                 last_col = ws.Cells(header_row, ws.Columns.Count).End(-4159).Column # xlToLeft
-                
+
                 header = [cell.Value for cell in ws.Range(ws.Cells(header_row, 1), ws.Cells(header_row, last_col))]
-                
+
                 try:
                     pdl_col_idx_0based = header.index(PRIMARY_KEY)
                 except ValueError:
                     logging.error(f"Colonna '{PRIMARY_KEY}' non trovata nel foglio '{sheet_name}'. Salto.")
                     continue
-                
+
                 # Leggi tutta la tabella di dati in un'unica operazione
                 data_range = ws.Range(ws.Cells(first_data_row, 1), ws.Cells(last_row, last_col))
                 data_array = [list(row) for row in data_range.Value]
 
                 # Crea una mappa per ricerca rapida: Valore PdL -> indice della riga (0-based)
                 pdl_to_row_index = {str(row[pdl_col_idx_0based]): i for i, row in enumerate(data_array) if row[pdl_col_idx_0based]}
-                
+
                 # --- OTTIMIZZAZIONE: MODIFICA IN MEMORIA ---
                 updated_in_sheet = 0
                 for update in sheet_updates:
                     pdl_to_find = update[PRIMARY_KEY]
                     row_idx = pdl_to_row_index.get(pdl_to_find)
-                    
+
                     if row_idx is not None:
                         for db_col, value in update.items():
                             if db_col == TIMESTAMP_COLUMN: continue
@@ -314,7 +375,7 @@ def commit_to_excel(updates):
                         updated_in_sheet += 1
                     else:
                         logging.warning(f"PdL '{pdl_to_find}' non trovato nella mappa del foglio '{sheet_name}'.")
-                
+
                 # --- OTTIMIZZAZIONE: SCRITTURA IN BLOCCO ---
                 if updated_in_sheet > 0:
                     logging.info(f"Scrittura di {len(data_array)} righe in blocco sul foglio '{sheet_name}'...")
@@ -332,7 +393,7 @@ def commit_to_excel(updates):
             logging.info(f"File Excel salvato con successo. Righe totali con modifiche: {total_updated_rows}.")
         else:
             logging.info("Nessuna riga è stata aggiornata in Excel.")
-            
+
         return total_updated_rows
 
     except pythoncom.com_error as e:
@@ -348,7 +409,7 @@ def commit_to_excel(updates):
             workbook.Close(SaveChanges=False)
         if excel_app:
             excel_app.Quit()
-        
+
         workbook = None
         excel_app = None
         pythoncom.CoUninitialize()

@@ -128,10 +128,9 @@ def get_archive_filter_options():
         if conn:
             conn.close()
 
-def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_search=None, tec_search=None, start_date=None, end_date=None):
+def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_search=None, tec_search=None, interventi_eseguiti_only=True, start_date=None, end_date=None):
     """
     Esegue una ricerca diretta e performante sul database delle attività archiviate.
-    Filtra sempre per attività che hanno almeno un intervento nello storico.
     """
     conn = get_db_connection()
 
@@ -139,8 +138,8 @@ def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_sear
     conditions = []
     params = []
 
-    # Condizione permanente: mostra solo attività con almeno un intervento.
-    conditions.append("(Storico IS NOT NULL AND Storico != '[]' AND Storico != '')")
+    if interventi_eseguiti_only:
+        conditions.append("(Storico IS NOT NULL AND Storico != '[]' AND Storico != '')")
 
     if pdl_search:
         conditions.append("PdL LIKE ?")
@@ -293,32 +292,39 @@ def delete_validation_session(session_id: str):
             conn.close()
 
 def get_unvalidated_reports():
-    """Recupera l'ultimo report per ogni attività in attesa di validazione, includendo la matricola."""
+    """Recupera tutti i singoli report che non sono ancora stati marcati come validati."""
     conn = get_db_connection()
     reports_to_validate = []
     try:
-        query = "SELECT PdL, DESCRIZIONE_ATTIVITA, Storico, db_last_modified FROM attivita_programmate WHERE db_last_modified IS NOT NULL ORDER BY db_last_modified DESC"
-        cursor = conn.cursor()
-        cursor.execute(query)
-        activities = cursor.fetchall()
+        # Seleziona le attività che hanno una modifica recente (potenzialmente hanno report non validati)
+        query = "SELECT PdL, DESCRIZIONE_ATTIVITA, Storico FROM attivita_programmate WHERE db_last_modified IS NOT NULL"
+        activities = conn.execute(query).fetchall()
 
         for activity in activities:
-            if activity['Storico']:
-                try:
-                    storico_list = json.loads(activity['Storico'])
-                    if storico_list:
-                        latest_report = storico_list[0]
+            if not activity['Storico']:
+                continue
+
+            try:
+                storico_list = json.loads(activity['Storico'])
+                for report in storico_list:
+                    # Un report è "non validato" se non ha la chiave 'validated' o se 'validated' è False.
+                    if not report.get('validated'):
                         reports_to_validate.append({
                             'PdL': activity['PdL'],
-                            'Descrizione': activity['DESCRIZIONE_ATTIVITA'], # Usa il nome corretto
-                            'Matricola': latest_report.get('Matricola', 'N/D'),
-                            'Tecnico': latest_report.get('Tecnico', 'N/D'),
-                            'Stato': latest_report.get('Stato', 'N/D'),
-                            'Report': latest_report.get('Report', 'Nessun report.'),
-                            'Data_Compilazione': latest_report.get('Data_Compilazione', activity['db_last_modified'])
+                            'Descrizione': activity['DESCRIZIONE_ATTIVITA'],
+                            'Matricola': report.get('Matricola', 'N/D'),
+                            'Tecnico': report.get('Tecnico', 'N/D'),
+                            'Stato': report.get('Stato', 'N/D'),
+                            'Report': report.get('Report', 'Nessun report.'),
+                            'Data_Compilazione': report.get('Data_Compilazione')
                         })
-                except json.JSONDecodeError:
-                    continue
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+        # Ordina i report per data di compilazione per mantenere un ordine consistente
+        if reports_to_validate:
+            reports_to_validate.sort(key=lambda x: x.get('Data_Compilazione') or '1970-01-01')
+
         return reports_to_validate
     except sqlite3.Error as e:
         print(f"Errore nel recuperare i report da validare: {e}")
@@ -329,62 +335,61 @@ def get_unvalidated_reports():
 
 def process_and_commit_validated_reports(validated_data: list):
     """
-    Processa i report validati, applicando le trasformazioni richieste prima
-    di aggiornarli nel DB e marcarli come validati.
+    Processa i report validati, applicando le trasformazioni richieste, marcando i singoli
+    report come validati, e aggiornando lo stato dell'attività principale.
     """
+    from collections import defaultdict
     conn = get_db_connection()
     status_map = {
-        'SOSPESA': 'INTERROTTO',
-        'TERMINATA': 'DA CHIUDERE',
-        'IN CORSO': 'EMESSO',
-        'NON SVOLTA': 'EMESSO'
+        'SOSPESA': 'INTERROTTO', 'TERMINATA': 'DA CHIUDERE',
+        'IN CORSO': 'EMESSO', 'NON SVOLTA': 'EMESSO'
     }
+
+    reports_by_pdl = defaultdict(list)
+    for report in validated_data:
+        if report.get('PdL'):
+            reports_by_pdl[report.get('PdL')].append(report)
+
     try:
         with conn:
             cursor = conn.cursor()
-            for report in validated_data:
-                pdl = report.get('PdL')
-                report_text = report.get('Report')
-                original_status = report.get('Stato')
-                compilation_date = report.get('Data_Compilazione')
-
-                if not all([pdl, report_text, original_status, compilation_date]):
-                    continue
-
+            for pdl, reports in reports_by_pdl.items():
                 cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
                 result = cursor.fetchone()
                 if not result or not result['Storico']:
+                    print(f"Attenzione: PdL {pdl} non trovato o senza storico, impossibile validare.")
                     continue
 
                 storico_list = json.loads(result['Storico'])
-                report_found_and_updated = False
-                for i, storico_item in enumerate(storico_list):
-                    if storico_item.get('Data_Compilazione') == compilation_date:
-                        storico_list[i]['Report'] = report_text
-                        storico_list[i]['Stato'] = original_status
-                        report_found_and_updated = True
-                        break
 
-                if report_found_and_updated:
-                    new_storico_json = json.dumps(storico_list)
+                for validated_report in reports:
+                    compilation_date = validated_report.get('Data_Compilazione')
+                    if not compilation_date: continue
 
-                    # Applica le trasformazioni richieste
-                    stato_attivita_db = report_text.upper()
-                    stato_pdl_db = status_map.get(original_status, original_status)
+                    for i, storico_item in enumerate(storico_list):
+                        if storico_item.get('Data_Compilazione') == compilation_date:
+                            storico_list[i]['Report'] = validated_report.get('Report')
+                            storico_list[i]['Stato'] = validated_report.get('Stato')
+                            storico_list[i]['validated'] = True
 
-                    # Estrai e formatta il cognome del tecnico
-                    personale_impiegato_db = ""
-                    tecnico_name = report.get('Tecnico', '')
-                    if tecnico_name and ' ' in tecnico_name:
-                        personale_impiegato_db = tecnico_name.split()[-1].upper()
-                    elif tecnico_name:
-                        personale_impiegato_db = tecnico_name.upper()
+                            stato_attivita_db = validated_report.get('Report', '').upper()
+                            stato_pdl_db = status_map.get(validated_report.get('Stato'), validated_report.get('Stato'))
+                            tecnico_name = validated_report.get('Tecnico', '')
+                            personale_impiegato_db = tecnico_name.split()[-1].upper() if ' ' in tecnico_name else tecnico_name.upper()
 
+                            cursor.execute(
+                                "UPDATE attivita_programmate SET STATO_ATTIVITA = ?, STATO_PdL = ?, PERSONALE_IMPIEGATO = ? WHERE PdL = ?",
+                                (stato_attivita_db, stato_pdl_db, personale_impiegato_db, pdl)
+                            )
+                            break
 
-                    cursor.execute(
-                        "UPDATE attivita_programmate SET Storico = ?, STATO_ATTIVITA = ?, STATO_PdL = ?, PERSONALE_IMPIEGATO = ?, db_last_modified = NULL WHERE PdL = ?",
-                        (new_storico_json, stato_attivita_db, stato_pdl_db, personale_impiegato_db, pdl)
-                    )
+                has_pending_reports = any(not item.get('validated') for item in storico_list)
+                new_storico_json = json.dumps(storico_list)
+
+                if has_pending_reports:
+                    cursor.execute("UPDATE attivita_programmate SET Storico = ? WHERE PdL = ?", (new_storico_json, pdl))
+                else:
+                    cursor.execute("UPDATE attivita_programmate SET Storico = ?, db_last_modified = NULL WHERE PdL = ?", (new_storico_json, pdl))
         return True
     except sqlite3.Error as e:
         print(f"Errore durante il salvataggio dei report validati: {e}")
