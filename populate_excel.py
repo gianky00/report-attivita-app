@@ -1,5 +1,14 @@
 import pandas as pd
 import os
+import warnings
+
+# Sopprime il warning specifico di openpyxl relativo alla "Print area"
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="openpyxl.reader.workbook",
+    message="Print area cannot be set to Defined name: .*."
+)
 
 # --- CONFIGURAZIONE ---
 EXCEL_FILE = "Gestionale_Tecnici.xlsx"

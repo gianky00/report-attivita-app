@@ -3,6 +3,15 @@ import pandas as pd
 import datetime
 from modules.notifications import crea_notifica
 import os
+import warnings
+
+# Sopprime il warning specifico di openpyxl relativo alla "Print area"
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="openpyxl.reader.workbook",
+    message="Print area cannot be set to Defined name: .*."
+)
 
 # --- LOGICA DI AUDITING ---
 LOG_FILE_PATH = 'Storico_Modifiche_Turni.xlsx'

@@ -5,6 +5,15 @@ import os
 import sys
 import logging
 from collections import defaultdict
+import warnings
+
+# Sopprime il warning specifico di openpyxl relativo alla "Print area"
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="openpyxl.reader.workbook",
+    message="Print area cannot be set to Defined name: .*."
+)
 
 try:
     import win32com.client as win32

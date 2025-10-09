@@ -4,6 +4,15 @@ import pandas as pd
 import bcrypt
 import datetime
 import shutil
+import warnings
+
+# Sopprime il warning specifico di openpyxl relativo alla "Print area"
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    module="openpyxl.reader.workbook",
+    message="Print area cannot be set to Defined name: .*."
+)
 
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
