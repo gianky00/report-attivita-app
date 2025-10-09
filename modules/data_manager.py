@@ -6,15 +6,6 @@ import datetime
 import re
 import threading
 import openpyxl
-import warnings
-
-# Sopprime il warning specifico di openpyxl relativo alla "Print area"
-warnings.filterwarnings(
-    "ignore",
-    category=UserWarning,
-    module="openpyxl.reader.workbook",
-    message="Print area cannot be set to Defined name: .*."
-)
 
 import config
 from config import get_attivita_programmate_path, get_storico_db_path, get_gestionale_path
@@ -456,6 +447,7 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             st.error(f"Errore durante la ricerca attività per il {giorno}/{mese}/{anno}: {e}")
         return []
 
+@st.cache_data(ttl=600)
 def carica_dati_attivita_programmate():
     """
     Carica i dati delle attività programmate direttamente dal database SQLite.

@@ -5,6 +5,7 @@ import os
 import sys
 import logging
 from collections import defaultdict
+import json
 import warnings
 
 # Sopprime il warning specifico di openpyxl relativo alla "Print area"
@@ -149,6 +150,49 @@ def sync_data(df_excel, df_db):
                 update_data = excel_row.to_dict()
                 update_data[PRIMARY_KEY] = key
                 update_data[TIMESTAMP_COLUMN] = excel_ts
+
+                # --- Logica di unione dello Storico ---
+                # Se la riga Excel ha dati per creare uno storico, uniscilo con quello esistente
+                if pd.notna(excel_row.get('DATA_CONTROLLO')) and pd.notna(excel_row.get('PERSONALE_IMPIEGATO')):
+                    try:
+                        data_riferimento = pd.to_datetime(excel_row['DATA_CONTROLLO'], errors='coerce')
+                        if not pd.isna(data_riferimento):
+                            nuovo_intervento = {
+                                "PdL": key,
+                                "Descrizione": excel_row.get('DESCRIZIONE_ATTIVITA'),
+                                "Stato": excel_row.get('STATO_PdL'),
+                                "Data_Riferimento": data_riferimento.strftime('%d/%m/%Y'),
+                                "Data_Riferimento_dt": data_riferimento.isoformat(),
+                                "Tecnico": excel_row.get('PERSONALE_IMPIEGATO'),
+                                "Report": excel_row.get('STATO_ATTIVITA', 'Nessun report da Excel.'),
+                                "Data_Compilazione": data_riferimento.isoformat()
+                            }
+
+                            # Carica lo storico esistente dal DB, se presente
+                            storico_esistente_json = db_row.get('Storico')
+                            storico_esistente = []
+                            if storico_esistente_json and isinstance(storico_esistente_json, str):
+                                try:
+                                    storico_esistente = json.loads(storico_esistente_json)
+                                except (json.JSONDecodeError, TypeError):
+                                    storico_esistente = []
+
+                            # Aggiungi il nuovo intervento e rimuovi duplicati basati sulla data di compilazione
+                            storico_esistente.append(nuovo_intervento)
+
+                            # Usa un set per tenere traccia delle date di compilazione uniche e mantenere l'ordine
+                            seen_dates = set()
+                            storico_unificato = []
+                            for intervento in sorted(storico_esistente, key=lambda x: x.get('Data_Compilazione', ''), reverse=True):
+                                comp_date = intervento.get('Data_Compilazione')
+                                if comp_date not in seen_dates:
+                                    storico_unificato.append(intervento)
+                                    seen_dates.add(comp_date)
+
+                            update_data['Storico'] = json.dumps(storico_unificato)
+                    except Exception as e:
+                        logging.warning(f"Impossibile creare lo storico per PdL {key} da Excel. Errore: {e}")
+
                 db_updates.append(update_data)
             elif db_ts.floor('s') > excel_ts.floor('s'):
                 db_mixed_update = {col: excel_row.get(col) for col in unidirectional_columns}
