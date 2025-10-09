@@ -1942,14 +1942,13 @@ def main_app(matricola_utente, ruolo):
                 with d2: st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
                 with d3: st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
 
-                interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
                 st.divider()
-                st.info("""**Nota:** Vengono visualizzate le 30 attività più recenti con uno storico compilato. Usa i filtri per una ricerca più specifica. Per cercare anche le attività pianificate ma non ancora eseguite, deseleziona la casella "Mostra solo interventi eseguiti".""")
+                st.info("""**Nota:** La ricerca mostra tutte le attività che hanno almeno un intervento registrato, ordinate per data dell'intervento più recente.""")
 
                 search_is_active = pdl_search or desc_search or imp_search or tec_search or (st.session_state.db_start_date and st.session_state.db_end_date)
 
                 with st.spinner("Ricerca in corso nel database..."):
-                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, interventi_eseguiti_only, st.session_state.db_start_date, st.session_state.db_end_date)
+                    risultati_df = get_filtered_archived_activities(pdl_search, desc_search, imp_search, tec_search, st.session_state.db_start_date, st.session_state.db_end_date)
 
                 if risultati_df.empty: st.info("Nessun record trovato.")
                 else:

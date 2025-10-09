@@ -456,7 +456,6 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             st.error(f"Errore durante la ricerca attività per il {giorno}/{mese}/{anno}: {e}")
         return []
 
-@st.cache_data(ttl=600)
 def carica_dati_attivita_programmate():
     """
     Carica i dati delle attività programmate direttamente dal database SQLite.

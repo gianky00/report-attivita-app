@@ -128,9 +128,10 @@ def get_archive_filter_options():
         if conn:
             conn.close()
 
-def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_search=None, tec_search=None, interventi_eseguiti_only=True, start_date=None, end_date=None):
+def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_search=None, tec_search=None, start_date=None, end_date=None):
     """
     Esegue una ricerca diretta e performante sul database delle attività archiviate.
+    Filtra sempre per attività che hanno almeno un intervento nello storico.
     """
     conn = get_db_connection()
 
@@ -138,8 +139,8 @@ def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_sear
     conditions = []
     params = []
 
-    if interventi_eseguiti_only:
-        conditions.append("(Storico IS NOT NULL AND Storico != '[]' AND Storico != '')")
+    # Condizione permanente: mostra solo attività con almeno un intervento.
+    conditions.append("(Storico IS NOT NULL AND Storico != '[]' AND Storico != '')")
 
     if pdl_search:
         conditions.append("PdL LIKE ?")
