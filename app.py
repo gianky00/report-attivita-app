@@ -39,9 +39,7 @@ from modules.data_manager import (
 )
 from modules.db_manager import (
     get_shifts_by_type, get_filtered_activities, get_technician_performance_data,
-    get_interventions_for_technician, get_unvalidated_reports,
-    create_validation_session, get_active_validation_session,
-    update_validation_session_data, delete_validation_session,
+    get_interventions_for_technician, get_reports_to_validate, delete_reports_by_ids,
     process_and_commit_validated_reports, salva_relazione, get_all_relazioni,
     get_unvalidated_relazioni, process_and_commit_validated_relazioni
 )
@@ -838,92 +836,91 @@ def render_report_validation_tab(user_matricola):
     st.subheader("Validazione Report Tecnici")
     st.info("""
     Questa sezione permette di validare i report inviati dai tecnici.
-    - **Carica Report**: Avvia una nuova sessione di validazione con gli ultimi report non ancora processati.
-    - **Sessione Persistente**: La sessione rimane attiva anche se chiudi o aggiorni la pagina.
-    - **Modifica Live**: Puoi modificare i dati direttamente nella tabella. Ogni modifica viene salvata automaticamente.
-    - **Valida e Salva**: Invia le modifiche finali al database e chiude la sessione.
-    - **Cancella**: Annulla la sessione corrente, eliminando tutte le modifiche non salvate.
+    - I report in attesa vengono caricati automaticamente.
+    - Puoi modificare il **Testo Report** e lo **Stato Attività** direttamente nella tabella.
+    - Seleziona uno o più report e clicca "Cancella" per rimuoverli definitivamente in caso di errore.
+    - Clicca "Valida e Salva Modifiche" per processare i report, scriverli su Excel e rimuoverli da questa coda.
     """)
 
-    # 1. Controlla se esiste una sessione di validazione attiva per l'utente
-    active_session = get_active_validation_session(user_matricola)
+    # Carica i report direttamente dalla nuova tabella
+    reports_df = get_reports_to_validate()
 
-    if active_session:
-        st.markdown("---")
-        st.subheader("📝 Sessione di Validazione in Corso")
+    if reports_df.empty:
+        st.success("🎉 Nessun nuovo report da validare al momento.")
+        return
 
-        session_id = active_session["session_id"]
-        report_data = active_session["data"]
+    # Aggiungi una colonna per le checkbox di cancellazione
+    reports_df.insert(0, "delete", False)
 
-        # Usa un DataFrame per st.data_editor
-        # Inizializza o aggiorna il DataFrame in session_state solo se necessario
-        if 'validation_df' not in st.session_state or st.session_state.get('validation_session_id') != session_id:
-             st.session_state.validation_df = pd.DataFrame(report_data)
-             st.session_state.validation_session_id = session_id
+    st.markdown("---")
+    st.markdown(f"**Ci sono {len(reports_df)} report in attesa di validazione.**")
 
-        # L'editor dati
-        edited_df = st.data_editor(
-            st.session_state.validation_df,
-            num_rows="dynamic",
-            key=f"data_editor_{session_id}",
-            width='stretch',
-            column_config={
-                "Report": st.column_config.TextColumn(width="large"),
-                "Descrizione": st.column_config.TextColumn(width="medium"),
-                "PdL": st.column_config.TextColumn(width="small"),
-                "Tecnico": st.column_config.TextColumn(width="small"),
-                "Stato": st.column_config.TextColumn(width="small"),
-            },
-            disabled=["PdL", "Descrizione", "Tecnico", "Data_Compilazione", "Matricola"]
-        )
+    # Colonne da disabilitare nell'editor
+    disabled_cols = [
+        "id_report", "pdl", "descrizione_attivita", "matricola_tecnico",
+        "nome_tecnico", "data_compilazione", "data_riferimento_attivita"
+    ]
 
-        # Salva le modifiche in tempo reale
-        if not edited_df.equals(st.session_state.validation_df):
-            update_validation_session_data(session_id, edited_df.to_dict('records'))
-            st.session_state.validation_df = edited_df.copy() # Aggiorna lo stato base
-            st.toast("Modifiche salvate nella sessione.")
+    # Usa data_editor per la modifica e la selezione
+    edited_df = st.data_editor(
+        reports_df,
+        key="validation_editor",
+        num_rows="dynamic",
+        width='stretch',
+        column_config={
+            "delete": st.column_config.CheckboxColumn(
+                "Cancella",
+                help="Seleziona per cancellare il report.",
+                default=False,
+            ),
+            "id_report": None, # Nasconde la colonna ID
+            "pdl": st.column_config.Column("PdL", width="small"),
+            "descrizione_attivita": st.column_config.Column("Descrizione", width="medium"),
+            "matricola_tecnico": None,
+            "nome_tecnico": st.column_config.Column("Tecnico", width="small"),
+            "stato_attivita": st.column_config.Column("Stato", width="small"),
+            "testo_report": st.column_config.TextColumn("Report", width="large"),
+            "data_compilazione": st.column_config.DatetimeColumn(
+                "Data Compilazione",
+                format="DD/MM/YYYY HH:mm",
+                width="small"
+            ),
+            "data_riferimento_attivita": None,
+        },
+        disabled=disabled_cols
+    )
 
-        st.markdown("---")
+    st.markdown("---")
 
-        # Pulsanti di azione
-        col1, col2, col3 = st.columns([2, 2, 5])
-        with col1:
-            if st.button("✅ Valida e Salva Modifiche", type="primary", width='stretch'):
+    col1, col2, col3 = st.columns([2, 2, 5])
+
+    with col1:
+        # Filtra i report non selezionati per la cancellazione per il pulsante di validazione
+        reports_to_validate_df = edited_df[edited_df["delete"] == False]
+        if not reports_to_validate_df.empty:
+            if st.button("✅ Valida e Salva Modifiche", type="primary", use_container_width=True):
+                # Rimuovi la colonna 'delete' prima di processare
+                reports_to_process = reports_to_validate_df.drop(columns=['delete'])
+
                 with st.spinner("Salvataggio dei report validati in corso..."):
-                    if process_and_commit_validated_reports(edited_df.to_dict('records')):
-                        delete_validation_session(session_id)
+                    # Questa funzione sarà modificata nel prossimo step per scrivere su Excel
+                    if process_and_commit_validated_reports(reports_to_process.to_dict('records')):
                         st.success("Report validati e salvati con successo!")
-                        # Pulisci lo stato per forzare il ricaricamento
-                        if 'validation_df' in st.session_state: del st.session_state.validation_df
-                        if 'validation_session_id' in st.session_state: del st.session_state.validation_session_id
                         st.rerun()
                     else:
                         st.error("Si è verificato un errore durante il salvataggio dei report.")
 
-        with col2:
-            if st.button("❌ Cancella Sessione", width='stretch'):
-                if delete_validation_session(session_id):
-                    st.info("Sessione di validazione cancellata.")
-                    # Pulisci lo stato
-                    if 'validation_df' in st.session_state: del st.session_state.validation_df
-                    if 'validation_session_id' in st.session_state: del st.session_state.validation_session_id
+    with col2:
+        # Trova i report selezionati per la cancellazione
+        reports_to_delete_df = edited_df[edited_df["delete"] == True]
+        if not reports_to_delete_df.empty:
+            if st.button(f"❌ Cancella {len(reports_to_delete_df)} Report", use_container_width=True):
+                ids_to_delete = reports_to_delete_df["id_report"].tolist()
+                if delete_reports_by_ids(ids_to_delete):
+                    st.success(f"{len(ids_to_delete)} report sono stati cancellati con successo.")
                     st.rerun()
                 else:
-                    st.error("Errore durante la cancellazione della sessione.")
-    else:
-        # Se non c'è una sessione attiva, mostra il pulsante per crearne una
-        st.markdown("---")
-        if st.button("📥 Carica Report da Validare", type="primary"):
-            unvalidated_reports = get_unvalidated_reports()
-            if unvalidated_reports:
-                session_id = create_validation_session(user_matricola, unvalidated_reports)
-                if session_id:
-                    st.success(f"Creati {len(unvalidated_reports)} report da validare. La sessione è iniziata.")
-                    st.rerun()
-                else:
-                    st.error("Impossibile creare una sessione di validazione.")
-            else:
-                st.success("🎉 Nessun nuovo report da validare al momento.")
+                    st.error("Errore durante la cancellazione dei report.")
 
 def render_reperibilita_tab(gestionale_data, matricola_utente, ruolo_utente):
     st.subheader("📅 Calendario Reperibilità Settimanale")
@@ -2251,17 +2248,19 @@ def main_app(matricola_utente, ruolo):
                                     else: st.error("Errore nel salvataggio del nuovo turno.")
                     with caposquadra_tabs[2]:
                         st.header("Gestione e Sincronizzazione Dati")
-                        st.info("Questa sezione permette di avviare la sincronizzazione bidirezionale tra il file Excel `ATTIVITA_PROGRAMMATE.xlsm` e il database interno.")
-                        st.warning("**Funzionamento:**\n- **Bidirezionale per colonne di stato:** `STATO PdL`, `ESE`, `SAIT`, `PONTEROSSO`, `STATO ATTIVITA'`, `DATA CONTROLLO`, `PERSONALE IMPIEGATO` vengono sincronizzate in base al timestamp più recente.\n- **Unidirezionale (Excel -> DB) per le altre colonne:** Tutti gli altri dati di pianificazione vengono aggiornati solo da Excel verso il database.\n- Il processo aggiornerà sia il database che il file Excel nella stessa operazione.")
-                        if st.button("🔄 Sincronizza DB <-> EXCEL", type="primary", help="Avvia la sincronizzazione bidirezionale completa."):
+                        st.info("Questa sezione permette di avviare la sincronizzazione bidirezionale tra il file Excel `ATTIVITA_PROGRAMMATE.xlsm` e il database interno, e di lanciare le macro di aggiornamento.")
+                        st.warning("**Funzionamento:**\n- La sincronizzazione aggiorna sia il database che il file Excel `ATTIVITA_PROGRAMMATE.xlsm`.\n- Al termine, viene eseguita automaticamente la macro `AggiornaAttivitaProgrammate_Veloce` dal file `Database_Report_Attivita.xlsm`.")
+
+                        if st.button("🔄 Sincronizza DB <-> Excel e Avvia Macro", type="primary", help="Avvia la sincronizzazione bidirezionale e l'esecuzione della macro."):
                             from sincronizzatore import sincronizza_db_excel
                             with st.spinner("Sincronizzazione in corso... Non chiudere la pagina."):
                                 success, message = sincronizza_db_excel()
                                 if success:
-                                    st.success("Sincronizzazione completata con successo!")
+                                    st.success("Operazione completata!")
                                     st.info(message)
-                                    st.cache_data.clear()
-                                else: st.error(f"Errore durante la sincronizzazione: {message}")
+                                    st.cache_data.clear() # Pulisce la cache per ricaricare i dati aggiornati
+                                else:
+                                    st.error(f"Errore durante l'operazione: {message}")
                     with caposquadra_tabs[3]:
                         validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
                         with validation_tabs[0]:

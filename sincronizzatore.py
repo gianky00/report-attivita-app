@@ -445,6 +445,57 @@ def delete_rows_from_db(keys_to_delete):
             logging.error(f"Errore durante la cancellazione di righe dal DB: {e}", exc_info=True)
             return -1
 
+def run_excel_macro(file_name, macro_name):
+    """
+    Apre un file Excel, esegue una macro e lo salva.
+    """
+    if not win32 or not pythoncom:
+        logging.error("Libreria pywin32 non disponibile. Impossibile eseguire la macro.")
+        return False, "Libreria pywin32 non trovata."
+
+    excel_app = None
+    workbook = None
+    file_path = os.path.abspath(file_name)
+
+    if not os.path.exists(file_path):
+        logging.error(f"File per macro non trovato: {file_path}")
+        return False, f"File {file_name} non trovato."
+
+    try:
+        pythoncom.CoInitialize()
+        excel_app = win32.DispatchEx("Excel.Application")
+        excel_app.Visible = False
+        excel_app.DisplayAlerts = False
+
+        workbook = excel_app.Workbooks.Open(file_path)
+        logging.info(f"Esecuzione della macro '{macro_name}' nel file '{file_name}'...")
+
+        # Esegue la macro. Il formato 'NomeFile.xlsm!NomeMacro' è comune ma
+        # a volte basta solo il nome della macro, a seconda di come è definita.
+        excel_app.Run(macro_name)
+
+        workbook.Save()
+        logging.info("Macro eseguita e file salvato con successo.")
+
+        return True, "Macro eseguita con successo."
+
+    except pythoncom.com_error as e:
+        error_msg = f"Errore COM durante l'esecuzione della macro: {e}"
+        logging.error(error_msg, exc_info=True)
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"Errore generico durante l'esecuzione della macro: {e}"
+        logging.error(error_msg, exc_info=True)
+        return False, error_msg
+    finally:
+        if workbook:
+            workbook.Close(SaveChanges=False)
+        if excel_app:
+            excel_app.Quit()
+        pythoncom.CoUninitialize()
+        logging.info("Connessione a Excel per macro rilasciata.")
+
+
 def sincronizza_db_excel():
     if not create_lock():
         return False, "Processo di sincronizzazione già in corso."
@@ -480,6 +531,20 @@ def sincronizza_db_excel():
             f"- Righe rimosse dal DB: {deleted_ops}"
         )
         logging.info(message)
+
+        # --- ESECUZIONE MACRO ALLA FINE ---
+        logging.info("--- AVVIO ESECUZIONE MACRO POST-SINCRO ---")
+        macro_success, macro_message = run_excel_macro(
+            "Database_Report_Attivita.xlsm",
+            "AggiornaAttivitaProgrammate_Veloce"
+        )
+        if not macro_success:
+            # Non blocchiamo l'esito della sincronizzazione principale, ma logghiamo l'errore.
+            logging.error(f"La macro non è stata eseguita correttamente: {macro_message}")
+            message += f"\n\nATTENZIONE: Errore durante l'esecuzione della macro: {macro_message}"
+        else:
+            message += f"\n\n{macro_message}"
+
         return True, message
 
     except Exception as e:

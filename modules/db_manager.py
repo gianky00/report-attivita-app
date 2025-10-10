@@ -213,192 +213,93 @@ def get_filtered_archived_activities(pdl_search=None, desc_search=None, imp_sear
         if conn:
             conn.close()
 
-def create_validation_session(user_matricola: str, data: list) -> str:
-    """Crea una nuova sessione di validazione per un utente, usando la matricola."""
-    import uuid
-    import datetime
-
-    session_id = str(uuid.uuid4())
-    created_at = datetime.datetime.now().isoformat()
-    data_json = json.dumps(data)
-    status = "active"
-
+def get_reports_to_validate() -> pd.DataFrame:
+    """Carica tutti i report in attesa di validazione dalla tabella dedicata."""
     conn = get_db_connection()
     try:
-        with conn:
-            conn.execute("DELETE FROM validation_sessions WHERE user_matricola = ? AND status = 'active'", (user_matricola,))
-            conn.execute(
-                "INSERT INTO validation_sessions (session_id, user_matricola, created_at, data, status) VALUES (?, ?, ?, ?, ?)",
-                (session_id, user_matricola, created_at, data_json, status)
-            )
-        return session_id
-    except sqlite3.Error as e:
-        print(f"Errore durante la creazione della sessione di validazione per {user_matricola}: {e}")
-        return None
+        query = "SELECT * FROM report_da_validare ORDER BY data_compilazione ASC"
+        df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        print(f"Errore nel caricare i report da validare: {e}")
+        return pd.DataFrame()
     finally:
         if conn:
             conn.close()
 
-def get_active_validation_session(user_matricola: str) -> dict:
-    """Recupera la sessione di validazione attiva per una data matricola."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT session_id, data FROM validation_sessions WHERE user_matricola = ? AND status = 'active'", (user_matricola,))
-        result = cursor.fetchone()
-
-        if result:
-            return {
-                "session_id": result["session_id"],
-                "data": json.loads(result["data"])
-            }
-        return None
-    except (sqlite3.Error, json.JSONDecodeError) as e:
-        print(f"Errore nel recuperare la sessione di validazione attiva per {user_matricola}: {e}")
-        return None
-    finally:
-        if conn:
-            conn.close()
-
-def update_validation_session_data(session_id: str, new_data: list):
-    """Aggiorna i dati di una sessione di validazione esistente."""
+def delete_reports_by_ids(report_ids: list) -> bool:
+    """Cancella una lista di report dalla tabella di validazione."""
+    if not report_ids:
+        return True
     conn = get_db_connection()
     try:
         with conn:
-            conn.execute(
-                "UPDATE validation_sessions SET data = ? WHERE session_id = ?",
-                (json.dumps(new_data), session_id)
-            )
+            placeholders = ','.join('?' for _ in report_ids)
+            query = f"DELETE FROM report_da_validare WHERE id_report IN ({placeholders})"
+            conn.execute(query, report_ids)
         return True
     except sqlite3.Error as e:
-        print(f"Errore durante l'aggiornamento della sessione {session_id}: {e}")
+        print(f"Errore durante la cancellazione dei report: {e}")
         return False
     finally:
         if conn:
             conn.close()
 
-def delete_validation_session(session_id: str):
-    """Elimina una sessione di validazione."""
-    conn = get_db_connection()
-    try:
-        with conn:
-            conn.execute("DELETE FROM validation_sessions WHERE session_id = ?", (session_id,))
-        return True
-    except sqlite3.Error as e:
-        print(f"Errore durante l'eliminazione della sessione {session_id}: {e}")
-        return False
-    finally:
-        if conn:
-            conn.close()
-
-def get_unvalidated_reports():
-    """Recupera tutti i singoli report che non sono ancora stati marcati come validati."""
-    conn = get_db_connection()
-    reports_to_validate = []
-    try:
-        # Seleziona le attività che hanno una modifica recente (potenzialmente hanno report non validati)
-        query = "SELECT PdL, DESCRIZIONE_ATTIVITA, Storico FROM attivita_programmate WHERE db_last_modified IS NOT NULL"
-        activities = conn.execute(query).fetchall()
-
-        for activity in activities:
-            if not activity['Storico']:
-                continue
-
-            try:
-                storico_list = json.loads(activity['Storico'])
-                for report in storico_list:
-                    # Un report è "non validato" se non ha la chiave 'validated' o se 'validated' è False.
-                    if not report.get('validated'):
-                        reports_to_validate.append({
-                            'PdL': activity['PdL'],
-                            'Descrizione': activity['DESCRIZIONE_ATTIVITA'],
-                            'Matricola': report.get('Matricola', 'N/D'),
-                            'Tecnico': report.get('Tecnico', 'N/D'),
-                            'Stato': report.get('Stato', 'N/D'),
-                            'Report': report.get('Report', 'Nessun report.'),
-                            'Data_Compilazione': report.get('Data_Compilazione')
-                        })
-            except (json.JSONDecodeError, TypeError):
-                continue
-
-        # Ordina i report per data di compilazione per mantenere un ordine consistente
-        if reports_to_validate:
-            reports_to_validate.sort(key=lambda x: x.get('Data_Compilazione') or '1970-01-01')
-
-        return reports_to_validate
-    except sqlite3.Error as e:
-        print(f"Errore nel recuperare i report da validare: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-def process_and_commit_validated_reports(validated_data: list):
+def process_and_commit_validated_reports(validated_data: list) -> bool:
     """
-    Processa i report validati, applicando le trasformazioni richieste, marcando i singoli
-    report come validati, e aggiornando lo stato dell'attività principale.
+    Scrive i report validati nel file Excel 'Database_Report_Attivita.xlsm'
+    e poi li rimuove dalla tabella di validazione del database.
     """
-    from collections import defaultdict
-    import datetime
-    conn = get_db_connection()
-    status_map = {
-        'SOSPESA': 'INTERROTTO', 'TERMINATA': 'DA CHIUDERE',
-        'IN CORSO': 'EMESSO', 'NON SVOLTA': 'EMESSO'
-    }
+    import openpyxl
 
-    reports_by_pdl = defaultdict(list)
-    for report in validated_data:
-        if report.get('PdL'):
-            reports_by_pdl[report.get('PdL')].append(report)
+    EXCEL_REPORT_FILE = "Database_Report_Attivita.xlsm"
+    SHEET_NAME = "STRUMENTALE"
 
-    try:
-        with conn:
-            cursor = conn.cursor()
-            for pdl, reports in reports_by_pdl.items():
-                cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
-                result = cursor.fetchone()
-                if not result or not result['Storico']:
-                    print(f"Attenzione: PdL {pdl} non trovato o senza storico, impossibile validare.")
-                    continue
-
-                storico_list = json.loads(result['Storico'])
-
-                for validated_report in reports:
-                    compilation_date = validated_report.get('Data_Compilazione')
-                    if not compilation_date: continue
-
-                    for i, storico_item in enumerate(storico_list):
-                        if storico_item.get('Data_Compilazione') == compilation_date:
-                            storico_list[i]['Report'] = validated_report.get('Report')
-                            storico_list[i]['Stato'] = validated_report.get('Stato')
-                            storico_list[i]['validated'] = True
-
-                            stato_attivita_db = validated_report.get('Report', '').upper()
-                            stato_pdl_db = status_map.get(validated_report.get('Stato'), validated_report.get('Stato'))
-                            tecnico_name = validated_report.get('Tecnico', '')
-                            personale_impiegato_db = tecnico_name.split()[-1].upper() if ' ' in tecnico_name else tecnico_name.upper()
-
-                            cursor.execute(
-                                "UPDATE attivita_programmate SET STATO_ATTIVITA = ?, STATO_PdL = ?, PERSONALE_IMPIEGATO = ? WHERE PdL = ?",
-                                (stato_attivita_db, stato_pdl_db, personale_impiegato_db, pdl)
-                            )
-                            break
-
-                has_pending_reports = any(not item.get('validated') for item in storico_list)
-                new_storico_json = json.dumps(storico_list)
-
-                if has_pending_reports:
-                    now_iso = datetime.datetime.now().isoformat()
-                    cursor.execute("UPDATE attivita_programmate SET Storico = ?, db_last_modified = ? WHERE PdL = ?", (new_storico_json, now_iso, pdl))
-                else:
-                    cursor.execute("UPDATE attivita_programmate SET Storico = ?, db_last_modified = NULL WHERE PdL = ?", (new_storico_json, pdl))
+    if not validated_data:
         return True
-    except sqlite3.Error as e:
-        print(f"Errore durante il salvataggio dei report validati: {e}")
+
+    # 1. Scrivi su Excel
+    try:
+        # Carica il workbook preservando le macro
+        workbook = openpyxl.load_workbook(EXCEL_REPORT_FILE, keep_vba=True)
+        sheet = workbook[SHEET_NAME]
+
+        # Prepara le righe da aggiungere
+        for report_dict in validated_data:
+            # Ordine delle colonne: PdL, Descrizione, Matricola, Tecnico, Stato, Report, Data_Compilazione
+            row_to_add = [
+                report_dict.get('pdl'),
+                report_dict.get('descrizione_attivita'),
+                report_dict.get('matricola_tecnico'),
+                report_dict.get('nome_tecnico'),
+                report_dict.get('stato_attivita'),
+                report_dict.get('testo_report'),
+                report_dict.get('data_compilazione')
+            ]
+            sheet.append(row_to_add)
+
+        workbook.save(EXCEL_REPORT_FILE)
+        print(f"Aggiunte {len(validated_data)} righe al file Excel '{EXCEL_REPORT_FILE}'.")
+
+    except FileNotFoundError:
+        print(f"ERRORE: Il file '{EXCEL_REPORT_FILE}' non è stato trovato.")
         return False
-    finally:
-        if conn:
-            conn.close()
+    except KeyError:
+        print(f"ERRORE: Il foglio '{SHEET_NAME}' non è stato trovato nel file Excel.")
+        return False
+    except Exception as e:
+        print(f"Errore durante la scrittura sul file Excel: {e}")
+        return False
+
+    # 2. Se la scrittura su Excel è andata a buon fine, rimuovi i report dal DB
+    report_ids_to_delete = [report['id_report'] for report in validated_data]
+    if not delete_reports_by_ids(report_ids_to_delete):
+        print("ERRORE CRITICO: I report sono stati scritti su Excel ma non è stato possibile rimuoverli dal database.")
+        # In questo scenario, l'utente vedrà ancora i report nella UI, che è meglio
+        # che perderli del tutto. Potrà ri-validarli.
+        return False
+
+    return True
 
 def get_interventions_for_technician(technician_matricola: str, start_date, end_date) -> pd.DataFrame:
     """Recupera tutti gli interventi per una data matricola in un intervallo di tempo."""
