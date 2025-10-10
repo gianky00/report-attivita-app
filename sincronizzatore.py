@@ -28,10 +28,18 @@ LOCK_FILE = "sync.lock"
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 # --- LOGGING ---
+# Force re-configuration of logging
+root = logging.getLogger()
+if root.handlers:
+    for handler in root.handlers:
+        root.removeHandler(handler)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.FileHandler("sync_log.log", mode='w'), logging.StreamHandler()]
+    handlers=[
+        logging.FileHandler("sync_log.log", mode='w'),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 
 # --- MAPPATURA E COLONNE ---
@@ -128,7 +136,9 @@ def sync_data(df_excel, df_db):
         if is_in_excel and not is_in_db:
             row_data = df_excel.loc[key].to_dict()
             row_data[PRIMARY_KEY] = key
-            row_data[TIMESTAMP_COLUMN] = now
+            # Assegna il timestamp da Excel, non uno nuovo.
+            # Questo è il fix cruciale per evitare la sincronizzazione di massa al primo avvio.
+            row_data[TIMESTAMP_COLUMN] = df_excel.loc[key, TIMESTAMP_COLUMN]
 
             # --- Logica per creare lo storico da Excel ---
             storico_da_excel = []
@@ -156,6 +166,7 @@ def sync_data(df_excel, df_db):
             # --- Fine logica storico ---
 
             db_inserts.append(row_data)
+            # Non c'è bisogno di aggiornare Excel, i timestamp sono già allineati.
         elif is_in_db and not is_in_excel:
             pass
         elif is_in_excel and is_in_db:
