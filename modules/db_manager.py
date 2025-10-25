@@ -266,7 +266,7 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
 
         # Prepara le righe da aggiungere
         for report_dict in validated_data:
-            # Ordine delle colonne: PdL, Descrizione, Matricola, Tecnico, Stato, Report, Data_Compilazione
+            # Ordine delle colonne: PdL, Descrizione, Matricola, Tecnico, Stato, Report, Data_Compilazione, Data_Intervento
             row_to_add = [
                 report_dict.get('pdl'),
                 report_dict.get('descrizione_attivita'),
@@ -274,7 +274,8 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
                 report_dict.get('nome_tecnico'),
                 report_dict.get('stato_attivita'),
                 report_dict.get('testo_report'),
-                report_dict.get('data_compilazione')
+                report_dict.get('data_compilazione'),
+                report_dict.get('data_riferimento_attivita')
             ]
             sheet.append(row_to_add)
 
