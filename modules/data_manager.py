@@ -187,22 +187,19 @@ def json_serial(obj):
 
 def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
     """
-    Scrive un report direttamente nel database SQLite, aggiornando lo storico,
-    lo stato e il timestamp di modifica dell'attività.
+    Scrive un report direttamente nella tabella `report_da_validare` del database SQLite.
     """
     import sqlite3
+    import uuid
 
-    azione = "inviato"
-    # Utilizza la data di riferimento dell'attività per il timestamp, non la data corrente.
-    timestamp = datetime.datetime.combine(data_riferimento, datetime.datetime.min.time())
-    data_riferimento_str = data_riferimento.strftime('%d/%m/%Y')
+    azione = "inviato per validazione"
+    timestamp_compilazione = datetime.datetime.now()
 
     conn = None
     try:
         conn = sqlite3.connect("schedario.db")
         cursor = conn.cursor()
 
-        # Recupera il nome completo dalla matricola per usarlo nel report e nell'email
         cursor.execute("SELECT \"Nome Cognome\" FROM contatti WHERE Matricola = ?", (str(matricola),))
         user_result = cursor.fetchone()
         if not user_result:
@@ -212,58 +209,45 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
 
         descrizione_completa = str(dati_da_scrivere['descrizione'])
         pdl_match = re.search(r'PdL (\d{6}/[CS]|\d{6})', descrizione_completa)
-        if not pdl_match:
-            st.error("Errore: Impossibile estrarre il PdL dalla descrizione.")
-            return False
-        pdl = pdl_match.group(1)
+        pdl = pdl_match.group(1) if pdl_match else "N/D"
 
-        nuovo_record_storico = {
-            'PdL': pdl,
-            'Matricola': str(matricola),
-            'Descrizione': dati_da_scrivere['descrizione'],
-            'Stato': dati_da_scrivere['stato'],
-            'Data_Riferimento': data_riferimento_str,
-            'Tecnico': nome_completo,
-            'Report': dati_da_scrivere['report'],
-            'Data_Compilazione': timestamp.isoformat(),
-            'Data_Riferimento_dt': data_riferimento.isoformat()
+        id_report = str(uuid.uuid4())
+
+        dati_nuovo_report = {
+            "id_report": id_report,
+            "pdl": pdl,
+            "descrizione_attivita": dati_da_scrivere['descrizione'],
+            "matricola_tecnico": str(matricola),
+            "nome_tecnico": nome_completo,
+            "stato_attivita": dati_da_scrivere['stato'],
+            "testo_report": dati_da_scrivere['report'],
+            "data_compilazione": timestamp_compilazione.isoformat(),
+            "data_riferimento_attivita": data_riferimento.isoformat()
         }
 
         with conn:
-            cursor.execute("SELECT Storico FROM attivita_programmate WHERE PdL = ?", (pdl,))
-            risultato = cursor.fetchone()
-
-            storico_esistente = json.loads(risultato[0]) if risultato and risultato[0] else []
-            storico_esistente.append(nuovo_record_storico)
-            storico_esistente.sort(key=lambda x: x.get('Data_Compilazione', ''), reverse=True)
-
-            nuovo_storico_json = json.dumps(storico_esistente, default=json_serial)
-            nuovo_stato = dati_da_scrivere['stato']
-            db_last_modified_ts = timestamp.isoformat()
-
-            cursor.execute(
-                "UPDATE attivita_programmate SET Storico = ?, STATO_ATTIVITA = ?, STATO_PdL = ?, db_last_modified = ? WHERE PdL = ?",
-                (nuovo_storico_json, nuovo_stato, nuovo_stato, db_last_modified_ts, pdl)
-            )
+            cols = ', '.join(f'"{k}"' for k in dati_nuovo_report.keys())
+            placeholders = ', '.join('?' for _ in dati_nuovo_report)
+            sql = f"INSERT INTO report_da_validare ({cols}) VALUES ({placeholders})"
+            cursor.execute(sql, list(dati_nuovo_report.values()))
 
         from modules.email_sender import invia_email_con_outlook_async
-        titolo_email = f"Report Attività {azione.upper()} da: {nome_completo}"
+        titolo_email = f"Nuovo Report da Validare da: {nome_completo}"
         report_html = dati_da_scrivere['report'].replace('\n', '<br>')
         html_body = f"""
         <html><head><style>
             body {{ font-family: Calibri, sans-serif; }} table {{ border-collapse: collapse; width: 100%; }}
             th, td {{ border: 1px solid #dddddd; text-align: left; padding: 8px; }} th {{ background-color: #f2f2f2; }}
-            .report-content {{ white-space: pre-wrap; word-wrap: break-word; }}
         </style></head><body>
-        <h2>Riepilogo Report Attività</h2>
+        <h2>Nuovo Report da Validare</h2>
         <p>Un report è stato <strong>{azione}</strong> dal tecnico {nome_completo}.</p>
         <table>
-            <tr><th>Data di Riferimento Attività</th><td>{data_riferimento_str}</td></tr>
-            <tr><th>Data e Ora Invio Report</th><td>{timestamp.strftime('%d/%m/%Y %H:%M:%S')}</td></tr>
+            <tr><th>Data di Riferimento Attività</th><td>{data_riferimento.strftime('%d/%m/%Y')}</td></tr>
+            <tr><th>Data e Ora Invio Report</th><td>{timestamp_compilazione.strftime('%d/%m/%Y %H:%M:%S')}</td></tr>
             <tr><th>Tecnico</th><td>{nome_completo}</td></tr>
             <tr><th>Attività</th><td>{dati_da_scrivere['descrizione']}</td></tr>
             <tr><th>Stato Finale</th><td><b>{dati_da_scrivere['stato']}</b></td></tr>
-            <tr><th>Report Compilato</th><td class="report-content">{report_html}</td></tr>
+            <tr><th>Report Compilato</th><td>{report_html}</td></tr>
         </table>
         <br><hr>
         <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
@@ -277,7 +261,7 @@ def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
         return True
 
     except sqlite3.Error as e:
-        st.error(f"Errore durante l'aggiornamento del database: {e}")
+        st.error(f"Errore durante il salvataggio del report nel database: {e}")
         return False
     except Exception as e:
         st.error(f"Errore imprevisto durante il salvataggio del report: {e}")

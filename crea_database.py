@@ -286,6 +286,17 @@ def crea_tabelle_se_non_esistono():
                 status TEXT NOT NULL,
                 FOREIGN KEY (user_matricola) REFERENCES contatti(Matricola) ON DELETE CASCADE
             )""",
+            "report_da_validare": """(
+                id_report TEXT PRIMARY KEY NOT NULL,
+                pdl TEXT,
+                descrizione_attivita TEXT,
+                matricola_tecnico TEXT,
+                nome_tecnico TEXT,
+                stato_attivita TEXT,
+                testo_report TEXT,
+                data_compilazione TEXT,
+                data_riferimento_attivita TEXT
+            )""",
             "relazioni": """(
                 id_relazione TEXT PRIMARY KEY NOT NULL,
                 data_intervento TEXT,
