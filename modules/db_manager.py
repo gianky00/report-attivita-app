@@ -264,7 +264,14 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
         workbook = openpyxl.load_workbook(EXCEL_REPORT_FILE, keep_vba=True)
         sheet = workbook[SHEET_NAME]
 
+        # Cerca la tabella 'Strumentale' nel foglio
+        table = sheet.tables.get("Strumentale")
+        if not table:
+            print(f"ERRORE: La tabella 'Strumentale' non è stata trovata nel foglio '{SHEET_NAME}'. Impossibile aggiungere righe.")
+            return False
+
         # Prepara le righe da aggiungere
+        num_rows_added = 0
         for report_dict in validated_data:
             # Ordine delle colonne: PdL, Descrizione, Matricola, Tecnico, Stato, Report, Data_Compilazione, Data_Intervento
             row_to_add = [
@@ -278,9 +285,18 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
                 report_dict.get('data_riferimento_attivita')
             ]
             sheet.append(row_to_add)
+            num_rows_added += 1
+
+        # Se sono state aggiunte righe, espandi il range della tabella
+        if num_rows_added > 0:
+            from openpyxl.utils import range_boundaries, get_column_letter
+            min_col, min_row, max_col, max_row = range_boundaries(table.ref)
+            new_max_row = max_row + num_rows_added
+            new_ref = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{new_max_row}"
+            table.ref = new_ref
 
         workbook.save(EXCEL_REPORT_FILE)
-        print(f"Aggiunte {len(validated_data)} righe al file Excel '{EXCEL_REPORT_FILE}'.")
+        print(f"Aggiunte {len(validated_data)} righe al file Excel '{EXCEL_REPORT_FILE}' e aggiornata la tabella 'Strumentale'.")
 
     except FileNotFoundError:
         print(f"ERRORE: Il file '{EXCEL_REPORT_FILE}' non è stato trovato.")
