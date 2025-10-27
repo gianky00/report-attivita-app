@@ -45,7 +45,15 @@ def authenticate_user(matricola, password, df_contatti):
                - '2FA_SETUP_REQUIRED': Password corretta, serve configurare la 2FA. `data` = (nome_completo, ruolo)
                - 'FAILED': Credenziali non valide. `data` = None
     """
-    if df_contatti is None or df_contatti.empty or not matricola or not password:
+    if df_contatti is None or df_contatti.empty:
+        if not matricola or not password:
+            return 'FAILED', None
+        # Se la tabella è vuota, questo è il primo utente in assoluto.
+        # Viene creato come Amministratore.
+        nome_completo = f"Admin User ({matricola})"
+        return 'FIRST_LOGIN_SETUP', (nome_completo, 'Amministratore', password)
+
+    if not matricola or not password:
         return 'FAILED', None
 
     # Cerca l'utente direttamente tramite Matricola (case-insensitive)

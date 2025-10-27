@@ -37,7 +37,7 @@ from modules.data_manager import (
     carica_dati_attivita_programmate
 )
 from modules.db_manager import (
-    get_shifts_by_type, get_filtered_activities, get_technician_performance_data,
+    get_shifts_by_type, get_technician_performance_data,
     get_interventions_for_technician, get_reports_to_validate, delete_reports_by_ids,
     process_and_commit_validated_reports, salva_relazione, get_all_relazioni,
     get_unvalidated_relazioni, process_and_commit_validated_relazioni
