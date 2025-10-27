@@ -119,36 +119,52 @@ def sync_excel_to_db():
 
                 # Gestione speciale per la tabella contatti per pulire i dati delle password
                 if table_name == 'contatti':
-                    # Validazione: La Matricola è obbligatoria e non può essere vuota.
-                    original_rows = len(df)
+                    # Logica di aggiornamento non distruttiva per 'contatti'
+                    print("Esecuzione dell'aggiornamento non distruttivo per la tabella 'contatti'...")
+
+                    # 1. Carica i dati esistenti dal DB
+                    try:
+                        db_df = pd.read_sql_query("SELECT * FROM contatti", conn)
+                        db_df.columns = [str(col).strip() for col in db_df.columns]
+                    except pd.io.sql.DatabaseError:
+                        db_df = pd.DataFrame() # La tabella potrebbe non esistere ancora
+
+                    # 2. Pulisci e valida i dati da Excel come prima
                     df.dropna(subset=['Matricola'], inplace=True)
                     df = df[df['Matricola'].astype(str).str.strip() != '']
+                    df['Matricola'] = df['Matricola'].astype(str) # Assicura consistenza tipi
 
-                    if len(df) < original_rows:
-                        print(f"Attenzione: {original_rows - len(df)} righe sono state saltate perché prive di Matricola.")
-
-                    # Rimuove la colonna 'Nome Cognome' se non è la PK (lo è Matricola ora)
-                    # per evitare problemi di 'colonna duplicata' con lo schema.
-                    if pk_col != 'Nome Cognome' and 'Nome Cognome' in df.columns:
-                         # Questo non dovrebbe accadere con lo schema nuovo, ma è una sicurezza
-                         pass
-
-
-                    # Se esiste la vecchia colonna 'Password', la rimuoviamo perché non è sicura
                     if 'Password' in df.columns:
                         df = df.drop(columns=['Password'], errors='ignore')
-
-                    # Se non esiste la colonna 'PasswordHash', la aggiungiamo vuota
                     if 'PasswordHash' not in df.columns:
                         df['PasswordHash'] = None
-                    else:
-                        # Pulisce e valida la colonna PasswordHash: qualsiasi valore non valido
-                        # viene impostato a None per forzare il setup al primo login.
-                        print("Validazione degli hash delle password...")
-                        df['PasswordHash'] = df['PasswordHash'].apply(
-                            lambda h: h if is_valid_bcrypt_hash(h) else None
+                    df['PasswordHash'] = df['PasswordHash'].apply(
+                        lambda h: h if is_valid_bcrypt_hash(h) else None
+                    )
+
+                    # 3. Fai il merge dei dati
+                    if not db_df.empty:
+                        db_df['Matricola'] = db_df['Matricola'].astype(str)
+                        # Mantieni le colonne che esistono solo nel DB (es. 2FA_Secret)
+                        merged_df = pd.merge(df, db_df[['Matricola', '2FA_Secret']], on='Matricola', how='left')
+                        # Aggiorna il PasswordHash solo se quello dall'Excel è valido, altrimenti mantieni quello esistente
+                        # Questo previene la sovrascrittura accidentale di un hash valido con None
+                        merged_df['PasswordHash'] = merged_df.apply(
+                            lambda row: row['PasswordHash_x'] if pd.notna(row['PasswordHash_x']) else row.get('PasswordHash_y'),
+                            axis=1
                         )
-                        print("Validazione completata.")
+                        # Rimuovi le colonne extra dal merge
+                        merged_df = merged_df.drop(columns=[col for col in merged_df if col.endswith('_x') or col.endswith('_y')])
+                    else:
+                        merged_df = df
+                        if '2FA_Secret' not in merged_df.columns:
+                            merged_df['2FA_Secret'] = None # Aggiungi se non esiste
+
+                    # 4. Sovrascrivi la tabella con i dati uniti
+                    merged_df.to_sql('contatti', conn, if_exists='replace', index=False)
+                    print(f"Tabella 'contatti' aggiornata in modo non distruttivo. {len(merged_df)} righe sincronizzate.")
+                    continue # Salta il resto del loop per questa tabella
+
 
                 df.to_sql(f"{table_name}_temp", conn, if_exists='replace', index=False)
 
