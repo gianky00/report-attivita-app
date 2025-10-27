@@ -74,3 +74,32 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                         st.session_state.debriefing_task = task_data
                         st.session_state.report_mode = 'manual'
                         st.rerun()
+
+def render_notification_center(notifications_df, gestionale_data, matricola_utente):
+    unread_count = len(notifications_df[notifications_df['Stato'] == 'non letta'])
+    icon_label = f"🔔 {unread_count}" if unread_count > 0 else "🔔"
+
+    with st.popover(icon_label):
+        st.subheader("Notifiche")
+        if notifications_df.empty:
+            st.write("Nessuna notifica.")
+        else:
+            for _, notifica in notifications_df.iterrows():
+                notifica_id = notifica['ID_Notifica']
+                is_unread = notifica['Stato'] == 'non letta'
+
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    if is_unread:
+                        st.markdown(f"**{notifica['Messaggio']}**")
+                    else:
+                        st.markdown(f"<span style='color: grey;'>{notifica['Messaggio']}</span>", unsafe_allow_html=True)
+                    st.caption(pd.to_datetime(notifica['Timestamp']).strftime('%d/%m/%Y %H:%M'))
+
+                with col2:
+                    if is_unread:
+                        if st.button(" letto", key=f"read_{notifica_id}", help="Segna come letto"):
+                            segna_notifica_letta(gestionale_data, notifica_id)
+                            salva_gestionale_async(gestionale_data)
+                            st.rerun()
+                st.divider()

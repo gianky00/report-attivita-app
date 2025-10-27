@@ -5,6 +5,15 @@ import bcrypt
 import datetime
 import shutil
 import warnings
+import re
+
+def is_valid_bcrypt_hash(h):
+    """Controlla se una stringa ha il formato di un hash bcrypt valido."""
+    if not isinstance(h, str):
+        return False
+    # Regex per un hash bcrypt: es. $2b$12$E6e.gJ4.e/9nJ0.FlzAF8.
+    bcrypt_pattern = re.compile(r'^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$')
+    return bcrypt_pattern.match(h) is not None
 
 # Sopprime il warning specifico di openpyxl relativo alla "Print area"
 warnings.filterwarnings(

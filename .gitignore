@@ -9,3 +9,11 @@ __pycache__/
 *.pyc
 .env
 venv/
+
+# File di database e di sessione
+*.db
+*.db.backup*
+sessions/
+
+# Log
+*.log
