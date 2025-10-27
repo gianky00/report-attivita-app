@@ -117,38 +117,48 @@ def sync_excel_to_db():
                     if len(df) < original_rows:
                         print(f"Attenzione: {original_rows - len(df)} righe in '{sheet_name}' sono state saltate per mappatura Nome->Matricola fallita.")
 
-                # Gestione speciale per la tabella contatti per pulire i dati delle password
+                # Gestione speciale per la tabella contatti per preservare i dati sensibili
                 if table_name == 'contatti':
-                    # Validazione: La Matricola è obbligatoria e non può essere vuota.
-                    original_rows = len(df)
+                    print("--- Inizio sincronizzazione speciale per 'contatti' per preservare i dati sensibili ---")
+
+                    # 1. Legge i segreti esistenti dal DB
+                    try:
+                        db_secrets_df = pd.read_sql_query('SELECT "Matricola", "PasswordHash", "2FA_Secret" FROM contatti', conn)
+                        db_secrets_df['Matricola'] = db_secrets_df['Matricola'].astype(str)
+                    except Exception:
+                        db_secrets_df = pd.DataFrame(columns=['Matricola', 'PasswordHash', '2FA_Secret'])
+
+                    # 2. Pulisce e valida i dati da Excel (df)
                     df.dropna(subset=['Matricola'], inplace=True)
                     df = df[df['Matricola'].astype(str).str.strip() != '']
+                    df['Matricola'] = df['Matricola'].astype(str)
 
-                    if len(df) < original_rows:
-                        print(f"Attenzione: {original_rows - len(df)} righe sono state saltate perché prive di Matricola.")
-
-                    # Rimuove la colonna 'Nome Cognome' se non è la PK (lo è Matricola ora)
-                    # per evitare problemi di 'colonna duplicata' con lo schema.
-                    if pk_col != 'Nome Cognome' and 'Nome Cognome' in df.columns:
-                         # Questo non dovrebbe accadere con lo schema nuovo, ma è una sicurezza
-                         pass
-
-
-                    # Se esiste la vecchia colonna 'Password', la rimuoviamo perché non è sicura
                     if 'Password' in df.columns:
                         df = df.drop(columns=['Password'], errors='ignore')
-
-                    # Se non esiste la colonna 'PasswordHash', la aggiungiamo vuota
                     if 'PasswordHash' not in df.columns:
                         df['PasswordHash'] = None
                     else:
-                        # Pulisce e valida la colonna PasswordHash: qualsiasi valore non valido
-                        # viene impostato a None per forzare il setup al primo login.
-                        print("Validazione degli hash delle password...")
-                        df['PasswordHash'] = df['PasswordHash'].apply(
-                            lambda h: h if is_valid_bcrypt_hash(h) else None
-                        )
-                        print("Validazione completata.")
+                        df['PasswordHash'] = df['PasswordHash'].apply(lambda h: h if is_valid_bcrypt_hash(h) else None)
+
+                    # 3. Fa il merge dei dati da Excel con i segreti dal DB
+                    merged_df = pd.merge(df, db_secrets_df, on='Matricola', how='left', suffixes=('_excel', '_db'))
+
+                    # 4. Dà priorità ai dati sensibili del DB
+                    merged_df['PasswordHash'] = merged_df['PasswordHash_db'].combine_first(merged_df['PasswordHash_excel'])
+                    merged_df['2FA_Secret'] = merged_df['2FA_Secret_db']
+
+                    # 5. Prepara il DataFrame finale con le colonne corrette
+                    final_cols = [col for col in df.columns if col != 'PasswordHash']
+                    final_cols.extend(['PasswordHash', '2FA_Secret'])
+                    final_df = merged_df[final_cols]
+
+                    # 6. Sostituisce la tabella nel DB con i dati aggiornati
+                    final_df.to_sql('contatti', conn, if_exists='replace', index=False)
+
+                    print(f"Sincronizzate {len(final_df)} righe per 'contatti', preservando i dati di autenticazione.")
+                    print(f"--- Fine sincronizzazione speciale per 'contatti' ---")
+
+                    continue # Salta il resto del loop generico per questa tabella
 
                 df.to_sql(f"{table_name}_temp", conn, if_exists='replace', index=False)
 
