@@ -404,20 +404,6 @@ def get_technician_performance_data(start_date, end_date) -> pd.DataFrame:
         if conn:
             conn.close()
 
-def get_on_call_shifts_for_period(start_date, end_date) -> pd.DataFrame:
-    """Carica i turni di reperibilità per un dato intervallo di date."""
-    conn = get_db_connection()
-    try:
-        query = "SELECT * FROM turni WHERE Tipo = 'Reperibilità' AND date(Data) BETWEEN date(?) AND date(?) ORDER BY Data ASC"
-        df = pd.read_sql_query(query, conn, params=(start_date, end_date))
-        return df
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        print(f"Errore nel caricare i turni di reperibilità: {e}")
-        return pd.DataFrame()
-    finally:
-        if conn:
-            conn.close()
-
 def salva_relazione(dati_relazione: dict) -> bool:
     """Salva una nuova relazione nel database."""
     conn = get_db_connection()
@@ -432,51 +418,6 @@ def salva_relazione(dati_relazione: dict) -> bool:
     except sqlite3.Error as e:
         print(f"Errore durante il salvataggio della relazione nel DB: {e}")
         return False
-    finally:
-        if conn:
-            conn.close()
-
-def get_filtered_activities(filters: dict) -> pd.DataFrame:
-    """Carica le attività programmate applicando i filtri specificati a livello di query."""
-    conn = get_db_connection()
-    base_query = "SELECT * FROM attivita_programmate"
-    conditions = []
-    params = []
-
-    if filters.get('tcl'):
-        placeholders = ','.join('?' for _ in filters['tcl'])
-        conditions.append(f"TCL IN ({placeholders})")
-        params.extend(filters['tcl'])
-    if filters.get('area'):
-        placeholders = ','.join('?' for _ in filters['area'])
-        conditions.append(f"Area IN ({placeholders})")
-        params.extend(filters['area'])
-    if filters.get('stato'):
-        placeholders = ','.join('?' for _ in filters['stato'])
-        conditions.append(f"Stato IN ({placeholders})")
-        params.extend(filters['stato'])
-    if filters.get('pdl_search'):
-        conditions.append("PdL LIKE ?")
-        params.append(f"%{filters['pdl_search']}%")
-    if filters.get('day_filter'):
-        day_conditions = []
-        for day in filters['day_filter']:
-            day_conditions.append("GiorniProgrammati LIKE ?")
-            params.append(f"%{day}%")
-        if day_conditions:
-            conditions.append(f"({' OR '.join(day_conditions)})")
-
-    if conditions:
-        base_query += " WHERE " + " AND ".join(conditions)
-
-    try:
-        df = pd.read_sql_query(base_query, conn, params=params)
-        if 'Storico' in df.columns:
-            df['Storico'] = df['Storico'].apply(lambda x: json.loads(x) if x else [])
-        return df
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        print(f"Errore nel caricare le attività filtrate: {e}")
-        return pd.DataFrame()
     finally:
         if conn:
             conn.close()

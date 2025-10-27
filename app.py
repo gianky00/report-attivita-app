@@ -1,6 +1,4 @@
 import streamlit as st
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import datetime
 import re
@@ -32,13 +30,12 @@ from modules.data_manager import (
     carica_knowledge_core,
     carica_gestionale,
     salva_gestionale_async,
-    carica_archivio_completo,
     trova_attivita,
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate
 )
 from modules.db_manager import (
-    get_shifts_by_type, get_filtered_activities, get_technician_performance_data,
+    get_shifts_by_type, get_technician_performance_data,
     get_interventions_for_technician, get_reports_to_validate, delete_reports_by_ids,
     process_and_commit_validated_reports, salva_relazione, get_all_relazioni,
     get_unvalidated_relazioni, process_and_commit_validated_relazioni
@@ -63,15 +60,6 @@ from modules.email_sender import invia_email_con_outlook_async
 
 
 # --- FUNZIONI DI SUPPORTO E CARICAMENTO DATI ---
-@st.cache_resource
-def autorizza_google():
-    scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-    client = gspread.authorize(creds)
-    if creds.access_token_expired:
-        client.login()
-    return client
-
 from modules.instrumentation_logic import find_and_analyze_tags, get_technical_suggestions, analyze_domain_terminology
 
 def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
@@ -150,12 +138,6 @@ def revisiona_relazione_con_ia(_testo_originale, _knowledge_base):
 def to_csv(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv(index=False).encode('utf-8')
-
-# La funzione calculate_technician_performance è stata rimossa perché
-# la logica è stata spostata in modules/db_manager.py per efficienza.
-# La nuova funzione get_technician_performance_data esegue i calcoli
-# direttamente nel database, riducendo drasticamente il carico sulla memoria
-# e il tempo di elaborazione.
 
 
 # --- FUNZIONI INTERFACCIA UTENTE ---

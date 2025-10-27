@@ -124,67 +124,6 @@ def salva_gestionale_async(data):
     return True # Ritorna immediatamente
 
 
-
-def carica_archivio_completo():
-    """
-    Nuova logica: Carica lo storico direttamente dal file ATTIVITA_PROGRAMMATE.xlsx,
-    che ora è l'unica fonte di verità.
-    La funzione simula un "archivio" per compatibilità con le funzioni esistenti.
-    """
-    excel_path = get_attivita_programmate_path()
-    all_data = []
-
-    sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-    # Aggiungo la colonna IMP per il filtro
-    cols_to_extract = ['PdL', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', "STATO\nATTIVITA'", "IMP"]
-
-    for sheet_name in sheets_to_read:
-        try:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            df.columns = [str(col).strip() for col in df.columns]
-
-            # Assicurati che le colonne esistano, altrimenti creale vuote per evitare errori
-            if "STATO\nATTIVITA'" not in df.columns:
-                df["STATO\nATTIVITA'"] = ""
-            if "IMP" not in df.columns:
-                df["IMP"] = ""
-
-            if all(col in df.columns for col in cols_to_extract):
-                df_sheet = df[cols_to_extract].copy()
-                all_data.append(df_sheet)
-        except Exception:
-            continue
-
-    if not all_data:
-        return pd.DataFrame()
-
-    df_archivio = pd.concat(all_data, ignore_index=True)
-    df_archivio.dropna(subset=['PdL', 'DATA\nCONTROLLO'], inplace=True)
-
-    # Rinomina le colonne per corrispondere allo schema atteso
-    df_archivio.rename(columns={
-        "DESCRIZIONE\nATTIVITA'": "Descrizione",
-        "STATO\nPdL": "Stato",
-        "DATA\nCONTROLLO": "Data_Riferimento",
-        "PERSONALE\nIMPIEGATO": "Tecnico",
-        "STATO\nATTIVITA'": "Report" # Mappa la colonna corretta a Report
-    }, inplace=True)
-
-    # Riempi i report vuoti con un testo standard
-    df_archivio['Report'] = df_archivio['Report'].fillna("Nessun report disponibile.")
-
-    # Aggiungi colonne mancanti per compatibilità
-    df_archivio['Data_Compilazione'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
-    df_archivio['Data_Riferimento_dt'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
-
-    return df_archivio
-
-def json_serial(obj):
-    """JSON serializer for objects not serializable by default json code"""
-    if isinstance(obj, (datetime.datetime, datetime.date, pd.Timestamp)):
-        return obj.isoformat()
-    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
-
 def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
     """
     Scrive un report direttamente nella tabella `report_da_validare` del database SQLite.

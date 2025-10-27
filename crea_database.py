@@ -32,22 +32,6 @@ SHEET_TABLE_MAP = {
     "Relazioni": ("relazioni", "id_relazione")
 }
 
-def is_valid_bcrypt_hash(h):
-    """
-    Verifica se una stringa è un hash bcrypt valido strutturalmente.
-    Questo non garantisce che sia stato generato da bcrypt, ma esclude
-    dati palesemente non validi come 'vuoto', ' ', o None.
-    """
-    if not isinstance(h, str):
-        return False
-    # I prefissi validi per bcrypt
-    if not (h.startswith('$2a$') or h.startswith('$2b$') or h.startswith('$2y$')):
-        return False
-    # Un hash bcrypt ha una lunghezza standard di 60 caratteri
-    if len(h) != 60:
-        return False
-    return True
-
 def sync_excel_to_db():
     """
     Sincronizza TUTTI i fogli del file Gestionale_Tecnici.xlsx con il database,
