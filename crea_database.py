@@ -152,10 +152,13 @@ def sync_excel_to_db():
                     final_cols.extend(['PasswordHash', '2FA_Secret'])
                     final_df = merged_df[final_cols]
 
-                    # 6. Sostituisce la tabella nel DB con i dati aggiornati
-                    final_df.to_sql('contatti', conn, if_exists='replace', index=False)
+                    # 6. Svuota la tabella e appende i nuovi dati (strategia DELETE + APPEND)
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM contatti;")
+                    final_df.to_sql('contatti', conn, if_exists='append', index=False)
+                    conn.commit()
 
-                    print(f"Sincronizzate {len(final_df)} righe per 'contatti', preservando i dati di autenticazione.")
+                    print(f"Sincronizzate {len(final_df)} righe per 'contatti', utilizzando la strategia DELETE e APPEND.")
                     print(f"--- Fine sincronizzazione speciale per 'contatti' ---")
 
                     continue # Salta il resto del loop generico per questa tabella
