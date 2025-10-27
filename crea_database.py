@@ -128,29 +128,43 @@ def sync_excel_to_db():
                     except Exception:
                         db_secrets_df = pd.DataFrame(columns=['Matricola', 'PasswordHash', '2FA_Secret'])
 
-                    # 2. Pulisce e valida i dati da Excel (df)
-                    df.dropna(subset=['Matricola'], inplace=True)
-                    df = df[df['Matricola'].astype(str).str.strip() != '']
-                    df['Matricola'] = df['Matricola'].astype(str)
+                    # 2. Pulisce i dati da Excel e RIMUOVE la colonna 2FA_Secret
+                    excel_df = df.copy()
+                    if "2FA_Secret" in excel_df.columns:
+                        excel_df = excel_df.drop(columns=["2FA_Secret"])
+                        print("Colonna '2FA_Secret' rimossa dai dati Excel per garantire la sovranità del database.")
 
-                    if 'Password' in df.columns:
-                        df = df.drop(columns=['Password'], errors='ignore')
-                    if 'PasswordHash' not in df.columns:
-                        df['PasswordHash'] = None
+                    excel_df.dropna(subset=['Matricola'], inplace=True)
+                    excel_df = excel_df[excel_df['Matricola'].astype(str).str.strip() != '']
+                    excel_df['Matricola'] = excel_df['Matricola'].astype(str)
+
+                    if 'Password' in excel_df.columns:
+                        excel_df = excel_df.drop(columns=['Password'], errors='ignore')
+                    if 'PasswordHash' not in excel_df.columns:
+                        excel_df['PasswordHash'] = None
                     else:
-                        df['PasswordHash'] = df['PasswordHash'].apply(lambda h: h if is_valid_bcrypt_hash(h) else None)
+                        excel_df['PasswordHash'] = excel_df['PasswordHash'].apply(lambda h: h if is_valid_bcrypt_hash(h) else None)
 
-                    # 3. Fa il merge dei dati da Excel con i segreti dal DB
-                    merged_df = pd.merge(df, db_secrets_df, on='Matricola', how='left', suffixes=('_excel', '_db'))
+                    # 3. Fa il merge dei dati puliti da Excel con i segreti dal DB
+                    # 'how=left' assicura che tutti gli utenti di Excel siano presenti
+                    merged_df = pd.merge(excel_df, db_secrets_df, on='Matricola', how='left', suffixes=('_excel', '_db'))
 
-                    # 4. Dà priorità ai dati sensibili del DB
+                    # 4. Dà priorità ai dati sensibili del DB, se esistono.
                     merged_df['PasswordHash'] = merged_df['PasswordHash_db'].combine_first(merged_df['PasswordHash_excel'])
-                    merged_df['2FA_Secret'] = merged_df['2FA_Secret_db']
+                    merged_df['2FA_Secret'] = merged_df['2FA_Secret_db'] # Prende SEMPRE il valore dal DB
 
-                    # 5. Prepara il DataFrame finale con le colonne corrette
-                    final_cols = [col for col in df.columns if col != 'PasswordHash']
-                    final_cols.extend(['PasswordHash', '2FA_Secret'])
-                    final_df = merged_df[final_cols]
+                    # 5. Prepara il DataFrame finale, assicurando l'ordine corretto delle colonne
+                    db_cols = ["Matricola", "Nome Cognome", "Ruolo", "PasswordHash", "Link Attività", "2FA_Secret"]
+
+                    # Prende le colonne da excel_df per mantenere la flessibilità, ma esclude quelle già gestite
+                    other_excel_cols = [col for col in excel_df.columns if col not in db_cols]
+                    final_cols_order = db_cols + other_excel_cols
+
+                    # Rimuove le colonne '_excel' e '_db' usate per il merge
+                    final_df = merged_df.drop(columns=[c for c in merged_df.columns if c.endswith('_excel') or c.endswith('_db')], errors='ignore')
+
+                    # Riordina le colonne per corrispondere allo schema del DB
+                    final_df = final_df.reindex(columns=final_cols_order)
 
                     # 6. Svuota la tabella e appende i nuovi dati (strategia DELETE + APPEND)
                     cursor = conn.cursor()
