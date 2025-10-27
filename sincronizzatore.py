@@ -536,7 +536,7 @@ def sincronizza_db_excel():
         logging.info("--- AVVIO ESECUZIONE MACRO POST-SINCRO ---")
         macro_success, macro_message = run_excel_macro(
             "Database_Report_Attivita.xlsm",
-            "AggiornaAttivitaProgrammate_Veloce"
+            "AggiornaReport"
         )
         if not macro_success:
             # Non blocchiamo l'esito della sincronizzazione principale, ma logghiamo l'errore.
