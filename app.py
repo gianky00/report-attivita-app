@@ -32,7 +32,6 @@ from modules.data_manager import (
     carica_knowledge_core,
     carica_gestionale,
     salva_gestionale_async,
-    carica_archivio_completo,
     trova_attivita,
     scrivi_o_aggiorna_risposta,
     carica_dati_attivita_programmate
