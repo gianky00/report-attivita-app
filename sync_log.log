@@ -1,0 +1,39 @@
+2025-10-27 15:27:28,991 - INFO - Lock file creato.
+2025-10-27 15:27:28,992 - INFO - --- INIZIO SINCRONIZZAZIONE BIDIREZIONALE ---
+2025-10-27 15:27:28,992 - INFO - Inizio caricamento dai fogli: ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
+2025-10-27 15:27:29,997 - INFO - Caricate 272 righe dal foglio 'A1'.
+2025-10-27 15:27:30,763 - INFO - Caricate 178 righe dal foglio 'A2'.
+2025-10-27 15:27:31,487 - INFO - Caricate 442 righe dal foglio 'A3'.
+2025-10-27 15:27:32,161 - INFO - Caricate 26 righe dal foglio 'CTE'.
+2025-10-27 15:27:33,025 - INFO - Caricate 181 righe dal foglio 'BLENDING'.
+2025-10-27 15:27:33,639 - INFO - Calcolate 1099 inserimenti DB, 0 aggiornamenti DB, 0 aggiornamenti Excel.
+2025-10-27 15:27:33,695 - INFO - Eseguite 1099 operazioni di INSERT in blocco nel DB.
+2025-10-27 15:27:33,709 - INFO - Nessun aggiornamento per Excel.
+2025-10-27 15:27:33,731 - INFO - Sincronizzazione completata.
+- Operazioni sul DB: 1099 (insert/update)
+- Righe con modifiche in Excel: 0
+- Righe rimosse dal DB: 0
+2025-10-27 15:27:33,731 - INFO - --- AVVIO ESECUZIONE MACRO POST-SINCRO ---
+2025-10-27 15:27:35,115 - INFO - Esecuzione della macro 'AggiornaAttivitaProgrammate_Veloce' nel file 'Database_Report_Attivita.xlsm'...
+2025-10-27 15:27:35,118 - ERROR - Errore COM durante l'esecuzione della macro: (-2147352567, 'Eccezione.', (0, 'Microsoft Excel', "Impossibile eseguire la macro 'AggiornaAttivitaProgrammate_Veloce' . È possibile che tale macro non sia disponibile nella cartella di lavoro o che tutte le macro siano disattivate.", 'xlmain11.chm', 0, -2146827284), None)
+Traceback (most recent call last):
+  File "C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app\sincronizzatore.py", line 475, in run_excel_macro
+    excel_app.Run(macro_name)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\Coemi\AppData\Local\Temp\gen_py\3.13\00020813-0000-0000-C000-000000000046x0x1x9.py", line 44403, in Run
+    return self._ApplyTypes_(259, 1, (12, 0), ((12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17), (12, 17)), 'Run', None,Macro
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    	, Arg1, Arg2, Arg3, Arg4, Arg5
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    	, Arg26, Arg27, Arg28, Arg29, Arg30
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    	)
+     ^
+  File "C:\Users\Coemi\AppData\Local\Programs\Python\Python313\Lib\site-packages\win32com\client\__init__.py", line 580, in _ApplyTypes_
+    self._oleobj_.InvokeTypes(dispid, 0, wFlags, retType, argTypes, *args),
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pywintypes.com_error: (-2147352567, 'Eccezione.', (0, 'Microsoft Excel', "Impossibile eseguire la macro 'AggiornaAttivitaProgrammate_Veloce' . È possibile che tale macro non sia disponibile nella cartella di lavoro o che tutte le macro siano disattivate.", 'xlmain11.chm', 0, -2146827284), None)
+2025-10-27 15:27:35,353 - INFO - Connessione a Excel per macro rilasciata.
+2025-10-27 15:27:35,353 - ERROR - La macro non è stata eseguita correttamente: Errore COM durante l'esecuzione della macro: (-2147352567, 'Eccezione.', (0, 'Microsoft Excel', "Impossibile eseguire la macro 'AggiornaAttivitaProgrammate_Veloce' . È possibile che tale macro non sia disponibile nella cartella di lavoro o che tutte le macro siano disattivate.", 'xlmain11.chm', 0, -2146827284), None)
+2025-10-27 15:27:35,354 - INFO - Lock file rimosso.
