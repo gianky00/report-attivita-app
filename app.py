@@ -1040,15 +1040,25 @@ else:
                         st.rerun()
 
                     elif status == "FIRST_LOGIN_SETUP":
-                        # L'utente esiste ma non ha una password. La creiamo ora.
                         nome_completo, ruolo, password_fornita = user_data
-
-                        # Hashing della nuova password
                         hashed_password = bcrypt.hashpw(password_fornita.encode('utf-8'), bcrypt.gensalt())
 
-                        # Aggiornamento del DataFrame in memoria usando la matricola inserita
-                        user_idx = df_contatti.index[df_contatti['Matricola'] == str(matricola_inserita)][0]
-                        df_contatti.loc[user_idx, 'PasswordHash'] = hashed_password.decode('utf-8')
+                        # Se il dataframe contatti è vuoto, questo è il primo utente in assoluto.
+                        if df_contatti.empty:
+                            new_user_data = {
+                                'Matricola': str(matricola_inserita),
+                                'Nome Cognome': nome_completo,
+                                'Ruolo': ruolo,
+                                'PasswordHash': hashed_password.decode('utf-8'),
+                                'Link Attività': '',
+                                '2FA_Secret': None
+                            }
+                            new_user_df = pd.DataFrame([new_user_data])
+                            gestionale['contatti'] = pd.concat([df_contatti, new_user_df], ignore_index=True)
+                        else:
+                            # Altrimenti, è un utente esistente che sta impostando la password per la prima volta.
+                            user_idx = df_contatti.index[df_contatti['Matricola'] == str(matricola_inserita)][0]
+                            df_contatti.loc[user_idx, 'PasswordHash'] = hashed_password.decode('utf-8')
 
                         # Salvataggio nel database
                         if salva_gestionale_async(gestionale):
