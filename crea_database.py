@@ -142,23 +142,41 @@ def sync_excel_to_db():
                         lambda h: h if is_valid_bcrypt_hash(h) else None
                     )
 
-                    # 3. Fai il merge dei dati
+                    # 3. Fai il merge dei dati in modo non distruttivo
                     if not db_df.empty:
                         db_df['Matricola'] = db_df['Matricola'].astype(str)
-                        # Mantieni le colonne che esistono solo nel DB (es. 2FA_Secret)
-                        merged_df = pd.merge(df, db_df[['Matricola', '2FA_Secret']], on='Matricola', how='left')
-                        # Aggiorna il PasswordHash solo se quello dall'Excel è valido, altrimenti mantieni quello esistente
-                        # Questo previene la sovrascrittura accidentale di un hash valido con None
-                        merged_df['PasswordHash'] = merged_df.apply(
-                            lambda row: row['PasswordHash_x'] if pd.notna(row['PasswordHash_x']) else row.get('PasswordHash_y'),
-                            axis=1
-                        )
-                        # Rimuovi le colonne extra dal merge
-                        merged_df = merged_df.drop(columns=[col for col in merged_df if col.endswith('_x') or col.endswith('_y')])
+
+                        # Esegui un merge a sinistra per mantenere tutti gli utenti da Excel,
+                        # portando i dati sensibili (PasswordHash, 2FA_Secret) dal database.
+                        merged_df = pd.merge(df, db_df[['Matricola', 'PasswordHash', '2FA_Secret']],
+                                           on='Matricola', how='left', suffixes=('_excel', '_db'))
+
+                        # Funzione per decidere quale PasswordHash mantenere:
+                        # - Priorità a un hash valido da Excel (per permettere reset).
+                        # - Altrimenti, mantieni l'hash esistente nel DB.
+                        # - Altrimenti, è None.
+                        def decide_password_hash(row):
+                            excel_hash = row['PasswordHash_excel']
+                            db_hash = row['PasswordHash_db']
+                            if is_valid_bcrypt_hash(excel_hash):
+                                return excel_hash
+                            if is_valid_bcrypt_hash(db_hash):
+                                return db_hash
+                            return None
+
+                        merged_df['PasswordHash'] = merged_df.apply(decide_password_hash, axis=1)
+
+                        # Per 2FA_Secret, mantieni SEMPRE il valore del DB se esiste.
+                        # Non deve mai essere sovrascritto da un valore nullo proveniente da Excel.
+                        merged_df['2FA_Secret'] = merged_df['2FA_Secret_db']
+
+                        # Rimuovi le colonne temporanee usate per il merge
+                        merged_df.drop(columns=['PasswordHash_excel', 'PasswordHash_db', '2FA_Secret_db'], inplace=True)
                     else:
+                        # Se il DB è vuoto (prima esecuzione), usa i dati da Excel come base
                         merged_df = df
                         if '2FA_Secret' not in merged_df.columns:
-                            merged_df['2FA_Secret'] = None # Aggiungi se non esiste
+                            merged_df['2FA_Secret'] = None
 
                     # 4. Sovrascrivi la tabella con i dati uniti
                     merged_df.to_sql('contatti', conn, if_exists='replace', index=False)
