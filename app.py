@@ -32,9 +32,7 @@ from modules.data_manager import (
     carica_knowledge_core,
     carica_gestionale,
     salva_gestionale_async,
-    trova_attivita,
-    scrivi_o_aggiorna_risposta,
-    carica_dati_attivita_programmate
+    scrivi_o_aggiorna_risposta
 )
 from modules.db_manager import (
     get_shifts_by_type, get_technician_performance_data,
@@ -309,53 +307,15 @@ def main_app(matricola_utente, ruolo):
 
         oggi = datetime.date.today()
 
-        # Carica i dati delle attività una sola volta
-        dati_programmati_df = carica_dati_attivita_programmate()
+        # La logica di recupero attività è stata rimossa perché dipendeva dal vecchio sistema di pianificazione.
+        # Verrà sostituita da un nuovo sistema basato su DB se necessario.
         attivita_da_recuperare = []
-        pdl_gia_recuperati = set()
-
-        if ruolo in ["Amministratore", "Tecnico"]:
-            stati_finali = {'Terminata', 'Completato', 'Annullato', 'Non Svolta'}
-            status_dict = {}
-            if not dati_programmati_df.empty:
-                status_dict = dati_programmati_df.set_index('PdL')['STATO_ATTIVITA'].to_dict()
-
-            pdl_compilati_sessione = {task['pdl'] for task in st.session_state.get("completed_tasks_yesterday", [])}
-
-            for i in range(1, 31):
-                giorno_controllo = oggi - datetime.timedelta(days=i)
-                attivita_del_giorno = trova_attivita(matricola_utente, giorno_controllo.day, giorno_controllo.month, giorno_controllo.year, gestionale_data['contatti'])
-
-                if attivita_del_giorno:
-                    for task in attivita_del_giorno:
-                        pdl = task['pdl']
-                        if pdl in pdl_gia_recuperati or pdl in pdl_compilati_sessione:
-                            continue
-
-                        stato_attuale = status_dict.get(pdl, 'Pianificato')
-                        if stato_attuale in stati_finali:
-                            continue
-
-                        # Logica Falsi Positivi Avanzata: controlla se esiste un intervento successivo o uguale
-                        gia_rendicontato_dopo = any(
-                            pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= giorno_controllo
-                            for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
-                        )
-                        if gia_rendicontato_dopo:
-                            continue
-
-                        task['data_attivita'] = giorno_controllo
-                        attivita_da_recuperare.append(task)
-                        pdl_gia_recuperati.add(pdl)
-
-            if attivita_da_recuperare:
-                st.warning(f"**Promemoria:** Hai **{len(attivita_da_recuperare)} attività** degli ultimi 30 giorni non rendicontate.")
 
         # Inizializza lo stato della tab principale se non esiste
         if 'main_tab' not in st.session_state:
             st.session_state.main_tab = "Attività Assegnate"
 
-        main_tabs_list = ["Attività Assegnate", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
+        main_tabs_list = ["Attività Assegnate", "📅 Gestione Turni", "Richieste", "❓ Guida"]
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
 
@@ -520,105 +480,6 @@ def main_app(matricola_utente, ruolo):
                         st.subheader("💡 Suggerimenti Tecnici")
                         for suggestion in st.session_state.get('technical_suggestions', []):
                             st.info(suggestion)
-
-        elif selected_tab == "Database":
-            from modules.db_manager import get_archive_filter_options, get_filtered_archived_activities
-            st.header("Archivio Storico")
-            db_tab1, db_tab2 = st.tabs(["Ricerca Attività", "Elenco Relazioni"])
-
-            with db_tab1:
-                st.subheader("Ricerca nel Database Attività")
-                filter_options = get_archive_filter_options()
-
-                def set_date_range_15_days():
-                    st.session_state.db_end_date = datetime.date.today()
-                    st.session_state.db_start_date = st.session_state.db_end_date - datetime.timedelta(days=15)
-
-                if 'db_start_date' not in st.session_state: st.session_state.db_start_date = None
-                if 'db_end_date' not in st.session_state: st.session_state.db_end_date = None
-
-                c1, c2, c3, c4 = st.columns(4)
-                with c1: pdl_search = st.text_input("Filtra per PdL", key="db_pdl_search")
-                with c2: desc_search = st.text_input("Filtra per Descrizione", key="db_desc_search")
-                with c3: imp_search = st.multiselect("Filtra per Impianto", options=filter_options['impianti'], key="db_imp_search")
-                with c4: tec_search = st.multiselect("Filtra per Tecnico/i", options=filter_options['tecnici'], key="db_tec_search")
-
-                st.divider()
-                st.markdown("##### Filtra per Data Intervento")
-                d1, d2, d3, d4 = st.columns([1,1,1,2])
-                with d1: st.date_input("Da:", key="db_start_date", format="DD/MM/YYYY")
-                with d2: st.date_input("A:", key="db_end_date", format="DD/MM/YYYY")
-                with d3: st.button("Ultimi 15 gg", key="db_last_15_days", on_click=set_date_range_15_days)
-
-                interventi_eseguiti_only = st.checkbox("Mostra solo interventi eseguiti", value=True, key="db_show_executed")
-                st.divider()
-                st.info("""**Nota:** Per impostazione predefinita, vengono visualizzate le 40 attività più recenti. Usa i filtri per una ricerca più specifica o il pulsante "Carica Altri" per visualizzare più risultati.""")
-
-                # --- Logica Paginazione e Filtri Unificata ---
-                if 'db_page' not in st.session_state:
-                    st.session_state.db_page = 0
-
-                # Usiamo una chiave diversa per i filtri per non interferire con altri stati
-                current_db_filters = (
-                    pdl_search, desc_search, tuple(sorted(imp_search)),
-                    tuple(sorted(tec_search)), interventi_eseguiti_only,
-                    st.session_state.db_start_date, st.session_state.db_end_date
-                )
-
-                if st.session_state.get('last_db_filters') != current_db_filters:
-                    st.session_state.db_page = 0
-                    st.session_state.last_db_filters = current_db_filters
-
-                with st.spinner("Ricerca in corso nel database..."):
-                    risultati_df = get_filtered_archived_activities(
-                        pdl_search, desc_search, imp_search, tec_search,
-                        interventi_eseguiti_only, st.session_state.db_start_date,
-                        st.session_state.db_end_date
-                    )
-
-                if risultati_df.empty:
-                    st.info("Nessun record trovato.")
-                else:
-                    ITEMS_PER_PAGE = 40
-                    total_results = len(risultati_df)
-
-                    # Calcola l'indice di fine basato sulla pagina corrente
-                    end_idx = (st.session_state.db_page + 1) * ITEMS_PER_PAGE
-                    items_to_display_df = risultati_df.iloc[0:end_idx]
-
-                    search_is_active = any(current_db_filters[:-2]) or all(current_db_filters[-2:])
-                    if search_is_active:
-                        st.info(f"Trovati {total_results} risultati. Visualizzati {len(items_to_display_df)}.")
-                    else:
-                        st.info(f"Visualizzati {len(items_to_display_df)} dei {total_results} interventi più recenti.")
-
-                    # Visualizzazione con expander
-                    for index, row in items_to_display_df.iterrows():
-                        pdl = row['PdL']
-                        impianto = row.get('IMP', 'N/D')
-                        descrizione = row.get('DESCRIZIONE_ATTIVITA', 'N/D')
-                        storico = row.get('Storico', [])
-
-                        expander_label = f"PdL {pdl} | {impianto} | {str(descrizione)[:60]}..."
-                        with st.expander(expander_label):
-                            visualizza_storico_organizzato(storico, pdl)
-
-                    # Pulsante per caricare altri risultati
-                    if end_idx < total_results:
-                        st.divider()
-                        if st.button("Carica Altri", key="db_load_more"):
-                            st.session_state.db_page += 1
-                            st.rerun()
-
-            with db_tab2:
-                st.subheader("Elenco Completo Relazioni Inviate")
-                relazioni_df = get_all_relazioni()
-                if relazioni_df.empty:
-                    st.info("Nessuna relazione trovata nel database.")
-                else:
-                    relazioni_df['data_intervento'] = pd.to_datetime(relazioni_df['data_intervento']).dt.strftime('%d/%m/%Y')
-                    relazioni_df['timestamp_invio'] = pd.to_datetime(relazioni_df['timestamp_invio']).dt.strftime('%d/%m/%Y %H:%M')
-                    st.dataframe(relazioni_df, width='stretch')
 
         elif selected_tab == "📅 Gestione Turni":
             st.subheader("Gestione Turni")
