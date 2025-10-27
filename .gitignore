@@ -9,10 +9,3 @@ __pycache__/
 *.pyc
 .env
 venv/
-
-# File di database locali
-*.db
-sync_log.log
-
-# File di Microsoft Excel
-*.xlsm
