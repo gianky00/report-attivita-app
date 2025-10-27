@@ -149,31 +149,6 @@ def crea_tabelle_se_non_esistono():
                 cursor.execute(f"CREATE TABLE {nome_tabella} {schema}")
                 print(f"Tabella '{nome_tabella}' creata.")
 
-        # Tabella per il sincronizzatore v2
-        attivita_schema = """(
-            "PdL" TEXT PRIMARY KEY NOT NULL,
-            "FERM" TEXT, "MANUT" TEXT, "PS" TEXT, "AREA" TEXT, "IMP" TEXT,
-            "DESCRIZIONE_ATTIVITA" TEXT, "LUN" TEXT, "MAR" TEXT, "MER" TEXT,
-            "GIO" TEXT, "VEN" TEXT, "STATO_PdL" TEXT, "ESE" TEXT, "SAIT" TEXT,
-            "PONTEROSSO" TEXT, "STATO_ATTIVITA" TEXT, "DATA_CONTROLLO" TEXT,
-            "PERSONALE_IMPIEGATO" TEXT, "PO" TEXT, "AVVISO" TEXT,
-            "row_last_modified" TEXT, "source_sheet" TEXT, "Storico" TEXT,
-            "db_last_modified" TEXT
-        )"""
-        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='attivita_programmate';")
-        if cursor.fetchone() is None:
-            print("Tabella 'attivita_programmate' non trovata. Creazione in corso...")
-            cursor.execute(f"CREATE TABLE attivita_programmate {attivita_schema}")
-            print("Tabella 'attivita_programmate' creata.")
-        else:
-            # Logica di migrazione per aggiungere la colonna se non esiste
-            cursor.execute("PRAGMA table_info(attivita_programmate)")
-            columns = [info[1] for info in cursor.fetchall()]
-            if 'db_last_modified' not in columns:
-                print("Aggiunta della colonna 'db_last_modified' alla tabella esistente...")
-                cursor.execute("ALTER TABLE attivita_programmate ADD COLUMN db_last_modified TEXT;")
-                print("Colonna 'db_last_modified' aggiunta.")
-
         conn.commit()
         print("Verifica e creazione tabelle completata.")
 

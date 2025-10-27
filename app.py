@@ -167,10 +167,6 @@ from components.form_handlers import (
     render_debriefing_ui,
     render_edit_shift_form
 )
-from pages.pianificazione_controllo import (
-    render_situazione_impianti_tab,
-    render_programmazione_tab
-)
 from pages.gestione_turni import (
     render_turni_list,
     render_reperibilita_tab
@@ -359,7 +355,7 @@ def main_app(matricola_utente, ruolo):
         if 'main_tab' not in st.session_state:
             st.session_state.main_tab = "Attività Assegnate"
 
-        main_tabs_list = ["Attività Assegnate", "Pianificazione e Controllo", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
+        main_tabs_list = ["Attività Assegnate", "Database", "📅 Gestione Turni", "Richieste", "❓ Guida"]
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
 
@@ -524,12 +520,6 @@ def main_app(matricola_utente, ruolo):
                         st.subheader("💡 Suggerimenti Tecnici")
                         for suggestion in st.session_state.get('technical_suggestions', []):
                             st.info(suggestion)
-
-        elif selected_tab == "Pianificazione e Controllo":
-            st.header("Pianificazione e Controllo")
-            sub_tabs_pianificazione = st.tabs(["Controllo", "Pianificazione"])
-            with sub_tabs_pianificazione[0]: render_situazione_impianti_tab()
-            with sub_tabs_pianificazione[1]: render_programmazione_tab()
 
         elif selected_tab == "Database":
             from modules.db_manager import get_archive_filter_options, get_filtered_archived_activities

@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -173,96 +174,140 @@ def render_report_validation_tab(user_matricola):
 
 def render_gestione_account(gestionale_data):
     df_contatti = gestionale_data['contatti']
-    st.subheader("Modifica Utenti Esistenti")
-    search_term = st.text_input("Cerca utente per nome o matricola...", key="user_search_admin")
+    st.subheader("Gestione Account Utente")
+
+    # --- Stato della sessione per la UI ---
+    if 'editing_user_matricola' not in st.session_state:
+        st.session_state.editing_user_matricola = None
+    if 'deleting_user_matricola' not in st.session_state:
+        st.session_state.deleting_user_matricola = None
+
+    # --- Funzioni di callback per gestire le azioni ---
+    def start_edit(matricola):
+        st.session_state.editing_user_matricola = matricola
+        st.session_state.deleting_user_matricola = None
+
+    def cancel_edit():
+        st.session_state.editing_user_matricola = None
+
+    def start_delete(matricola):
+        st.session_state.deleting_user_matricola = matricola
+        st.session_state.editing_user_matricola = None
+
+    def cancel_delete():
+        st.session_state.deleting_user_matricola = None
+
+    def reset_password(matricola, user_name):
+        user_idx = df_contatti[df_contatti['Matricola'] == matricola].index[0]
+        df_contatti.loc[user_idx, 'PasswordHash'] = None
+        if salva_gestionale_async(gestionale_data):
+            st.success(f"Password per {user_name} resettata. L'utente dovrà crearne una nuova al prossimo accesso.")
+        else:
+            st.error("Errore durante il reset della password.")
+
+    def reset_2fa(matricola, user_name):
+        user_idx = df_contatti[df_contatti['Matricola'] == matricola].index[0]
+        df_contatti.loc[user_idx, '2FA_Secret'] = None
+        if salva_gestionale_async(gestionale_data):
+            st.success(f"2FA per {user_name} resettata. L'utente dovrà configurarla di nuovo al prossimo accesso.")
+        else:
+            st.error("Errore durante il reset del 2FA.")
+
+    # --- Interfaccia di Modifica Utente (se attiva) ---
+    if st.session_state.editing_user_matricola:
+        user_to_edit = df_contatti[df_contatti['Matricola'] == st.session_state.editing_user_matricola].iloc[0]
+        with st.form(key="edit_user_form"):
+            st.subheader(f"Modifica Utente: {user_to_edit['Nome Cognome']}")
+
+            new_nome_cognome = st.text_input("Nome Cognome", value=user_to_edit['Nome Cognome'])
+            new_matricola = st.text_input("Matricola", value=user_to_edit['Matricola'])
+
+            ruoli_disponibili = ["Tecnico", "Aiutante", "Amministratore"]
+            try:
+                current_role_index = ruoli_disponibili.index(user_to_edit['Ruolo'])
+            except ValueError:
+                current_role_index = 0
+            new_role = st.selectbox("Nuovo Ruolo", options=ruoli_disponibili, index=current_role_index)
+
+            col1, col2 = st.columns(2)
+            if col1.form_submit_button("Salva Modifiche", type="primary"):
+                user_idx = df_contatti.index[df_contatti['Matricola'] == st.session_state.editing_user_matricola][0]
+                df_contatti.loc[user_idx, 'Nome Cognome'] = new_nome_cognome
+                df_contatti.loc[user_idx, 'Matricola'] = new_matricola
+                df_contatti.loc[user_idx, 'Ruolo'] = new_role
+
+                if salva_gestionale_async(gestionale_data):
+                    st.success("Utente aggiornato con successo.")
+                    st.session_state.editing_user_matricola = None
+                    st.rerun()
+                else:
+                    st.error("Errore durante il salvataggio delle modifiche.")
+
+            if col2.form_submit_button("Annulla"):
+                cancel_edit()
+                st.rerun()
+
+    # --- Lista Utenti ---
+    st.subheader("Elenco Utenti")
+    search_term = st.text_input("Cerca per nome o matricola...", key="user_search_admin")
     if search_term:
-        df_contatti = df_contatti[
+        df_contatti_filtrati = df_contatti[
             df_contatti['Nome Cognome'].str.contains(search_term, case=False, na=False) |
             df_contatti['Matricola'].astype(str).str.contains(search_term, case=False, na=False)
         ]
-
-    if 'editing_user_matricola' not in st.session_state:
-        st.session_state.editing_user_matricola = None
-
-    if st.session_state.editing_user_matricola:
-        user_to_edit_series = df_contatti[df_contatti['Matricola'] == st.session_state.editing_user_matricola]
-        if not user_to_edit_series.empty:
-            user_to_edit = user_to_edit_series.iloc[0]
-            user_name = user_to_edit['Nome Cognome']
-            with st.form(key="edit_user_form"):
-                st.subheader(f"Modifica Utente: {user_name} ({st.session_state.editing_user_matricola})")
-                ruoli_disponibili = ["Tecnico", "Aiutante", "Amministratore"]
-                try:
-                    current_role_index = ruoli_disponibili.index(user_to_edit['Ruolo'])
-                except ValueError:
-                    current_role_index = 0
-                new_role = st.selectbox("Nuovo Ruolo", options=ruoli_disponibili, index=current_role_index)
-                is_placeholder_current = pd.isna(user_to_edit.get('PasswordHash'))
-                is_placeholder_new = st.checkbox("Resetta Account (forza creazione nuova password)", value=is_placeholder_current)
-                new_password = ""
-                if not is_placeholder_new:
-                    new_password = st.text_input("Nuova Password (lasciare vuoto per non modificare)", type="password")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.form_submit_button("Salva Modifiche", type="primary"):
-                        user_idx = df_contatti[df_contatti['Matricola'] == st.session_state.editing_user_matricola].index[0]
-                        df_contatti.loc[user_idx, 'Ruolo'] = new_role
-                        if is_placeholder_new:
-                            df_contatti.loc[user_idx, 'PasswordHash'] = None
-                            st.success(f"Account di {user_name} resettato. Dovrà creare una nuova password al prossimo accesso.")
-                        elif new_password:
-                            hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
-                            df_contatti.loc[user_idx, 'PasswordHash'] = hashed.decode('utf-8')
-                            st.success(f"Password per {user_name} aggiornata.")
-                        salva_gestionale_async(gestionale_data)
-                        st.session_state.editing_user_matricola = None
-                        st.toast("Modifiche salvate!")
-                        st.rerun()
-                with col2:
-                    if st.form_submit_button("Annulla"):
-                        st.session_state.editing_user_matricola = None
-                        st.rerun()
-        else:
-            st.error("Utente non trovato. Ricaricamento...")
-            st.session_state.editing_user_matricola = None
-            st.rerun()
     else:
-        for index, user in df_contatti.iterrows():
-            user_name = user['Nome Cognome']
-            user_matricola = user['Matricola']
-            with st.container(border=True):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.markdown(f"**{user_name}** (`{user_matricola}`)")
-                with col2:
-                    is_placeholder = pd.isna(user.get('PasswordHash'))
-                    status = "Da Attivare (primo accesso)" if is_placeholder else "Attivo"
-                    st.markdown(f"*{user['Ruolo']}* - Stato: *{status}*")
-                with col3:
-                    if st.button("Modifica", key=f"edit_{user_matricola}"):
-                        st.session_state.editing_user_matricola = user_matricola
+        df_contatti_filtrati = df_contatti
+
+    for index, user in df_contatti_filtrati.iterrows():
+        user_name = user['Nome Cognome']
+        user_matricola = user['Matricola']
+        with st.container(border=True):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                is_placeholder = pd.isna(user.get('PasswordHash'))
+                status = "Da Attivare" if is_placeholder else "Attivo"
+                st.markdown(f"**{user_name}** (`{user_matricola}`) - *{user['Ruolo']}* - Stato: **{status}**")
+
+            with col2:
+                st.button("✏️ Modifica", key=f"edit_{user_matricola}", on_click=start_edit, args=(user_matricola,))
+
+            # Azioni di reset e cancellazione
+            b1, b2, b3 = st.columns(3)
+            b1.button("🔑 Resetta Password", key=f"reset_pwd_{user_matricola}", on_click=reset_password, args=(user_matricola, user_name))
+            b2.button("📱 Resetta 2FA", key=f"reset_2fa_{user_matricola}", on_click=reset_2fa, args=(user_matricola, user_name), disabled=pd.isna(user.get('2FA_Secret')))
+
+            # Logica di cancellazione con conferma
+            if st.session_state.deleting_user_matricola == user_matricola:
+                st.warning(f"Sei sicuro di voler eliminare l'utente **{user_name}**? Questa azione è irreversibile.")
+                c1, c2 = st.columns(2)
+                if c1.button("✅ Conferma Eliminazione", key=f"confirm_delete_{user_matricola}", type="primary"):
+                    df_contatti.drop(index, inplace=True)
+                    if salva_gestionale_async(gestionale_data):
+                        st.success(f"Utente {user_name} eliminato.")
+                        st.session_state.deleting_user_matricola = None
                         st.rerun()
-                has_2fa = '2FA_Secret' in user and pd.notna(user['2FA_Secret']) and user['2FA_Secret']
-                if has_2fa:
-                    with col1:
-                        if st.button("Resetta 2FA", key=f"reset_2fa_{user_matricola}", help="Rimuove la 2FA per questo utente. Dovrà configurarla di nuovo al prossimo accesso."):
-                            user_idx = df_contatti[df_contatti['Matricola'] == user_matricola].index[0]
-                            df_contatti.loc[user_idx, '2FA_Secret'] = None
-                            salva_gestionale_async(gestionale_data)
-                            st.success(f"2FA resettata per {user_name}.")
-                            st.rerun()
+                    else:
+                        st.error("Errore durante l'eliminazione.")
+                if c2.button("❌ Annulla", key=f"cancel_delete_{user_matricola}"):
+                    cancel_delete()
+                    st.rerun()
+            else:
+                b3.button("❌ Elimina Utente", key=f"delete_{user_matricola}", on_click=start_delete, args=(user_matricola,))
+
     st.divider()
 
-    with st.expander("Crea Nuovo Utente"):
+    # --- Creazione Nuovo Utente ---
+    with st.expander("➕ Crea Nuovo Utente"):
         with st.form("new_user_form", clear_on_submit=True):
             st.subheader("Dati Nuovo Utente")
-            c1, c2, c3 = st.columns(3)
+            c1, c2 = st.columns(2)
             new_nome = c1.text_input("Nome*")
             new_cognome = c2.text_input("Cognome*")
+            c3, c4 = st.columns(2)
             new_matricola = c3.text_input("Matricola*")
-            new_ruolo = st.selectbox("Ruolo", ["Tecnico", "Aiutante", "Amministratore"])
-            submitted_new_user = st.form_submit_button("Crea Utente")
-            if submitted_new_user:
+            new_ruolo = c4.selectbox("Ruolo", ["Tecnico", "Aiutante", "Amministratore"])
+
+            if st.form_submit_button("Crea Utente"):
                 if new_nome and new_cognome and new_matricola:
                     if str(new_matricola) in df_contatti['Matricola'].astype(str).tolist():
                         st.error(f"Errore: La matricola '{new_matricola}' esiste già.")
@@ -272,19 +317,15 @@ def render_gestione_account(gestionale_data):
                             'Matricola': str(new_matricola),
                             'Nome Cognome': nome_completo,
                             'Ruolo': new_ruolo,
-                            'PasswordHash': None,
-                            'Link Attività': ''
+                            'PasswordHash': None, '2FA_Secret': None
                         }
-                        for col in df_contatti.columns:
-                            if col not in new_user_data:
-                                new_user_data[col] = None
                         nuovo_utente_df = pd.DataFrame([new_user_data])
                         gestionale_data['contatti'] = pd.concat([df_contatti, nuovo_utente_df], ignore_index=True)
                         if salva_gestionale_async(gestionale_data):
-                            st.success(f"Utente '{nome_completo}' creato con successo! Dovrà impostare la password al primo accesso.")
+                            st.success(f"Utente '{nome_completo}' creato. Dovrà impostare la password al primo accesso.")
                             st.rerun()
                         else:
-                            st.error("Errore durante il salvataggio del nuovo utente.")
+                            st.error("Errore durante il salvataggio.")
                 else:
                     st.warning("Nome, Cognome e Matricola sono obbligatori.")
 
@@ -421,19 +462,16 @@ def render_admin_dashboard(gestionale_data, matricola_utente):
                             else:
                                 st.error("Errore nel salvataggio del nuovo turno.")
             with caposquadra_tabs[2]:
-                st.header("Gestione e Sincronizzazione Dati")
-                st.info("Questa sezione permette di avviare la sincronizzazione bidirezionale tra il file Excel `ATTIVITA_PROGRAMMATE.xlsm` e il database interno, e di lanciare le macro di aggiornamento.")
-                st.warning("**Funzionamento:**\n- La sincronizzazione aggiorna sia il database che il file Excel `ATTIVITA_PROGRAMMATE.xlsm`.\n- Al termine, viene eseguita automaticamente la macro `AggiornaAttivitaProgrammate_Veloce` dal file `Database_Report_Attivita.xlsm`.")
-                if st.button("🔄 Sincronizza DB <-> Excel e Avvia Macro", type="primary", help="Avvia la sincronizzazione bidirezionale e l'esecuzione della macro."):
-                    from sincronizzatore import sincronizza_db_excel
-                    with st.spinner("Sincronizzazione in corso... Non chiudere la pagina."):
-                        success, message = sincronizza_db_excel()
+                st.header("Gestione Dati Macro")
+                st.info("Questa sezione permette di avviare la macro di aggiornamento dei report.")
+                if st.button("🚀 Avvia Macro AggiornaReport", type="primary"):
+                    from sincronizzatore import run_excel_macro
+                    with st.spinner("Esecuzione della macro in corso..."):
+                        success, message = run_excel_macro("Database_Report_Attivita.xlsm", "AggiornaReport")
                         if success:
-                            st.success("Operazione completata!")
-                            st.info(message)
-                            st.cache_data.clear()
+                            st.success(f"Operazione completata: {message}")
                         else:
-                            st.error(f"Errore durante l'operazione: {message}")
+                            st.error(f"Errore durante l'esecuzione della macro: {message}")
             with caposquadra_tabs[3]:
                 validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
                 with validation_tabs[0]:
