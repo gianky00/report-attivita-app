@@ -178,8 +178,13 @@ def sync_excel_to_db():
                         if '2FA_Secret' not in merged_df.columns:
                             merged_df['2FA_Secret'] = None
 
-                    # 4. Sovrascrivi la tabella con i dati uniti
-                    merged_df.to_sql('contatti', conn, if_exists='replace', index=False)
+                    # 4. Svuota la tabella esistente e appende i dati uniti
+                    # Questo approccio preserva lo schema della tabella, inclusa la Primary Key.
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM contatti;")
+                    merged_df.to_sql('contatti', conn, if_exists='append', index=False)
+                    conn.commit()
+
                     print(f"Tabella 'contatti' aggiornata in modo non distruttivo. {len(merged_df)} righe sincronizzate.")
                     continue # Salta il resto del loop per questa tabella
 
