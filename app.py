@@ -337,7 +337,7 @@ def main_app(matricola_utente, ruolo):
 
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-                lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
+                lista_attivita_raw = []
 
                 # Applica la logica dei falsi positivi anche per le attività di oggi
                 lista_attivita_filtrata = [
