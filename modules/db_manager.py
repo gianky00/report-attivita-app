@@ -310,3 +310,32 @@ def get_unvalidated_reports_by_technician(matricola_tecnico: str) -> pd.DataFram
     finally:
         if conn:
             conn.close()
+
+def get_table_names() -> list:
+    """Restituisce una lista con i nomi di tutte le tabelle nel database."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [row[0] for row in cursor.fetchall()]
+        return tables
+    except sqlite3.Error as e:
+        st.error(f"Errore nel recuperare i nomi delle tabelle: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_table_data(table_name: str) -> pd.DataFrame:
+    """Carica i dati di una specifica tabella dal database."""
+    conn = get_db_connection()
+    try:
+        query = f"SELECT * FROM {table_name}"
+        df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        st.error(f"Errore nel caricare i dati dalla tabella {table_name}: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
