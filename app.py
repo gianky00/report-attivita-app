@@ -38,8 +38,7 @@ from modules.data_manager import (
 from modules.db_manager import (
     get_shifts_by_type, get_reports_to_validate, delete_reports_by_ids,
     process_and_commit_validated_reports, salva_relazione,
-    get_unvalidated_relazioni, process_and_commit_validated_relazioni,
-    get_validated_intervention_reports
+    get_unvalidated_relazioni, process_and_commit_validated_relazioni
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -176,9 +175,7 @@ from pages.admin import (
     render_gestione_account,
     render_technician_detail_view,
     render_report_validation_tab,
-    render_access_logs_tab,
-    render_db_admin_tab,
-    render_crea_nuovo_turno_tab
+    render_access_logs_tab
 )
 from pages.guida import render_guida_tab
 
@@ -344,7 +341,7 @@ def main_app(matricola_utente, ruolo):
         st.divider()
 
         if selected_tab == "Attività Assegnate":
-            sub_tab_list = ["Attività di Oggi", "Recupero Attività", "Attività Validate"]
+            sub_tab_list = ["Attività di Oggi", "Recupero Attività Non rendicontate (Ultimi 30gg)"]
             if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
             sub_tabs = st.tabs(sub_tab_list)
@@ -364,27 +361,12 @@ def main_app(matricola_utente, ruolo):
                 disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
             with sub_tabs[1]:
-                st.header("Recupero Attività")
+                st.header("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
-            with sub_tabs[2]:
-                st.header("Elenco Attività Validate")
-                # Carica i report validati specifici per il tecnico loggato
-                report_validati_df = get_validated_intervention_reports(matricola_tecnico=str(matricola_utente))
-
-                if report_validati_df.empty:
-                    st.info("Non hai ancora report validati.")
-                else:
-                    for _, report in report_validati_df.iterrows():
-                        with st.expander(f"PdL `{report['pdl']}` - Intervento del {pd.to_datetime(report['data_riferimento_attivita']).strftime('%d/%m/%Y')}"):
-                            st.markdown(f"**Descrizione:** {report['descrizione_attivita']}")
-                            st.markdown(f"**Compilato il:** {pd.to_datetime(report['data_compilazione']).strftime('%d/%m/%Y %H:%M')}")
-                            st.info(f"**Testo del Report:**\n\n{report['testo_report']}")
-                            st.caption(f"ID Report: {report['id_report']} | Validato il: {pd.to_datetime(report['timestamp_validazione']).strftime('%d/%m/%Y %H:%M')}")
-
             # Contenuto per la nuova scheda "Compila Relazione"
-            if ruolo in ["Tecnico", "Amministratore"] and len(sub_tabs) > 3:
-                with sub_tabs[3]:
+            if ruolo in ["Tecnico", "Amministratore"] and len(sub_tabs) > 2:
+                with sub_tabs[2]:
                     st.header("Compila Relazione di Reperibilità")
 
                     kb_count = get_report_knowledge_base_count()
@@ -683,7 +665,8 @@ def main_app(matricola_utente, ruolo):
             st.subheader("Dashboard di Controllo")
             if st.session_state.get('detail_technician_matricola'): render_technician_detail_view()
             else:
-                main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica", "Amministrazione DB"])
+                st.subheader("Dashboard di Controllo")
+                main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
                 with main_admin_tabs[0]:
                     caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
                     with caposquadra_tabs[0]:
@@ -699,7 +682,32 @@ def main_app(matricola_utente, ruolo):
                         with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
                         st.info("La sezione di performance è in fase di Sviluppo.")
                     with caposquadra_tabs[1]:
-                        render_crea_nuovo_turno_tab(gestionale_data)
+                        with st.form("new_shift_form", clear_on_submit=True):
+                            st.subheader("Dettagli Nuovo Turno")
+                            tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
+                            desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
+                            data_turno = st.date_input("Data Turno")
+                            col1, col2 = st.columns(2)
+                            with col1: ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
+                            with col2: ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
+                            col3, col4 = st.columns(2)
+                            with col3: posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
+                            with col4: posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
+                            if st.form_submit_button("Crea Turno"):
+                                if not desc_turno: st.error("La descrizione non può essere vuota.")
+                                else:
+                                    new_id = f"T_{int(datetime.datetime.now().timestamp())}"
+                                    nuovo_turno = pd.DataFrame([{'ID_Turno': new_id, 'Descrizione': desc_turno, 'Data': pd.to_datetime(data_turno), 'OrarioInizio': ora_inizio.strftime('%H:%M'), 'OrarioFine': ora_fine.strftime('%H:%M'), 'PostiTecnico': posti_tech, 'PostiAiutante': posti_aiut, 'Tipo': tipo_turno}])
+                                    gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
+                                    df_contatti = gestionale_data.get('contatti')
+                                    if df_contatti is not None:
+                                        utenti_da_notificare = df_contatti['Matricola'].tolist()
+                                        messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
+                                        for matricola in utenti_da_notificare: crea_notifica(gestionale_data, matricola, messaggio)
+                                    if salva_gestionale_async(gestionale_data):
+                                        st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
+                                        st.rerun()
+                                    else: st.error("Errore nel salvataggio del nuovo turno.")
                     with caposquadra_tabs[3]:
                         validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
                         with validation_tabs[0]:
@@ -742,7 +750,13 @@ def main_app(matricola_utente, ruolo):
                 with main_admin_tabs[1]:
                     tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
                     with tecnica_tabs[0]: render_gestione_account(gestionale_data)
-                    with tecnica_tabs[1]: render_access_logs_tab(gestionale_data)
+                    with tecnica_tabs[1]:
+                        st.subheader("Cronologia Accessi")
+                        access_logs_df = gestionale_data.get('access_logs', pd.DataFrame())
+                        if access_logs_df.empty:
+                            st.info("Nessun log di accesso registrato.")
+                        else:
+                            st.dataframe(access_logs_df.sort_values(by="timestamp", ascending=False), width='stretch')
                     with tecnica_tabs[2]:
                         st.header("Gestione Intelligenza Artificiale")
                         ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
@@ -779,8 +793,6 @@ def main_app(matricola_utente, ruolo):
                                     result = learning_module.build_knowledge_base()
                                 if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
                                 else: st.error(result.get("message"))
-                with main_admin_tabs[2]:
-                    render_db_admin_tab()
 
 
 # --- GESTIONE LOGIN ---
