@@ -745,8 +745,6 @@ def main_app(matricola_utente, ruolo):
                     with tecnica_tabs[1]: render_access_logs_tab(gestionale_data)
                     with tecnica_tabs[2]:
                         st.header("Gestione Intelligenza Artificiale")
-                with main_admin_tabs[2]:
-                    render_db_admin_tab()
                         ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
                         with ia_sub_tabs[0]:
                             st.markdown("### 🧠 Revisione Voci del Knowledge Core")
@@ -781,6 +779,8 @@ def main_app(matricola_utente, ruolo):
                                     result = learning_module.build_knowledge_base()
                                 if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
                                 else: st.error(result.get("message"))
+                with main_admin_tabs[2]:
+                    render_db_admin_tab()
 
 
 # --- GESTIONE LOGIN ---
