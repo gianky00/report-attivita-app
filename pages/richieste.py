@@ -35,8 +35,6 @@ def render_richieste_tab(gestionale_data, matricola_utente, ruolo, nome_utente_a
                         <p>{dettagli_richiesta.replace('\\n', '<br>')}</p>
                         <br><hr>
                         <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
-                        <p><strong>Gianky Allegretti</strong><br>
-                        Direttore Tecnico</p>
                         </body></html>
                         """
                         invia_email_con_outlook_async(titolo_email, html_body)
@@ -91,8 +89,6 @@ def render_richieste_tab(gestionale_data, matricola_utente, ruolo, nome_utente_a
                             <p>{note_assenza.replace('\\n', '<br>') if note_assenza else 'Nessuna nota.'}</p>
                             <br><hr>
                             <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
-                            <p><strong>Gianky Allegretti</strong><br>
-                            Direttore Tecnico</p>
                             </body></html>
                             """
                             invia_email_con_outlook_async(titolo_email, html_body)
