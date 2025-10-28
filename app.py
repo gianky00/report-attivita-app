@@ -38,7 +38,8 @@ from modules.data_manager import (
 from modules.db_manager import (
     get_shifts_by_type, get_reports_to_validate, delete_reports_by_ids,
     process_and_commit_validated_reports, salva_relazione,
-    get_unvalidated_relazioni, process_and_commit_validated_relazioni
+    get_unvalidated_relazioni, process_and_commit_validated_relazioni,
+    get_validated_intervention_reports
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
