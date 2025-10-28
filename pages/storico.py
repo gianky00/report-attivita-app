@@ -24,7 +24,9 @@ def render_storico_tab():
     with tab1:
         st.subheader("Archivio Report di Intervento Validati")
         df_attivita = get_validated_intervention_reports()
+
         if not df_attivita.empty:
+            # Search functionality
             search_term = st.text_input("Cerca per PdL, descrizione o tecnico...", key="search_attivita")
             if search_term:
                 df_attivita = df_attivita[
@@ -32,7 +34,28 @@ def render_storico_tab():
                     df_attivita["descrizione_attivita"].str.contains(search_term, case=False, na=False) |
                     df_attivita["nome_tecnico"].str.contains(search_term, case=False, na=False)
                 ]
-            st.dataframe(df_attivita, use_container_width=True)
+
+            # Group by PDL
+            grouped_by_pdl = df_attivita.groupby('pdl')
+
+            for pdl, group in grouped_by_pdl:
+                # Get the description from the first row of the group
+                descrizione_pdl = group['descrizione_attivita'].iloc[0]
+                expander_title = f"**PDL {pdl}** - {descrizione_pdl}"
+
+                with st.expander(expander_title):
+                    # Sort interventions by date
+                    group['data_riferimento_attivita'] = pd.to_datetime(group['data_riferimento_attivita'])
+                    sorted_group = group.sort_values(by='data_riferimento_attivita', ascending=False)
+
+                    for _, row in sorted_group.iterrows():
+                        data_intervento_str = row['data_riferimento_attivita'].strftime('%d/%m/%Y')
+                        sub_expander_title = f"Intervento del **{data_intervento_str}** - Tecnico: **{row['nome_tecnico']}**"
+
+                        with st.expander(sub_expander_title):
+                            st.markdown(f"**Stato Attività:** {row['stato_attivita']}")
+                            st.markdown(f"**Data Compilazione:** {pd.to_datetime(row['data_compilazione']).strftime('%d/%m/%Y %H:%M')}")
+                            st.text_area("Report", value=row['testo_report'], height=200, disabled=True, key=f"report_{row['id_report']}")
         else:
             st.success("Non ci sono report di intervento validati nell'archivio.")
 

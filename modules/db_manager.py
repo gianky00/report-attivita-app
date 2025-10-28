@@ -123,68 +123,13 @@ def delete_reports_by_ids(report_ids: list) -> bool:
 
 def process_and_commit_validated_reports(validated_data: list) -> bool:
     """
-    Scrive i report validati nel file Excel 'Database_Report_Attivita.xlsm'
-    e poi li rimuove dalla tabella di validazione del database.
+    Salva i report validati nella tabella `report_interventi` del database
+    e poi li rimuove dalla tabella di validazione.
     """
-    import openpyxl
-
-    EXCEL_REPORT_FILE = "Database_Report_Attivita.xlsm"
-    SHEET_NAME = "STRUMENTALE"
-
     if not validated_data:
         return True
 
-    # 1. Scrivi su Excel
-    try:
-        # Carica il workbook preservando le macro
-        workbook = openpyxl.load_workbook(EXCEL_REPORT_FILE, keep_vba=True)
-        sheet = workbook[SHEET_NAME]
-
-        # Cerca la tabella 'Strumentale' nel foglio
-        table = sheet.tables.get("Strumentale")
-        if not table:
-            print(f"ERRORE: La tabella 'Strumentale' non è stata trovata nel foglio '{SHEET_NAME}'. Impossibile aggiungere righe.")
-            return False
-
-        # Prepara le righe da aggiungere
-        num_rows_added = 0
-        for report_dict in validated_data:
-            # Ordine delle colonne: PdL, Descrizione, Matricola, Tecnico, Stato, Report, Data_Compilazione, Data_Intervento
-            row_to_add = [
-                report_dict.get('pdl'),
-                report_dict.get('descrizione_attivita'),
-                report_dict.get('matricola_tecnico'),
-                report_dict.get('nome_tecnico'),
-                report_dict.get('stato_attivita'),
-                report_dict.get('testo_report'),
-                report_dict.get('data_compilazione'),
-                report_dict.get('data_riferimento_attivita')
-            ]
-            sheet.append(row_to_add)
-            num_rows_added += 1
-
-        # Se sono state aggiunte righe, espandi il range della tabella
-        if num_rows_added > 0:
-            from openpyxl.utils import range_boundaries, get_column_letter
-            min_col, min_row, max_col, max_row = range_boundaries(table.ref)
-            new_max_row = max_row + num_rows_added
-            new_ref = f"{get_column_letter(min_col)}{min_row}:{get_column_letter(max_col)}{new_max_row}"
-            table.ref = new_ref
-
-        workbook.save(EXCEL_REPORT_FILE)
-        print(f"Aggiunte {len(validated_data)} righe al file Excel '{EXCEL_REPORT_FILE}' e aggiornata la tabella 'Strumentale'.")
-
-    except FileNotFoundError:
-        print(f"ERRORE: Il file '{EXCEL_REPORT_FILE}' non è stato trovato.")
-        return False
-    except KeyError:
-        print(f"ERRORE: Il foglio '{SHEET_NAME}' non è stato trovato nel file Excel.")
-        return False
-    except Exception as e:
-        print(f"Errore durante la scrittura sul file Excel: {e}")
-        return False
-
-    # 2. Se la scrittura su Excel è andata a buon fine, salva i report nella tabella 'report_interventi'
+    # 1. Salva i report validati nella tabella 'report_interventi'
     import datetime
     for report_dict in validated_data:
         report_data = {
@@ -200,12 +145,13 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
             "timestamp_validazione": datetime.datetime.now().isoformat()
         }
         if not salva_report_intervento(report_data):
-            print(f"ATTENZIONE: Report {report_dict.get('id_report')} scritto su Excel ma non salvato nel DB storico 'report_interventi'.")
+            # Se il salvataggio nel DB fallisce, logga l'errore ma non bloccare la validazione degli altri report
+            print(f"ATTENZIONE: Report {report_dict.get('id_report')} non salvato nel DB storico 'report_interventi'.")
 
-    # 3. Infine, rimuovi i report dalla tabella di validazione
+    # 2. Infine, rimuovi i report dalla tabella di validazione
     report_ids_to_delete = [report['id_report'] for report in validated_data]
     if not delete_reports_by_ids(report_ids_to_delete):
-        print("ERRORE CRITICO: I report sono stati scritti su Excel e nel DB storico, ma non è stato possibile rimuoverli dalla coda di validazione.")
+        print("ERRORE CRITICO: I report sono stati salvati nel DB storico, ma non è stato possibile rimuoverli dalla coda di validazione.")
         return False
 
     return True
