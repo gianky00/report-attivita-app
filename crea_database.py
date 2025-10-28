@@ -160,66 +160,11 @@ def crea_tabelle_se_non_esistono():
 
 def check_and_recreate_db_if_needed():
     """
-    Controlla se il DB esiste e se ha lo schema corretto (verificando la PK della tabella contatti).
-    Se lo schema è obsoleto, crea un backup del vecchio DB e lo elimina, forzando la ricreazione.
+    Controlla se il DB esiste. Se non esiste, lo crea.
     """
     if not os.path.exists(DB_NAME):
         print("Database non trovato. Verrà creato.")
-        return # Il DB non esiste, quindi verrà creato da zero
-
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-
-        # Controlla se la tabella 'contatti' esiste prima di ispezionarla
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='contatti';")
-        if cursor.fetchone() is None:
-            print("Tabella 'contatti' non trovata. Il database verrà ricreato.")
-            # La tabella non esiste, quindi lo schema è incompleto.
-            # Non c'è bisogno di fare un backup se manca la tabella principale.
-            conn.close()
-            os.remove(DB_NAME)
-            print(f"File '{DB_NAME}' rimosso.")
-            return
-
-        # Ispeziona la tabella 'contatti' per vedere se 'Matricola' è una PK
-        cursor.execute("PRAGMA table_info(contatti);")
-        columns_info = cursor.fetchall()
-
-        is_pk = False
-        for col in columns_info:
-            # col[1] è il nome della colonna, col[5] è 1 se è parte della PK
-            if col[1] == 'Matricola' and col[5] == 1:
-                is_pk = True
-                break
-
-        if not is_pk:
-            print("ERRORE: Schema del database obsoleto rilevato (manca PK su 'contatti').")
-            conn.close() # Chiudi la connessione prima di manipolare il file
-
-            # Crea un backup
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_name = f"{DB_NAME}.backup_{timestamp}"
-            shutil.copy2(DB_NAME, backup_name)
-            print(f"Backup del database corrente creato come '{backup_name}'.")
-
-            # Rimuovi il vecchio DB per forzare la ricreazione
-            os.remove(DB_NAME)
-            print(f"Database obsoleto '{DB_NAME}' rimosso. Verrà ricreato con lo schema corretto.")
-
-    except sqlite3.Error as e:
-        print(f"Errore durante il controllo dello schema del database: {e}")
-        # Se c'è un errore, potrebbe essere corrotto. Proviamo a ricrearlo.
-        if conn:
-            conn.close()
-        if os.path.exists(DB_NAME):
-             os.remove(DB_NAME)
-        print(f"Database '{DB_NAME}' rimosso a causa di un errore.")
-
-    finally:
-        if conn:
-            conn.close()
+        crea_tabelle_se_non_esistono()
 
 
 if __name__ == "__main__":
