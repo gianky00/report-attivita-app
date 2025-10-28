@@ -1,3 +1,4 @@
+
 import threading
 import config
 
@@ -7,7 +8,6 @@ try:
     outlook_enabled = True
 except ImportError:
     outlook_enabled = False
-    # Definisci placeholder se le librerie non sono disponibili
     pythoncom = None
     win32 = None
 
@@ -18,8 +18,10 @@ def _invia_email_con_outlook_backend(subject, html_body):
         return
 
     pythoncom.CoInitialize()
-    with config.OUTLOOK_LOCK:
-        try:
+    outlook = None
+    mail = None
+    try:
+        with config.OUTLOOK_LOCK:
             outlook = win32.Dispatch('outlook.application')
             mail = outlook.CreateItem(0)
             mail.To = config.EMAIL_DESTINATARIO
@@ -27,11 +29,16 @@ def _invia_email_con_outlook_backend(subject, html_body):
             mail.Subject = subject
             mail.HTMLBody = html_body
             mail.Send()
-        except Exception as e:
-            # Log all'output standard, non è possibile usare st.warning da un thread
-            print(f"ATTENZIONE: Impossibile inviare l'email con Outlook in background: {e}.")
-        finally:
-            pythoncom.CoUninitialize()
+            print(f"Email '{subject}' inviata con successo in background.")
+    except Exception as e:
+        print(f"ATTENZIONE: Impossibile inviare l'email con Outlook in background: {e}.")
+    finally:
+        # Rilascia esplicitamente gli oggetti COM
+        if mail:
+            del mail
+        if outlook:
+            del outlook
+        pythoncom.CoUninitialize()
 
 def invia_email_con_outlook_async(subject, html_body):
     """Avvia l'invio dell'email in un thread separato per non bloccare l'UI."""

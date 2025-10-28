@@ -25,9 +25,6 @@ REM --- 3. Creazione e Sincronizzazione del Database ---
 echo [3/7] Preparazione del database locale...
 python crea_database.py
 echo.
-echo [4/7] Sincronizzazione dei dati da Excel al database...
-python sincronizzatore.py
-echo.
 
 REM --- 5. Avvia ngrok in una nuova finestra ---
 echo [5/7] Avvio di ngrok per esporre la porta 8501...

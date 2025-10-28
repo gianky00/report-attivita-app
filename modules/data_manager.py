@@ -124,67 +124,6 @@ def salva_gestionale_async(data):
     return True # Ritorna immediatamente
 
 
-
-def carica_archivio_completo():
-    """
-    Nuova logica: Carica lo storico direttamente dal file ATTIVITA_PROGRAMMATE.xlsx,
-    che ora è l'unica fonte di verità.
-    La funzione simula un "archivio" per compatibilità con le funzioni esistenti.
-    """
-    excel_path = get_attivita_programmate_path()
-    all_data = []
-
-    sheets_to_read = ['A1', 'A2', 'A3', 'CTE', 'BLENDING']
-    # Aggiungo la colonna IMP per il filtro
-    cols_to_extract = ['PdL', "DESCRIZIONE\nATTIVITA'", "STATO\nPdL", 'DATA\nCONTROLLO', 'PERSONALE\nIMPIEGATO', "STATO\nATTIVITA'", "IMP"]
-
-    for sheet_name in sheets_to_read:
-        try:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name, header=2)
-            df.columns = [str(col).strip() for col in df.columns]
-
-            # Assicurati che le colonne esistano, altrimenti creale vuote per evitare errori
-            if "STATO\nATTIVITA'" not in df.columns:
-                df["STATO\nATTIVITA'"] = ""
-            if "IMP" not in df.columns:
-                df["IMP"] = ""
-
-            if all(col in df.columns for col in cols_to_extract):
-                df_sheet = df[cols_to_extract].copy()
-                all_data.append(df_sheet)
-        except Exception:
-            continue
-
-    if not all_data:
-        return pd.DataFrame()
-
-    df_archivio = pd.concat(all_data, ignore_index=True)
-    df_archivio.dropna(subset=['PdL', 'DATA\nCONTROLLO'], inplace=True)
-
-    # Rinomina le colonne per corrispondere allo schema atteso
-    df_archivio.rename(columns={
-        "DESCRIZIONE\nATTIVITA'": "Descrizione",
-        "STATO\nPdL": "Stato",
-        "DATA\nCONTROLLO": "Data_Riferimento",
-        "PERSONALE\nIMPIEGATO": "Tecnico",
-        "STATO\nATTIVITA'": "Report" # Mappa la colonna corretta a Report
-    }, inplace=True)
-
-    # Riempi i report vuoti con un testo standard
-    df_archivio['Report'] = df_archivio['Report'].fillna("Nessun report disponibile.")
-
-    # Aggiungi colonne mancanti per compatibilità
-    df_archivio['Data_Compilazione'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
-    df_archivio['Data_Riferimento_dt'] = pd.to_datetime(df_archivio['Data_Riferimento'], errors='coerce')
-
-    return df_archivio
-
-def json_serial(obj):
-    """JSON serializer for objects not serializable by default json code"""
-    if isinstance(obj, (datetime.datetime, datetime.date, pd.Timestamp)):
-        return obj.isoformat()
-    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
-
 def scrivi_o_aggiorna_risposta(dati_da_scrivere, matricola, data_riferimento):
     """
     Scrive un report direttamente nella tabella `report_da_validare` del database SQLite.
@@ -361,7 +300,7 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             return []
 
         # Ottimizzazione: Carica lo storico una sola volta
-        df_storico_db = carica_dati_attivita_programmate()
+        df_storico_db = pd.DataFrame() #FIXME: carica_dati_attivita_programmate() was removed
 
         attivita_collezionate = {}
         for _, riga in df_range.iterrows():
@@ -389,7 +328,7 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
                 activity_key = (pdl, desc)
                 if activity_key not in attivita_collezionate:
                     # Filtra lo storico per il PdL corrente
-                    storico_pdl = df_storico_db[df_storico_db['PdL'] == pdl].to_dict('records')
+                    storico_pdl = [] #df_storico_db[df_storico_db['PdL'] == pdl].to_dict('records')
 
                     attivita_collezionate[activity_key] = {
                         'pdl': pdl,
@@ -431,51 +370,24 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             st.error(f"Errore durante la ricerca attività per il {giorno}/{mese}/{anno}: {e}")
         return []
 
-@st.cache_data(ttl=600)
-def carica_dati_attivita_programmate():
+@st.cache_data
+def load_validated_intervention_reports():
     """
-    Carica i dati delle attività programmate direttamente dal database SQLite.
-    Questa funzione è molto più veloce rispetto alla lettura del file Excel.
+    Carica lo storico dei report di intervento validati dal file Excel.
     """
-    import sqlite3
-
-    DB_NAME = "schedario.db"
-    TABLE_NAME = "attivita_programmate"
-
-    if not os.path.exists(DB_NAME):
-        st.error(f"Database '{DB_NAME}' non trovato. Eseguire lo script di avvio per crearlo e sincronizzarlo.")
-        return pd.DataFrame()
-
-    conn = None
+    EXCEL_FILE = "Database_Report_Attivita.xlsm"
+    SHEET_NAME = "STRUMENTALE"
     try:
-        conn = sqlite3.connect(DB_NAME)
-        # Leggi tutti i dati dalla tabella e caricali in un DataFrame pandas
-        df = pd.read_sql_query(f"SELECT * FROM {TABLE_NAME}", conn)
-
-        # La colonna 'Storico' è memorizzata come stringa JSON.
-        # Dobbiamo riconvertirla in un oggetto Python (lista di dizionari).
-        def parse_storico_json(json_string):
-            try:
-                # Se la stringa non è vuota o None, la parsifichiamo
-                if json_string:
-                    return json.loads(json_string)
-                # Altrimenti, restituiamo una lista vuota, come si aspetta l'UI
-                return []
-            except (json.JSONDecodeError, TypeError):
-                # In caso di errore (es. stringa non valida), restituisci una lista vuota
-                return []
-
-        if 'Storico' in df.columns:
-            df['Storico'] = df['Storico'].apply(parse_storico_json)
-        else:
-            # Se la colonna non dovesse esistere, la creiamo vuota per sicurezza
-            df['Storico'] = [[] for _ in range(len(df))]
-
+        df = pd.read_excel(EXCEL_FILE, sheet_name=SHEET_NAME, engine='openpyxl')
+        # Assicura che le colonne abbiano nomi utilizzabili
+        df.columns = [col.replace(' ', '_').lower() for col in df.columns]
+        # Converte le date se necessario, gestendo eventuali errori
+        if 'data_intervento' in df.columns:
+            df['data_intervento'] = pd.to_datetime(df['data_intervento'], errors='coerce')
         return df
-
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        st.error(f"Errore durante la lettura dal database: {e}")
+    except FileNotFoundError:
+        st.error(f"File non trovato: {EXCEL_FILE}. Impossibile caricare lo storico delle attività.")
         return pd.DataFrame()
-    finally:
-        if conn:
-            conn.close()
+    except Exception as e:
+        st.error(f"Errore durante la lettura del file Excel: {e}")
+        return pd.DataFrame()

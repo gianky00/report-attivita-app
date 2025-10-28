@@ -25,26 +25,6 @@ def save_unreviewed_knowledge(data):
     with open(UNREVIEWED_KNOWLEDGE_PATH, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
-def add_new_entry(pdl, attivita, report_lines, tecnico):
-    """
-    Aggiunge una nuova voce di conoscenza da revisionare.
-    """
-    unreviewed = load_unreviewed_knowledge()
-    
-    new_entry = {
-        "id": f"entry_{int(datetime.now().timestamp())}",
-        "pdl": pdl,
-        "attivita_collegata": attivita,
-        "dettagli_report": report_lines,
-        "suggerito_da": tecnico,
-        "data_suggerimento": datetime.now().isoformat(),
-        "stato": "in attesa di revisione"
-    }
-    
-    unreviewed.append(new_entry)
-    save_unreviewed_knowledge(unreviewed)
-    return new_entry
-
 def integrate_knowledge(entry_id, integration_details):
     """
     Integra una voce revisionata nel knowledge_core.json principale.
