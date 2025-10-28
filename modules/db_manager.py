@@ -174,12 +174,19 @@ def salva_report_intervento(dati_report: dict) -> bool:
         if conn:
             conn.close()
 
-def get_validated_intervention_reports() -> pd.DataFrame:
-    """Carica tutti i report di intervento validati dal database."""
+def get_validated_intervention_reports(matricola_tecnico: str = None) -> pd.DataFrame:
+    """
+    Carica i report di intervento validati dal database.
+    Se matricola_tecnico è fornita, filtra per quel tecnico.
+    """
     conn = get_db_connection()
     try:
-        query = "SELECT * FROM report_interventi ORDER BY data_riferimento_attivita DESC"
-        df = pd.read_sql_query(query, conn)
+        if matricola_tecnico:
+            query = "SELECT * FROM report_interventi WHERE matricola_tecnico = ? ORDER BY data_riferimento_attivita DESC"
+            df = pd.read_sql_query(query, conn, params=(matricola_tecnico,))
+        else:
+            query = "SELECT * FROM report_interventi ORDER BY data_riferimento_attivita DESC"
+            df = pd.read_sql_query(query, conn)
         return df
     except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
         st.error(f"Errore nel caricamento dei report di intervento: {e}")
@@ -286,6 +293,20 @@ def salva_relazione(dati_relazione: dict) -> bool:
     except sqlite3.Error as e:
         print(f"Errore durante il salvataggio della relazione nel DB: {e}")
         return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_unvalidated_reports_by_technician(matricola_tecnico: str) -> pd.DataFrame:
+    """Carica i report inviati da un tecnico ma non ancora validati."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM report_da_validare WHERE matricola_tecnico = ? ORDER BY data_compilazione DESC"
+        df = pd.read_sql_query(query, conn, params=(matricola_tecnico,))
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        st.error(f"Errore nel caricamento dei report non validati per il tecnico {matricola_tecnico}: {e}")
+        return pd.DataFrame()
     finally:
         if conn:
             conn.close()
