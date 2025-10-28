@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from modules.utils import merge_time_slots
+from modules.db_manager import get_unvalidated_reports_by_technician
 
 def visualizza_storico_organizzato(storico_list, pdl):
     """Mostra lo storico di un'attività in modo organizzato, usando st.toggle."""
@@ -46,7 +48,9 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
             if len(team) > 1:
                 team_details_md = "**Team:**\n"
                 for member in team:
-                    orari_str = ", ".join(member['orari'])
+                    # Accorpa le fasce orarie
+                    orari_accorpati = merge_time_slots(member['orari'])
+                    orari_str = ", ".join(orari_accorpati)
                     team_details_md += f"- {member['nome']} ({member['ruolo']}) | 🕒 {orari_str}\n"
                 st.info(team_details_md)
 
@@ -63,17 +67,23 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
 
     st.divider()
 
-    if st.session_state.get(f"completed_tasks_{section_key}", []):
-        with st.expander("✅ Attività Inviate (Modificabili)", expanded=False):
-            for i, task_data in enumerate(st.session_state[f"completed_tasks_{section_key}"]):
-                with st.container(border=True):
-                    st.markdown(f"**PdL `{task_data['pdl']}`** - {task_data['stato']}")
-                    st.caption("Report Inviato:")
-                    st.info(task_data['report'])
-                    if st.button("Modifica Report", key=f"edit_{section_key}_{i}"):
-                        st.session_state.debriefing_task = task_data
-                        st.session_state.report_mode = 'manual'
-                        st.rerun()
+    # Mostra i report inviati ma non ancora validati, recuperandoli dal DB
+    matricola_utente = st.session_state.get('authenticated_user', '')
+    if matricola_utente:
+        unvalidated_reports_df = get_unvalidated_reports_by_technician(matricola_utente)
+        if not unvalidated_reports_df.empty:
+            with st.expander("✅ Attività Inviate (Modificabili)", expanded=True):
+                for _, report in unvalidated_reports_df.iterrows():
+                    with st.container(border=True):
+                        st.markdown(f"**PdL `{report['pdl']}`** - Inviato il {pd.to_datetime(report['data_compilazione']).strftime('%d/%m/%Y %H:%M')}")
+                        st.caption("Report Inviato:")
+                        st.info(report['testo_report'])
+                        if st.button("Modifica Report", key=f"edit_report_{report['id_report']}"):
+                            # Prepara lo stato per la modifica, convertendo il record del DB in un dizionario
+                            task_data = report.to_dict()
+                            st.session_state.debriefing_task = task_data
+                            st.session_state.report_mode = 'manual'
+                            st.rerun()
 
 def render_notification_center(notifications_df, gestionale_data, matricola_utente):
     unread_count = len(notifications_df[notifications_df['Stato'] == 'non letta'])

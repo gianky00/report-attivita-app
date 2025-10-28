@@ -341,7 +341,7 @@ def main_app(matricola_utente, ruolo):
         st.divider()
 
         if selected_tab == "Attività Assegnate":
-            sub_tab_list = ["Attività di Oggi", "Recupero Attività Non rendicontate (Ultimi 30gg)"]
+            sub_tab_list = ["Attività di Oggi", "Recupero Attività", "Attività Validate"]
             if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
             sub_tabs = st.tabs(sub_tab_list)
@@ -361,12 +361,27 @@ def main_app(matricola_utente, ruolo):
                 disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
             with sub_tabs[1]:
-                st.header("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
+                st.header("Recupero Attività")
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
+            with sub_tabs[2]:
+                st.header("Elenco Attività Validate")
+                # Carica i report validati specifici per il tecnico loggato
+                report_validati_df = get_validated_intervention_reports(matricola_tecnico=str(matricola_utente))
+
+                if report_validati_df.empty:
+                    st.info("Non hai ancora report validati.")
+                else:
+                    for _, report in report_validati_df.iterrows():
+                        with st.expander(f"PdL `{report['pdl']}` - Intervento del {pd.to_datetime(report['data_riferimento_attivita']).strftime('%d/%m/%Y')}"):
+                            st.markdown(f"**Descrizione:** {report['descrizione_attivita']}")
+                            st.markdown(f"**Compilato il:** {pd.to_datetime(report['data_compilazione']).strftime('%d/%m/%Y %H:%M')}")
+                            st.info(f"**Testo del Report:**\n\n{report['testo_report']}")
+                            st.caption(f"ID Report: {report['id_report']} | Validato il: {pd.to_datetime(report['timestamp_validazione']).strftime('%d/%m/%Y %H:%M')}")
+
             # Contenuto per la nuova scheda "Compila Relazione"
-            if ruolo in ["Tecnico", "Amministratore"] and len(sub_tabs) > 2:
-                with sub_tabs[2]:
+            if ruolo in ["Tecnico", "Amministratore"] and len(sub_tabs) > 3:
+                with sub_tabs[3]:
                     st.header("Compila Relazione di Reperibilità")
 
                     kb_count = get_report_knowledge_base_count()
@@ -665,7 +680,6 @@ def main_app(matricola_utente, ruolo):
             st.subheader("Dashboard di Controllo")
             if st.session_state.get('detail_technician_matricola'): render_technician_detail_view()
             else:
-                st.subheader("Dashboard di Controllo")
                 main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
                 with main_admin_tabs[0]:
                     caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
