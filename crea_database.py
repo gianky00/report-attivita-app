@@ -139,6 +139,39 @@ def crea_tabelle_se_non_esistono():
                 timestamp_invio TEXT,
                 id_validatore TEXT,
                 timestamp_validazione TEXT
+            )""",
+            "report_interventi": """(
+                id_report TEXT PRIMARY KEY NOT NULL,
+                pdl TEXT,
+                descrizione_attivita TEXT,
+                matricola_tecnico TEXT,
+                nome_tecnico TEXT,
+                stato_attivita TEXT,
+                testo_report TEXT,
+                data_compilazione TEXT,
+                data_riferimento_attivita TEXT,
+                timestamp_validazione TEXT
+            )""",
+            "storico_richieste_materiali": """(
+                id_storico INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_richiesta TEXT NOT NULL,
+                richiedente_matricola TEXT,
+                nome_richiedente TEXT,
+                timestamp_richiesta TEXT,
+                dettagli_richiesta TEXT,
+                timestamp_approvazione TEXT
+            )""",
+            "storico_richieste_assenze": """(
+                id_storico INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_richiesta TEXT NOT NULL,
+                richiedente_matricola TEXT,
+                nome_richiedente TEXT,
+                timestamp_richiesta TEXT,
+                tipo_assenza TEXT,
+                data_inizio TEXT,
+                data_fine TEXT,
+                note TEXT,
+                timestamp_approvazione TEXT
             )"""
         }
 
