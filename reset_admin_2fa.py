@@ -1,26 +1,26 @@
 import sqlite3
+import sys
 
 DB_NAME = "schedario.db"
-ADMIN_MATRICOLA = "admin"
 
-def reset_admin_2fa():
+def reset_user_2fa(matricola):
     """
-    Resets the 2FA secret for the admin user in the database.
+    Resets the 2FA secret for a given user Matricola in the database.
     """
     conn = None
     try:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
 
-        # Set the 2FA_Secret to NULL for the admin user
-        cursor.execute("UPDATE contatti SET \"2FA_Secret\" = NULL WHERE Matricola = ?", (ADMIN_MATRICOLA,))
+        # Set the 2FA_Secret to NULL for the specified user
+        cursor.execute("UPDATE contatti SET \"2FA_Secret\" = NULL WHERE Matricola = ?", (matricola,))
 
         if cursor.rowcount > 0:
             conn.commit()
-            print(f"2FA for user '{ADMIN_MATRICOLA}' has been reset successfully.")
+            print(f"2FA for user with Matricola '{matricola}' has been reset successfully.")
             print("The user will be prompted to set up 2FA on their next login.")
         else:
-            print(f"User '{ADMIN_MATRICOLA}' not found in the database. No changes were made.")
+            print(f"User with Matricola '{matricola}' not found in the database. No changes were made.")
 
     except sqlite3.Error as e:
         print(f"Database error: {e}")
@@ -29,4 +29,9 @@ def reset_admin_2fa():
             conn.close()
 
 if __name__ == "__main__":
-    reset_admin_2fa()
+    if len(sys.argv) != 2:
+        print("Usage: python reset_admin_2fa.py <Matricola>")
+        sys.exit(1)
+
+    user_matricola = sys.argv[1]
+    reset_user_2fa(user_matricola)
