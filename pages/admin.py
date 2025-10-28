@@ -303,30 +303,8 @@ def render_admin_dashboard(gestionale_data, matricola_utente):
     else:
         main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
         with main_admin_tabs[0]:
-            caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
+            caposquadra_tabs = st.tabs(["Crea Nuovo Turno", "Validazione Report"])
             with caposquadra_tabs[0]:
-                st.markdown("#### Seleziona Intervallo Temporale")
-                if 'perf_start_date' not in st.session_state:
-                    st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
-                if 'perf_end_date' not in st.session_state:
-                    st.session_state.perf_end_date = datetime.date.today()
-                c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
-                if c1.button("Oggi"):
-                    st.session_state.perf_start_date = st.session_state.perf_end_date = datetime.date.today()
-                if c2.button("Ultimi 7 giorni"):
-                    st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7)
-                    st.session_state.perf_end_date = datetime.date.today()
-                if c3.button("Ultimi 30 giorni"):
-                    st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
-                    st.session_state.perf_end_date = datetime.date.today()
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
-                with col2:
-                    st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
-                start_datetime, end_datetime = st.session_state.perf_start_date, st.session_state.perf_end_date
-                st.info("La sezione di performance è in fase di Sviluppo.")
-            with caposquadra_tabs[1]:
                 with st.form("new_shift_form", clear_on_submit=True):
                     st.subheader("Dettagli Nuovo Turno")
                     tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
@@ -360,18 +338,7 @@ def render_admin_dashboard(gestionale_data, matricola_utente):
                                 st.rerun()
                             else:
                                 st.error("Errore nel salvataggio del nuovo turno.")
-            with caposquadra_tabs[2]:
-                st.header("Gestione Dati Macro")
-                st.info("Questa sezione permette di avviare la macro di aggiornamento dei report.")
-                if st.button("🚀 Avvia Macro AggiornaReport", type="primary"):
-                    from sincronizzatore import run_excel_macro
-                    with st.spinner("Esecuzione della macro in corso..."):
-                        success, message = run_excel_macro("Database_Report_Attivita.xlsm", "AggiornaReport")
-                        if success:
-                            st.success(f"Operazione completata: {message}")
-                        else:
-                            st.error(f"Errore durante l'esecuzione della macro: {message}")
-            with caposquadra_tabs[3]:
+            with caposquadra_tabs[1]:
                 validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
                 with validation_tabs[0]:
                     render_report_validation_tab(matricola_utente)

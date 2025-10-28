@@ -32,7 +32,8 @@ from modules.data_manager import (
     carica_knowledge_core,
     carica_gestionale,
     salva_gestionale_async,
-    scrivi_o_aggiorna_risposta
+    scrivi_o_aggiorna_risposta,
+    trova_attivita
 )
 from modules.db_manager import (
     get_shifts_by_type, get_reports_to_validate, delete_reports_by_ids,
@@ -240,6 +241,18 @@ def delete_session(token):
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---
+def recupera_attivita_non_rendicontate(matricola_utente, df_contatti):
+    """
+    Recupera le attività non rendicontate degli ultimi 30 giorni.
+    """
+    oggi = datetime.date.today()
+    attivita_da_recuperare = []
+    for i in range(1, 31):
+        giorno_controllo = oggi - datetime.timedelta(days=i)
+        attivita_giorno = trova_attivita(matricola_utente, giorno_controllo.day, giorno_controllo.month, giorno_controllo.year, df_contatti)
+        attivita_da_recuperare.extend(attivita_giorno)
+    return attivita_da_recuperare
+
 def main_app(matricola_utente, ruolo):
     st.set_page_config(layout="wide", page_title="Gestionale")
 
@@ -306,9 +319,7 @@ def main_app(matricola_utente, ruolo):
 
         oggi = datetime.date.today()
 
-        # La logica di recupero attività è stata rimossa perché dipendeva dal vecchio sistema di pianificazione.
-        # Verrà sostituita da un nuovo sistema basato su DB se necessario.
-        attivita_da_recuperare = []
+        attivita_da_recuperare = recupera_attivita_non_rendicontate(matricola_utente, df_contatti)
 
         # Inizializza lo stato della tab principale se non esiste
         if 'main_tab' not in st.session_state:
@@ -337,7 +348,7 @@ def main_app(matricola_utente, ruolo):
 
             with sub_tabs[0]:
                 st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-                lista_attivita_raw = []
+                lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
 
                 # Applica la logica dei falsi positivi anche per le attività di oggi
                 lista_attivita_filtrata = [
