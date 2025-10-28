@@ -262,6 +262,70 @@ def get_validated_reports(table_name: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+def salva_storico_materiali(dati_richiesta: dict) -> bool:
+    """Salva una richiesta di materiali approvata nello storico."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cols = ', '.join(f'"{k}"' for k in dati_richiesta.keys())
+            placeholders = ', '.join('?' for _ in dati_richiesta)
+            sql = f"INSERT INTO storico_richieste_materiali ({cols}) VALUES ({placeholders})"
+            cursor.execute(sql, list(dati_richiesta.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante il salvataggio della richiesta materiali nello storico: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def salva_storico_assenze(dati_richiesta: dict) -> bool:
+    """Salva una richiesta di assenza approvata nello storico."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cols = ', '.join(f'"{k}"' for k in dati_richiesta.keys())
+            placeholders = ', '.join('?' for _ in dati_richiesta)
+            sql = f"INSERT INTO storico_richieste_assenze ({cols}) VALUES ({placeholders})"
+            cursor.execute(sql, list(dati_richiesta.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante il salvataggio della richiesta assenze nello storico: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_storico_richieste_materiali() -> pd.DataFrame:
+    """Carica lo storico delle richieste di materiali dal database."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM storico_richieste_materiali ORDER BY timestamp_approvazione DESC"
+        df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        st.error(f"Errore nel caricamento dello storico materiali: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
+
+def get_storico_richieste_assenze() -> pd.DataFrame:
+    """Carica lo storico delle richieste di assenze dal database."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM storico_richieste_assenze ORDER BY timestamp_approvazione DESC"
+        df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        st.error(f"Errore nel caricamento dello storico assenze: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
+
 def salva_relazione(dati_relazione: dict) -> bool:
     """Salva una nuova relazione nel database."""
     conn = get_db_connection()

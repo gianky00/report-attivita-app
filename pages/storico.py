@@ -1,6 +1,11 @@
 import streamlit as st
 import pandas as pd
-from modules.db_manager import get_validated_reports, get_validated_intervention_reports
+from modules.db_manager import (
+    get_validated_reports,
+    get_validated_intervention_reports,
+    get_storico_richieste_materiali,
+    get_storico_richieste_assenze
+)
 
 def render_storico_tab():
     """
@@ -9,7 +14,12 @@ def render_storico_tab():
     """
     st.header("Archivio Storico")
 
-    tab1, tab2 = st.tabs(["**Storico Attività**", "**Storico Relazioni**"])
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "**Storico Attività**",
+        "**Storico Relazioni**",
+        "**Storico Materiali**",
+        "**Storico Assenze**"
+    ])
 
     with tab1:
         st.subheader("Archivio Report di Intervento Validati")
@@ -48,3 +58,28 @@ def render_storico_tab():
                     st.text_area("", value=row.get('corpo_relazione', 'Nessun testo.'), height=200, disabled=True, key=f"rel_{row['id_relazione']}")
         else:
             st.success("Non ci sono relazioni validate nell'archivio.")
+
+    with tab3:
+        st.subheader("Archivio Richieste Materiali Approvate")
+        df_materiali = get_storico_richieste_materiali()
+        if not df_materiali.empty:
+            for _, row in df_materiali.iterrows():
+                timestamp_str = pd.to_datetime(row['timestamp_richiesta']).strftime('%d/%m/%Y %H:%M')
+                expander_title = f"**{timestamp_str}** - Richiedente: **{row.get('nome_richiedente', 'N/D')}**"
+                with st.expander(expander_title):
+                    st.text_area("Dettagli Richiesta", value=row.get('dettagli_richiesta', 'Nessun dettaglio.'), height=150, disabled=True, key=f"mat_{row['id_storico']}")
+        else:
+            st.success("Nessuna richiesta di materiali nello storico.")
+
+    with tab4:
+        st.subheader("Archivio Richieste Assenze Approvate")
+        df_assenze = get_storico_richieste_assenze()
+        if not df_assenze.empty:
+            for _, row in df_assenze.iterrows():
+                data_inizio_str = pd.to_datetime(row['data_inizio']).strftime('%d/%m/%Y')
+                data_fine_str = pd.to_datetime(row['data_fine']).strftime('%d/%m/%Y')
+                expander_title = f"**{row.get('tipo_assenza', 'N/D')}** dal **{data_inizio_str}** al **{data_fine_str}** - Richiedente: **{row.get('nome_richiedente', 'N/D')}**"
+                with st.expander(expander_title):
+                    st.text_area("Note", value=row.get('note', 'Nessuna nota.'), height=100, disabled=True, key=f"ass_{row['id_storico']}")
+        else:
+            st.success("Nessuna richiesta di assenze nello storico.")

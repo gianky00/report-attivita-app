@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 from modules.data_manager import salva_gestionale_async
 from modules.email_sender import invia_email_con_outlook_async
+from modules.db_manager import salva_storico_materiali, salva_storico_assenze
 
 def render_richieste_tab(gestionale_data, matricola_utente, ruolo, nome_utente_autenticato):
     st.header("Richieste")
@@ -23,6 +24,17 @@ def render_richieste_tab(gestionale_data, matricola_utente, ruolo, nome_utente_a
                         nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data])
                     gestionale_data['richieste_materiali'] = pd.concat([df_materiali, nuova_richiesta_df], ignore_index=True)
                     if salva_gestionale_async(gestionale_data):
+                        # Salva nello storico immutabile
+                        storico_data = {
+                            "id_richiesta": new_id,
+                            "richiedente_matricola": str(matricola_utente),
+                            "nome_richiedente": nome_utente_autenticato,
+                            "timestamp_richiesta": datetime.datetime.now().isoformat(),
+                            "dettagli_richiesta": dettagli_richiesta,
+                            "timestamp_approvazione": datetime.datetime.now().isoformat() # Immediata approvazione
+                        }
+                        salva_storico_materiali(storico_data)
+
                         st.success("Richiesta materiali inviata con successo!")
                         titolo_email = f"Nuova Richiesta Materiali da {nome_utente_autenticato}"
                         html_body = f"""
@@ -76,6 +88,20 @@ def render_richieste_tab(gestionale_data, matricola_utente, ruolo, nome_utente_a
                         df_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame())
                         gestionale_data['richieste_assenze'] = pd.concat([df_assenze, nuova_richiesta_assenza], ignore_index=True)
                         if salva_gestionale_async(gestionale_data):
+                            # Salva nello storico immutabile
+                            storico_data = {
+                                "id_richiesta": new_id,
+                                "richiedente_matricola": str(matricola_utente),
+                                "nome_richiedente": nome_utente_autenticato,
+                                "timestamp_richiesta": datetime.datetime.now().isoformat(),
+                                "tipo_assenza": tipo_assenza,
+                                "data_inizio": data_inizio.isoformat(),
+                                "data_fine": data_fine.isoformat(),
+                                "note": note_assenza,
+                                "timestamp_approvazione": datetime.datetime.now().isoformat() # Immediata approvazione
+                            }
+                            salva_storico_assenze(storico_data)
+
                             st.success("Richiesta di assenza inviata con successo!")
                             titolo_email = f"Nuova Richiesta di Assenza da {nome_utente_autenticato}"
                             html_body = f"""
