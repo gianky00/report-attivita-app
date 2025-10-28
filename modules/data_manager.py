@@ -369,3 +369,25 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
         if not isinstance(e, FileNotFoundError):
             st.error(f"Errore durante la ricerca attività per il {giorno}/{mese}/{anno}: {e}")
         return []
+
+@st.cache_data
+def load_validated_intervention_reports():
+    """
+    Carica lo storico dei report di intervento validati dal file Excel.
+    """
+    EXCEL_FILE = "Database_Report_Attivita.xlsm"
+    SHEET_NAME = "STRUMENTALE"
+    try:
+        df = pd.read_excel(EXCEL_FILE, sheet_name=SHEET_NAME, engine='openpyxl')
+        # Assicura che le colonne abbiano nomi utilizzabili
+        df.columns = [col.replace(' ', '_').lower() for col in df.columns]
+        # Converte le date se necessario, gestendo eventuali errori
+        if 'data_intervento' in df.columns:
+            df['data_intervento'] = pd.to_datetime(df['data_intervento'], errors='coerce')
+        return df
+    except FileNotFoundError:
+        st.error(f"File non trovato: {EXCEL_FILE}. Impossibile caricare lo storico delle attività.")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Errore durante la lettura del file Excel: {e}")
+        return pd.DataFrame()

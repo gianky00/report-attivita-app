@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from modules.db_manager import get_validated_reports
+from modules.data_manager import load_validated_intervention_reports
 
 def render_storico_tab():
     """
@@ -13,14 +14,14 @@ def render_storico_tab():
 
     with tab1:
         st.subheader("Archivio Report di Intervento Validati")
-        df_attivita = get_validated_reports("report_da_validare")
+        df_attivita = load_validated_intervention_reports()
         if not df_attivita.empty:
             search_term = st.text_input("Cerca per PdL, descrizione o tecnico...", key="search_attivita")
             if search_term:
                 df_attivita = df_attivita[
                     df_attivita["pdl"].str.contains(search_term, case=False, na=False) |
-                    df_attivita["descrizione_attivita"].str.contains(search_term, case=False, na=False) |
-                    df_attivita["nome_tecnico"].str.contains(search_term, case=False, na=False)
+                    df_attivita["descrizione"].str.contains(search_term, case=False, na=False) |
+                    df_attivita["tecnico"].str.contains(search_term, case=False, na=False)
                 ]
             st.dataframe(df_attivita, use_container_width=True)
         else:

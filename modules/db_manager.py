@@ -202,7 +202,7 @@ def get_validated_reports(table_name: str) -> pd.DataFrame:
     conn = get_db_connection()
     try:
         # Costruisce la query in modo sicuro per evitare SQL injection sul nome della tabella
-        if table_name not in ['relazioni', 'report_da_validare']: # Whitelist delle tabelle consentite
+        if table_name not in ['relazioni', 'report_validati']: # Whitelist delle tabelle consentite
             raise ValueError("Nome tabella non valido")
 
         query = f"SELECT * FROM {table_name} WHERE stato = 'Validata' ORDER BY data_intervento DESC"
