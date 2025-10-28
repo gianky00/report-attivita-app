@@ -194,88 +194,23 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
 
     return True
 
-def get_interventions_for_technician(technician_matricola: str, start_date, end_date) -> pd.DataFrame:
-    """Recupera tutti gli interventi per una data matricola in un intervallo di tempo."""
+
+def get_validated_reports(table_name: str) -> pd.DataFrame:
+    """
+    Carica i dati validati da una tabella specifica (es. 'relazioni').
+    """
     conn = get_db_connection()
     try:
-        query = """
-        SELECT
-          json_extract(value, '$.PdL') AS PdL,
-          json_extract(value, '$.Descrizione') AS Descrizione,
-          json_extract(value, '$.Stato') AS Stato,
-          json_extract(value, '$.Report') AS Report,
-          date(json_extract(value, '$.Data_Riferimento_dt')) AS Data_Riferimento_dt,
-          json_extract(value, '$.Tecnico') AS Tecnico,
-          json_extract(value, '$.Matricola') AS Matricola
-        FROM
-          attivita_programmate,
-          json_each(attivita_programmate.Storico)
-        WHERE
-          Matricola = ? AND
-          date(Data_Riferimento_dt) BETWEEN date(?) AND date(?)
-        ORDER BY
-          Data_Riferimento_dt DESC;
-        """
-        start_date_str = start_date.strftime('%Y-%m-%d')
-        end_date_str = end_date.strftime('%Y-%m-%d')
+        # Costruisce la query in modo sicuro per evitare SQL injection sul nome della tabella
+        if table_name not in ['relazioni', 'report_da_validare']: # Whitelist delle tabelle consentite
+            raise ValueError("Nome tabella non valido")
 
-        df = pd.read_sql_query(query, conn, params=(technician_matricola, start_date_str, end_date_str))
+        query = f"SELECT * FROM {table_name} WHERE stato = 'Validata' ORDER BY data_intervento DESC"
+        df = pd.read_sql_query(query, conn)
         return df
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        print(f"Errore nel recuperare gli interventi per matricola {technician_matricola}: {e}")
+    except (sqlite3.Error, pd.io.sql.DatabaseError, ValueError) as e:
+        st.error(f"Errore nel caricamento dei dati dalla tabella {table_name}: {e}")
         return pd.DataFrame()
-    finally:
-        if conn:
-            conn.close()
-
-def get_technician_performance_data(start_date, end_date) -> pd.DataFrame:
-    """Calcola le metriche di performance per i tecnici interrogando direttamente il DB e raggruppando per Matricola."""
-    conn = get_db_connection()
-    try:
-        query = """
-        SELECT
-            Matricola,
-            Tecnico,
-            COUNT(*) AS "Totale Interventi",
-            CAST(SUM(CASE WHEN Stato = 'TERMINATA' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) AS REAL) AS "Tasso Completamento (%)",
-            AVG(julianday(Data_Compilazione) - julianday(Data_Riferimento_dt)) AS "Ritardo Medio Compilazione (gg)",
-            SUM(CASE WHEN LENGTH(Report) < 20 THEN 1 ELSE 0 END) AS "Report Sbrigativi"
-        FROM (
-            SELECT
-                json_extract(value, '$.Matricola') AS Matricola,
-                json_extract(value, '$.Tecnico') AS Tecnico,
-                json_extract(value, '$.Stato') AS Stato,
-                json_extract(value, '$.Report') AS Report,
-                json_extract(value, '$.Data_Riferimento_dt') AS Data_Riferimento_dt,
-                json_extract(value, '$.Data_Compilazione') AS Data_Compilazione
-            FROM
-                attivita_programmate,
-                json_each(attivita_programmate.Storico)
-        )
-        WHERE
-            Matricola IS NOT NULL AND
-            date(Data_Riferimento_dt) BETWEEN date(?) AND date(?)
-        GROUP BY
-            Matricola, Tecnico
-        ORDER BY
-            "Totale Interventi" DESC;
-        """
-        start_date_str = start_date.strftime('%Y-%m-%d')
-        end_date_str = end_date.strftime('%Y-%m-%d')
-
-        df = pd.read_sql_query(query, conn, params=(start_date_str, end_date_str))
-
-        if not df.empty:
-            df['Tasso Completamento (%)'] = df['Tasso Completamento (%)'].map('{:.1f}'.format)
-            df['Ritardo Medio Compilazione (gg)'] = df['Ritardo Medio Compilazione (gg)'].map('{:.1f}'.format)
-            # Usa il Nome Tecnico come indice per la visualizzazione in UI
-            return df.set_index('Tecnico')
-
-        return pd.DataFrame(columns=['Matricola', 'Tecnico', 'Totale Interventi', 'Tasso Completamento (%)', 'Ritardo Medio Compilazione (gg)', 'Report Sbrigativi']).set_index('Tecnico')
-
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        print(f"Errore nel calcolo delle performance dei tecnici: {e}")
-        return pd.DataFrame(columns=['Matricola', 'Tecnico', 'Totale Interventi', 'Tasso Completamento (%)', 'Ritardo Medio Compilazione (gg)', 'Report Sbrigativi']).set_index('Tecnico')
     finally:
         if conn:
             conn.close()

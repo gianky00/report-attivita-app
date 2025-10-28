@@ -35,9 +35,8 @@ from modules.data_manager import (
     scrivi_o_aggiorna_risposta
 )
 from modules.db_manager import (
-    get_shifts_by_type, get_technician_performance_data,
-    get_interventions_for_technician, get_reports_to_validate, delete_reports_by_ids,
-    process_and_commit_validated_reports, salva_relazione, get_all_relazioni,
+    get_shifts_by_type, get_reports_to_validate, delete_reports_by_ids,
+    process_and_commit_validated_reports, salva_relazione,
     get_unvalidated_relazioni, process_and_commit_validated_relazioni
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
@@ -315,7 +314,7 @@ def main_app(matricola_utente, ruolo):
         if 'main_tab' not in st.session_state:
             st.session_state.main_tab = "Attività Assegnate"
 
-        main_tabs_list = ["Attività Assegnate", "📅 Gestione Turni", "Richieste", "❓ Guida"]
+        main_tabs_list = ["Attività Assegnate", "📅 Gestione Turni", "Richieste", "Storico", "❓ Guida"]
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
 
@@ -644,6 +643,10 @@ def main_app(matricola_utente, ruolo):
                         df_richieste_assenze['Data_Fine'] = pd.to_datetime(df_richieste_assenze['Data_Fine']).dt.strftime('%d/%m/%Y')
                         st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), width='stretch')
 
+        elif selected_tab == "Storico":
+            from pages.storico import render_storico_tab
+            render_storico_tab()
+
         elif selected_tab == "❓ Guida":
             render_guida_tab(ruolo)
 
@@ -666,33 +669,7 @@ def main_app(matricola_utente, ruolo):
                         col1, col2 = st.columns(2)
                         with col1: st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
                         with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
-                        start_datetime, end_datetime = st.session_state.perf_start_date, st.session_state.perf_end_date
-                        if st.button("📊 Calcola Performance", type="primary"):
-                            with st.spinner("Calcolo delle performance in corso..."): performance_df = get_technician_performance_data(start_datetime, end_datetime)
-                            st.session_state['performance_results'] = {'df': performance_df, 'start_date': pd.to_datetime(start_datetime), 'end_date': pd.to_datetime(end_datetime)}
-                        if 'performance_results' in st.session_state:
-                            results = st.session_state['performance_results']
-                            performance_df = results['df']
-                            if performance_df.empty: st.info("Nessun dato di performance trovato per il periodo selezionato.")
-                            else:
-                                st.markdown("---")
-                                st.markdown("### Riepilogo Performance del Team")
-                                total_interventions_team = performance_df['Totale Interventi'].sum()
-                                total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
-                                total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
-                                avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
-                                st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
-                                c1, c2, c3 = st.columns(3)
-                                c1.metric("Totale Interventi", f"{total_interventions_team}")
-                                c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
-                                c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
-                                st.markdown("#### Dettaglio Performance per Tecnico")
-                                for index, row in performance_df.iterrows():
-                                    st.write(f"**Tecnico:** {index}")
-                                    st.dataframe(row.to_frame().T)
-                                    if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                        st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
-                                        st.rerun()
+                        st.info("La sezione di performance è in fase di Sviluppo.")
                     with caposquadra_tabs[1]:
                         with st.form("new_shift_form", clear_on_submit=True):
                             st.subheader("Dettagli Nuovo Turno")
@@ -720,21 +697,6 @@ def main_app(matricola_utente, ruolo):
                                         st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
                                         st.rerun()
                                     else: st.error("Errore nel salvataggio del nuovo turno.")
-                    with caposquadra_tabs[2]:
-                        st.header("Gestione e Sincronizzazione Dati")
-                        st.info("Questa sezione permette di avviare la sincronizzazione bidirezionale tra il file Excel `ATTIVITA_PROGRAMMATE.xlsm` e il database interno, e di lanciare le macro di aggiornamento.")
-                        st.warning("**Funzionamento:**\n- La sincronizzazione aggiorna sia il database che il file Excel `ATTIVITA_PROGRAMMATE.xlsm`.\n- Al termine, viene eseguita automaticamente la macro `AggiornaAttivitaProgrammate_Veloce` dal file `Database_Report_Attivita.xlsm`.")
-
-                        if st.button("🔄 Sincronizza DB <-> Excel e Avvia Macro", type="primary", help="Avvia la sincronizzazione bidirezionale e l'esecuzione della macro."):
-                            from sincronizzatore import sincronizza_db_excel
-                            with st.spinner("Sincronizzazione in corso... Non chiudere la pagina."):
-                                success, message = sincronizza_db_excel()
-                                if success:
-                                    st.success("Operazione completata!")
-                                    st.info(message)
-                                    st.cache_data.clear() # Pulisce la cache per ricaricare i dati aggiornati
-                                else:
-                                    st.error(f"Errore durante l'operazione: {message}")
                     with caposquadra_tabs[3]:
                         validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
                         with validation_tabs[0]:

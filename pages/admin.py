@@ -4,8 +4,6 @@ import pandas as pd
 import datetime
 import bcrypt
 from modules.db_manager import (
-    get_technician_performance_data,
-    get_interventions_for_technician,
     get_reports_to_validate,
     delete_reports_by_ids,
     process_and_commit_validated_reports,
@@ -27,79 +25,7 @@ def to_csv(df):
 # --- Funzioni di rendering per le sotto-schede ---
 
 def render_technician_detail_view():
-    """Mostra la vista di dettaglio per un singolo tecnico."""
-    technician_matricola = st.session_state['detail_technician_matricola']
-    start_date = st.session_state['detail_start_date']
-    end_date = st.session_state['detail_end_date']
-
-    df_contatti = carica_gestionale()['contatti']
-    technician_name = df_contatti[df_contatti['Matricola'] == technician_matricola].iloc[0]['Nome Cognome']
-
-    st.title(f"Dettaglio Performance: {technician_name}")
-    st.markdown(f"Periodo: **{start_date.strftime('%d/%m/%Y')}** - **{end_date.strftime('%d/%m/%Y')}**")
-
-    if 'performance_results' in st.session_state:
-        performance_df = st.session_state['performance_results']['df']
-        if technician_name in performance_df.index:
-            technician_metrics = performance_df.loc[technician_name]
-            st.markdown("#### Riepilogo Metriche")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Totale Interventi", technician_metrics['Totale Interventi'])
-            c2.metric("Tasso Completamento", f"{technician_metrics['Tasso Completamento (%)']}%")
-            c3.metric("Ritardo Medio (gg)", technician_metrics['Ritardo Medio Compilazione (gg)'])
-            c4.metric("Report Sbrigativi", technician_metrics['Report Sbrigativi'])
-            st.markdown("---")
-
-    if st.button("⬅️ Torna alla Dashboard"):
-        del st.session_state['detail_technician_matricola']
-        del st.session_state['detail_start_date']
-        del st.session_state['detail_end_date']
-        st.rerun()
-
-    technician_interventions = get_interventions_for_technician(technician_matricola, start_date, end_date)
-
-    if technician_interventions.empty:
-        st.warning("Nessun intervento trovato per questo tecnico nel periodo selezionato.")
-        return
-
-    st.markdown("### Riepilogo Interventi")
-    technician_interventions['Data'] = pd.to_datetime(technician_interventions['Data_Riferimento_dt']).dt.strftime('%d/%m/%Y')
-    st.dataframe(technician_interventions[['Data', 'PdL', 'Descrizione', 'Stato', 'Report']])
-
-    st.download_button(
-        label="📥 Esporta Dettaglio CSV",
-        data=to_csv(technician_interventions),
-        file_name=f"dettaglio_{technician_name}.csv",
-        mime='text/csv',
-    )
-
-    st.markdown("---")
-    st.markdown("### Analisi Avanzata")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### Ripartizione Esiti")
-        status_counts = technician_interventions['Stato'].value_counts()
-        if not status_counts.empty:
-            fig, ax = plt.subplots()
-            ax.pie(status_counts, labels=status_counts.index, autopct='%1.1f%%', startangle=90)
-            ax.axis('equal')
-            st.pyplot(fig)
-        else:
-            st.info("Nessun dato sullo stato disponibile per creare il grafico.")
-    with col2:
-        st.markdown("#### Andamento Attività nel Tempo")
-        interventions_by_day = technician_interventions.groupby(pd.to_datetime(technician_interventions['Data_Riferimento_dt']).dt.date).size()
-        interventions_by_day.index.name = 'Data'
-        st.bar_chart(interventions_by_day)
-
-    st.markdown("#### Analisi Qualitativa: Report Sbrigativi")
-    rushed_reports_df = technician_interventions[technician_interventions['Report'].str.len() < 20]
-    if not rushed_reports_df.empty:
-        st.warning(f"Trovati {len(rushed_reports_df)} report potenzialmente sbrigativi:")
-        for _, row in rushed_reports_df.iterrows():
-            st.info(f"**Data:** {row['Data']} - **PdL:** {row['PdL']} - **Report:** *'{row['Report']}'*")
-    else:
-        st.success("Nessun report sbrigativo trovato in questo periodo.")
+    st.info("La sezione di performance è in fase di Sviluppo.")
 
 def render_report_validation_tab(user_matricola):
     st.subheader("Validazione Report Tecnici")
@@ -399,34 +325,7 @@ def render_admin_dashboard(gestionale_data, matricola_utente):
                 with col2:
                     st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
                 start_datetime, end_datetime = st.session_state.perf_start_date, st.session_state.perf_end_date
-                if st.button("📊 Calcola Performance", type="primary"):
-                    with st.spinner("Calcolo delle performance in corso..."):
-                        performance_df = get_technician_performance_data(start_datetime, end_datetime)
-                    st.session_state['performance_results'] = {'df': performance_df, 'start_date': pd.to_datetime(start_datetime), 'end_date': pd.to_datetime(end_datetime)}
-                if 'performance_results' in st.session_state:
-                    results = st.session_state['performance_results']
-                    performance_df = results['df']
-                    if performance_df.empty:
-                        st.info("Nessun dato di performance trovato per il periodo selezionato.")
-                    else:
-                        st.markdown("---")
-                        st.markdown("### Riepilogo Performance del Team")
-                        total_interventions_team = performance_df['Totale Interventi'].sum()
-                        total_rushed_reports_team = performance_df['Report Sbrigativi'].sum()
-                        total_completed_interventions = (performance_df['Tasso Completamento (%)'].astype(float) / 100) * performance_df['Totale Interventi']
-                        avg_completion_rate_team = (total_completed_interventions.sum() / total_interventions_team) * 100 if total_interventions_team > 0 else 0
-                        st.download_button(label="📥 Esporta Riepilogo CSV", data=to_csv(performance_df), file_name='performance_team.csv', mime='text/csv')
-                        c1, c2, c3 = st.columns(3)
-                        c1.metric("Totale Interventi", f"{total_interventions_team}")
-                        c2.metric("Tasso Completamento Medio", f"{avg_completion_rate_team:.1f}%")
-                        c3.metric("Report Sbrigativi", f"{total_rushed_reports_team}")
-                        st.markdown("#### Dettaglio Performance per Tecnico")
-                        for index, row in performance_df.iterrows():
-                            st.write(f"**Tecnico:** {index}")
-                            st.dataframe(row.to_frame().T)
-                            if st.button(f"Vedi Dettaglio Interventi di {index}", key=f"detail_{index}"):
-                                st.session_state.update({'detail_technician_matricola': row['Matricola'], 'detail_start_date': results['start_date'], 'detail_end_date': results['end_date']})
-                                st.rerun()
+                st.info("La sezione di performance è in fase di Sviluppo.")
             with caposquadra_tabs[1]:
                 with st.form("new_shift_form", clear_on_submit=True):
                     st.subheader("Dettagli Nuovo Turno")
