@@ -174,19 +174,12 @@ def salva_report_intervento(dati_report: dict) -> bool:
         if conn:
             conn.close()
 
-def get_validated_intervention_reports(matricola_tecnico: str = None) -> pd.DataFrame:
-    """
-    Carica i report di intervento validati dal database.
-    Se matricola_tecnico è fornita, filtra per quel tecnico.
-    """
+def get_validated_intervention_reports() -> pd.DataFrame:
+    """Carica tutti i report di intervento validati dal database."""
     conn = get_db_connection()
     try:
-        if matricola_tecnico:
-            query = "SELECT * FROM report_interventi WHERE matricola_tecnico = ? ORDER BY data_riferimento_attivita DESC"
-            df = pd.read_sql_query(query, conn, params=(matricola_tecnico,))
-        else:
-            query = "SELECT * FROM report_interventi ORDER BY data_riferimento_attivita DESC"
-            df = pd.read_sql_query(query, conn)
+        query = "SELECT * FROM report_interventi ORDER BY data_riferimento_attivita DESC"
+        df = pd.read_sql_query(query, conn)
         return df
     except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
         st.error(f"Errore nel caricamento dei report di intervento: {e}")
@@ -296,6 +289,26 @@ def salva_relazione(dati_relazione: dict) -> bool:
     finally:
         if conn:
             conn.close()
+def get_validated_intervention_reports(matricola_tecnico: str = None) -> pd.DataFrame:
+    """
+    Carica i report di intervento validati dal database.
+    Se matricola_tecnico è fornita, filtra per quel tecnico.
+    """
+    conn = get_db_connection()
+    try:
+        if matricola_tecnico:
+            query = "SELECT * FROM report_interventi WHERE matricola_tecnico = ? ORDER BY data_riferimento_attivita DESC"
+            df = pd.read_sql_query(query, conn, params=(matricola_tecnico,))
+        else:
+            query = "SELECT * FROM report_interventi ORDER BY data_riferimento_attivita DESC"
+            df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        st.error(f"Errore nel caricamento dei report di intervento: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
 
 def get_unvalidated_reports_by_technician(matricola_tecnico: str) -> pd.DataFrame:
     """Carica i report inviati da un tecnico ma non ancora validati."""
@@ -306,35 +319,6 @@ def get_unvalidated_reports_by_technician(matricola_tecnico: str) -> pd.DataFram
         return df
     except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
         st.error(f"Errore nel caricamento dei report non validati per il tecnico {matricola_tecnico}: {e}")
-        return pd.DataFrame()
-    finally:
-        if conn:
-            conn.close()
-
-def get_table_names() -> list:
-    """Restituisce una lista con i nomi di tutte le tabelle nel database."""
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tables = [row[0] for row in cursor.fetchall()]
-        return tables
-    except sqlite3.Error as e:
-        st.error(f"Errore nel recuperare i nomi delle tabelle: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-def get_table_data(table_name: str) -> pd.DataFrame:
-    """Carica i dati di una specifica tabella dal database."""
-    conn = get_db_connection()
-    try:
-        query = f"SELECT * FROM {table_name}"
-        df = pd.read_sql_query(query, conn)
-        return df
-    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
-        st.error(f"Errore nel caricare i dati dalla tabella {table_name}: {e}")
         return pd.DataFrame()
     finally:
         if conn:
