@@ -50,12 +50,15 @@ def render_storico_tab():
 
                     for _, row in sorted_group.iterrows():
                         data_intervento_str = row['data_riferimento_attivita'].strftime('%d/%m/%Y')
-                        sub_expander_title = f"Intervento del **{data_intervento_str}** - Tecnico: **{row['nome_tecnico']}**"
+                        # Titolo dell'expander interno con la sola data
+                        sub_expander_title = f"Intervento del {data_intervento_str}"
 
                         with st.expander(sub_expander_title):
-                            st.markdown(f"**Stato Attività:** {row['stato_attivita']}")
+                            # Dettagli all'interno dell'expander
+                            st.markdown(f"**Report compilato da:** {row['nome_tecnico']}")
+                            st.markdown(f"**Stato:** {row['stato_attivita']}")
                             st.markdown(f"**Data Compilazione:** {pd.to_datetime(row['data_compilazione']).strftime('%d/%m/%Y %H:%M')}")
-                            st.text_area("Report", value=row['testo_report'], height=200, disabled=True, key=f"report_{row['id_report']}")
+                            st.text_area("Report:", value=row['testo_report'], height=200, disabled=True, key=f"report_{row['id_report']}")
         else:
             st.success("Non ci sono report di intervento validati nell'archivio.")
 
