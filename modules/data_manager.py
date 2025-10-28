@@ -300,7 +300,7 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             return []
 
         # Ottimizzazione: Carica lo storico una sola volta
-        df_storico_db = carica_dati_attivita_programmate()
+        df_storico_db = pd.DataFrame() #FIXME: carica_dati_attivita_programmate() was removed
 
         attivita_collezionate = {}
         for _, riga in df_range.iterrows():
@@ -328,7 +328,7 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
                 activity_key = (pdl, desc)
                 if activity_key not in attivita_collezionate:
                     # Filtra lo storico per il PdL corrente
-                    storico_pdl = df_storico_db[df_storico_db['PdL'] == pdl].to_dict('records')
+                    storico_pdl = [] #df_storico_db[df_storico_db['PdL'] == pdl].to_dict('records')
 
                     attivita_collezionate[activity_key] = {
                         'pdl': pdl,
