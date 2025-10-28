@@ -184,12 +184,30 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
         print(f"Errore durante la scrittura sul file Excel: {e}")
         return False
 
-    # 2. Se la scrittura su Excel è andata a buon fine, rimuovi i report dal DB
+    # 2. Se la scrittura su Excel è andata a buon fine, salva i report nella tabella 'relazioni'
+    import datetime
+    for report_dict in validated_data:
+        relazione_data = {
+            "id_relazione": report_dict.get('id_report'),
+            "data_intervento": report_dict.get('data_riferimento_attivita'),
+            "tecnico_compilatore": report_dict.get('nome_tecnico'),
+            "partner": "N/A",  # O un valore di default appropriato
+            "ora_inizio": "N/A",
+            "ora_fine": "N/A",
+            "corpo_relazione": report_dict.get('testo_report'),
+            "stato": "Validata",
+            "timestamp_invio": report_dict.get('data_compilazione'),
+            "id_validatore": "sistema", # O l'ID del validatore se disponibile
+            "timestamp_validazione": datetime.datetime.now().isoformat()
+        }
+        if not salva_relazione(relazione_data):
+            # Se il salvataggio nel DB fallisce, logga l'errore ma non bloccare il processo
+            print(f"ATTENZIONE: Report {report_dict.get('id_report')} scritto su Excel ma non salvato nel DB storico.")
+
+    # 3. Infine, rimuovi i report dalla tabella di validazione
     report_ids_to_delete = [report['id_report'] for report in validated_data]
     if not delete_reports_by_ids(report_ids_to_delete):
-        print("ERRORE CRITICO: I report sono stati scritti su Excel ma non è stato possibile rimuoverli dal database.")
-        # In questo scenario, l'utente vedrà ancora i report nella UI, che è meglio
-        # che perderli del tutto. Potrà ri-validarli.
+        print("ERRORE CRITICO: I report sono stati scritti su Excel e nel DB storico, ma non è stato possibile rimuoverli dalla coda di validazione.")
         return False
 
     return True
