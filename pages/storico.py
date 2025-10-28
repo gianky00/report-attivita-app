@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-from modules.db_manager import get_validated_reports
-from modules.data_manager import load_validated_intervention_reports
+from modules.db_manager import get_validated_reports, get_validated_intervention_reports
 
 def render_storico_tab():
     """
@@ -14,14 +13,14 @@ def render_storico_tab():
 
     with tab1:
         st.subheader("Archivio Report di Intervento Validati")
-        df_attivita = load_validated_intervention_reports()
+        df_attivita = get_validated_intervention_reports()
         if not df_attivita.empty:
             search_term = st.text_input("Cerca per PdL, descrizione o tecnico...", key="search_attivita")
             if search_term:
                 df_attivita = df_attivita[
                     df_attivita["pdl"].str.contains(search_term, case=False, na=False) |
-                    df_attivita["descrizione"].str.contains(search_term, case=False, na=False) |
-                    df_attivita["tecnico"].str.contains(search_term, case=False, na=False)
+                    df_attivita["descrizione_attivita"].str.contains(search_term, case=False, na=False) |
+                    df_attivita["nome_tecnico"].str.contains(search_term, case=False, na=False)
                 ]
             st.dataframe(df_attivita, use_container_width=True)
         else:
@@ -31,11 +30,21 @@ def render_storico_tab():
         st.subheader("Archivio Relazioni di Reperibilità Validate")
         df_relazioni = get_validated_reports("relazioni")
         if not df_relazioni.empty:
-            display_cols = [
-                "data_intervento", "tecnico_compilatore", "partner",
-                "ora_inizio", "ora_fine", "corpo_relazione"
-            ]
-            df_display = df_relazioni[[col for col in display_cols if col in df_relazioni.columns]]
-            st.dataframe(df_display, use_container_width=True)
+            # Ordina le relazioni per data di intervento
+            if 'data_intervento' in df_relazioni.columns:
+                df_relazioni['data_intervento'] = pd.to_datetime(df_relazioni['data_intervento'])
+                df_relazioni = df_relazioni.sort_values(by="data_intervento", ascending=False)
+
+            for _, row in df_relazioni.iterrows():
+                # Formatta la data per una visualizzazione più pulita
+                data_intervento_str = row['data_intervento'].strftime('%d/%m/%Y') if pd.notna(row['data_intervento']) else 'Data non disponibile'
+
+                expander_title = f"**{data_intervento_str}** - Tecnico: **{row.get('tecnico_compilatore', 'N/D')}** - Partner: **{row.get('partner', 'N/D')}**"
+
+                with st.expander(expander_title):
+                    st.markdown(f"**Orario:** dalle {row.get('ora_inizio', 'N/D')} alle {row.get('ora_fine', 'N/D')}")
+                    st.markdown("**Relazione:**")
+                    # Usa una formattazione che rispetti gli a capo e il testo pre-formattato
+                    st.text_area("", value=row.get('corpo_relazione', 'Nessun testo.'), height=200, disabled=True, key=f"rel_{row['id_relazione']}")
         else:
             st.success("Non ci sono relazioni validate nell'archivio.")

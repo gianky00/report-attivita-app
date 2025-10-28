@@ -184,25 +184,23 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
         print(f"Errore durante la scrittura sul file Excel: {e}")
         return False
 
-    # 2. Se la scrittura su Excel è andata a buon fine, salva i report nella tabella 'relazioni'
+    # 2. Se la scrittura su Excel è andata a buon fine, salva i report nella tabella 'report_interventi'
     import datetime
     for report_dict in validated_data:
-        relazione_data = {
-            "id_relazione": report_dict.get('id_report'),
-            "data_intervento": report_dict.get('data_riferimento_attivita'),
-            "tecnico_compilatore": report_dict.get('nome_tecnico'),
-            "partner": "N/A",  # O un valore di default appropriato
-            "ora_inizio": "N/A",
-            "ora_fine": "N/A",
-            "corpo_relazione": report_dict.get('testo_report'),
-            "stato": "Validata",
-            "timestamp_invio": report_dict.get('data_compilazione'),
-            "id_validatore": "sistema", # O l'ID del validatore se disponibile
+        report_data = {
+            "id_report": report_dict.get('id_report'),
+            "pdl": report_dict.get('pdl'),
+            "descrizione_attivita": report_dict.get('descrizione_attivita'),
+            "matricola_tecnico": report_dict.get('matricola_tecnico'),
+            "nome_tecnico": report_dict.get('nome_tecnico'),
+            "stato_attivita": "Validato", # Sovrascrive lo stato
+            "testo_report": report_dict.get('testo_report'),
+            "data_compilazione": report_dict.get('data_compilazione'),
+            "data_riferimento_attivita": report_dict.get('data_riferimento_attivita'),
             "timestamp_validazione": datetime.datetime.now().isoformat()
         }
-        if not salva_relazione(relazione_data):
-            # Se il salvataggio nel DB fallisce, logga l'errore ma non bloccare il processo
-            print(f"ATTENZIONE: Report {report_dict.get('id_report')} scritto su Excel ma non salvato nel DB storico.")
+        if not salva_report_intervento(report_data):
+            print(f"ATTENZIONE: Report {report_dict.get('id_report')} scritto su Excel ma non salvato nel DB storico 'report_interventi'.")
 
     # 3. Infine, rimuovi i report dalla tabella di validazione
     report_ids_to_delete = [report['id_report'] for report in validated_data]
@@ -212,6 +210,37 @@ def process_and_commit_validated_reports(validated_data: list) -> bool:
 
     return True
 
+def salva_report_intervento(dati_report: dict) -> bool:
+    """Salva un report di intervento validato nel database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cols = ', '.join(f'"{k}"' for k in dati_report.keys())
+            placeholders = ', '.join('?' for _ in dati_report)
+            sql = f"INSERT INTO report_interventi ({cols}) VALUES ({placeholders})"
+            cursor.execute(sql, list(dati_report.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante il salvataggio del report di intervento nel DB: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_validated_intervention_reports() -> pd.DataFrame:
+    """Carica tutti i report di intervento validati dal database."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM report_interventi ORDER BY data_riferimento_attivita DESC"
+        df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError) as e:
+        st.error(f"Errore nel caricamento dei report di intervento: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
 
 def get_validated_reports(table_name: str) -> pd.DataFrame:
     """

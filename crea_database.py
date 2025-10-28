@@ -139,6 +139,18 @@ def crea_tabelle_se_non_esistono():
                 timestamp_invio TEXT,
                 id_validatore TEXT,
                 timestamp_validazione TEXT
+            )""",
+            "report_interventi": """(
+                id_report TEXT PRIMARY KEY NOT NULL,
+                pdl TEXT,
+                descrizione_attivita TEXT,
+                matricola_tecnico TEXT,
+                nome_tecnico TEXT,
+                stato_attivita TEXT,
+                testo_report TEXT,
+                data_compilazione TEXT,
+                data_riferimento_attivita TEXT,
+                timestamp_validazione TEXT
             )"""
         }
 
