@@ -17,7 +17,7 @@ def _invia_email_con_outlook_backend(subject, html_body):
         print("ATTENZIONE: Modulo pywin32 non trovato. Invio email disabilitato.")
         return
 
-    pythoncom.CoInitialize()
+    pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
     outlook = None
     mail = None
     try:
