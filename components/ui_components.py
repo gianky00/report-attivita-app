@@ -48,7 +48,6 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
             if len(team) > 1:
                 team_details_md = "**Team:**\n"
                 for member in team:
-                    # Accorpa le fasce orarie
                     orari_accorpati = merge_time_slots(member['orari'])
                     orari_str = ", ".join(orari_accorpati)
                     team_details_md += f"- {member['nome']} ({member['ruolo']}) | 🕒 {orari_str}\n"
@@ -67,7 +66,6 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
 
     st.divider()
 
-    # Mostra i report inviati ma non ancora validati, recuperandoli dal DB
     matricola_utente = st.session_state.get('authenticated_user', '')
     if matricola_utente:
         unvalidated_reports_df = get_unvalidated_reports_by_technician(matricola_utente)
@@ -79,7 +77,6 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                         st.caption("Report Inviato:")
                         st.info(report['testo_report'])
                         if st.button("Modifica Report", key=f"edit_report_{report['id_report']}"):
-                            # Prepara lo stato per la modifica, convertendo il record del DB in un dizionario
                             task_data = report.to_dict()
                             st.session_state.debriefing_task = task_data
                             st.session_state.report_mode = 'manual'

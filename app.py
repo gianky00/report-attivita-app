@@ -362,14 +362,12 @@ def main_app(matricola_utente, ruolo):
                 disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
             with sub_tabs[1]:
-                st.header("Recupero Attività")
+                st.header("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             with sub_tabs[2]:
                 st.header("Elenco Attività Validate")
-                # Carica i report validati specifici per il tecnico loggato
                 report_validati_df = get_validated_intervention_reports(matricola_tecnico=str(matricola_utente))
-
                 if report_validati_df.empty:
                     st.info("Non hai ancora report validati.")
                 else:
@@ -765,7 +763,13 @@ def main_app(matricola_utente, ruolo):
                 with main_admin_tabs[1]:
                     tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
                     with tecnica_tabs[0]: render_gestione_account(gestionale_data)
-                    with tecnica_tabs[1]: render_access_logs_tab(gestionale_data)
+                    with tecnica_tabs[1]:
+                        st.subheader("Cronologia Accessi")
+                        access_logs_df = gestionale_data.get('access_logs', pd.DataFrame())
+                        if access_logs_df.empty:
+                            st.info("Nessun log di accesso registrato.")
+                        else:
+                            st.dataframe(access_logs_df.sort_values(by="timestamp", ascending=False), width='stretch')
                     with tecnica_tabs[2]:
                         st.header("Gestione Intelligenza Artificiale")
                         ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
