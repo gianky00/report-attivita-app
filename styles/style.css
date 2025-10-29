@@ -1,0 +1,191 @@
+/* styles/style.css */
+
+/* Stile di base per il corpo dell'applicazione */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f0f2f6;
+    color: #333;
+    transition: background-color 0.3s ease;
+}
+
+/* Contenitore principale per centrare e dare margini */
+.main-container {
+    padding: 1rem;
+    transition: all 0.3s ease-in-out;
+}
+
+/* Stile per l'App Bar fissa in alto */
+.app-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    padding: 0 1rem;
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.app-bar .title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    opacity: 1;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.app-bar .title.fade-out {
+    opacity: 0;
+}
+
+.app-bar .app-bar-icons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.app-bar-icons .icon-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.app-bar-icons .icon-container:hover {
+    background-color: #f0f0f0;
+}
+
+/* Stile per il Navigation Drawer */
+.nav-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100%;
+    background-color: #ffffff;
+    box-shadow: 4px 0 8px rgba(0,0,0,0.1);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+    z-index: 1010;
+    padding-top: 70px; /* Spazio per l'App Bar */
+}
+
+.nav-drawer.open {
+    transform: translateX(0);
+}
+
+/* Overlay per scurire il contenuto principale quando il menu è aperto */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+    z-index: 1005;
+}
+
+.overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Scala il contenuto quando il menu è aperto */
+.main-content.drawer-open {
+    transform: scale(0.98);
+    filter: blur(1px);
+    transition: transform 0.3s ease, filter 0.3s ease;
+    transform-origin: center;
+}
+
+/* Stili per le voci del menu di navigazione */
+.nav-menu ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+.nav-menu .nav-item > div {
+    padding: 12px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background-color 0.2s;
+    font-weight: 500;
+}
+
+.nav-menu .nav-item > div:hover {
+    background-color: #eef2f7;
+}
+
+.nav-menu .nav-item.active > div {
+    background-color: #e0eaff;
+    color: #3366ff;
+    border-radius: 8px;
+    margin: 0 10px;
+    padding: 12px 10px;
+}
+
+/* Stile per l'icona chevron (freccetta) */
+.nav-menu .chevron {
+    transition: transform 0.2s ease-in-out;
+}
+
+.nav-menu .chevron.expanded {
+    transform: rotate(90deg);
+}
+
+/* Stili per il sottomenu */
+.nav-submenu {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out;
+    background-color: #f8f9fa;
+}
+
+.nav-submenu.expanded {
+    max-height: 500px; /* Valore sufficientemente grande */
+}
+
+.nav-submenu li {
+    padding-left: 35px;
+}
+
+/* Stili per i contenuti della pagina e le transizioni */
+.page-content {
+    opacity: 1;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.page-content.fade-out {
+    opacity: 0;
+}
+
+/* Stili per le card delle attività */
+.task-card {
+    padding: 1.5rem;
+    background-color: #ffffff;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+/* Miglioramento degli st.expander */
+.st-expander {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    background-color: #fafafa;
+}
