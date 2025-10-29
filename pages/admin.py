@@ -187,7 +187,8 @@ def render_gestione_account(gestionale_data):
     for index, user in df_contatti_filtrati.iterrows():
         user_name = user['Nome Cognome']
         user_matricola = user['Matricola']
-        with st.container(border=True):
+        with st.container():
+            st.markdown(f'<div class="card">', unsafe_allow_html=True)
             col1, col2 = st.columns([3, 1])
             with col1:
                 is_placeholder = pd.isna(user.get('PasswordHash'))
@@ -219,7 +220,7 @@ def render_gestione_account(gestionale_data):
                     st.rerun()
             else:
                 b3.button("❌ Elimina Utente", key=f"delete_{user_matricola}", on_click=start_delete, args=(user_matricola,))
-
+            st.markdown(f'</div>', unsafe_allow_html=True)
     st.divider()
 
     # --- Creazione Nuovo Utente ---
@@ -256,7 +257,7 @@ def render_gestione_account(gestionale_data):
                     st.warning("Nome, Cognome e Matricola sono obbligatori.")
 
 def render_access_logs_tab(gestionale_data):
-    st.header("Cronologia Accessi al Sistema")
+    st.subheader("Cronologia Accessi al Sistema")
     st.info("Questa sezione mostra tutti i tentativi di accesso registrati, dal più recente al più vecchio.")
     logs_df = gestionale_data.get('access_logs')
     if logs_df is None or logs_df.empty:
@@ -301,8 +302,10 @@ def render_admin_dashboard(gestionale_data, matricola_utente):
     if st.session_state.get('detail_technician_matricola'):
         render_technician_detail_view()
     else:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
         main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
         with main_admin_tabs[0]:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             caposquadra_tabs = st.tabs(["Crea Nuovo Turno", "Validazione Report"])
             with caposquadra_tabs[0]:
                 with st.form("new_shift_form", clear_on_submit=True):
@@ -371,14 +374,16 @@ def render_admin_dashboard(gestionale_data, matricola_utente):
                                     st.rerun()
                                 else:
                                     st.error("Si è verificato un errore durante il salvataggio delle relazioni.")
+            st.markdown('</div>', unsafe_allow_html=True)
         with main_admin_tabs[1]:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
             with tecnica_tabs[0]:
                 render_gestione_account(gestionale_data)
             with tecnica_tabs[1]:
                 render_access_logs_tab(gestionale_data)
             with tecnica_tabs[2]:
-                st.header("Gestione Intelligenza Artificiale")
+                st.subheader("Gestione Intelligenza Artificiale")
                 ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
                 with ia_sub_tabs[0]:
                     st.markdown("### 🧠 Revisione Voci del Knowledge Core")
@@ -420,3 +425,5 @@ def render_admin_dashboard(gestionale_data, matricola_utente):
                             st.success(result.get("message")); st.cache_data.clear()
                         else:
                             st.error(result.get("message"))
+            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)

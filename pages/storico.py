@@ -12,8 +12,9 @@ def render_storico_tab():
     Renderizza la sezione "Storico" con le sottoschede per le attività
     e le relazioni validate.
     """
-    st.header("Archivio Storico")
+    st.subheader("Archivio Storico")
 
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     tab1, tab2, tab3, tab4 = st.tabs([
         "**Storico Attività**",
         "**Storico Relazioni**",
@@ -109,3 +110,4 @@ def render_storico_tab():
                     st.text_area("Note", value=row.get('note', 'Nessuna nota.'), height=100, disabled=True, key=f"ass_{row['id_storico']}")
         else:
             st.success("Nessuna richiesta di assenze nello storico.")
+    st.markdown('</div>', unsafe_allow_html=True)

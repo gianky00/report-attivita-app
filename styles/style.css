@@ -14,155 +14,6 @@ body {
     transition: all 0.3s ease-in-out;
 }
 
-/* Stile per l'App Bar fissa in alto */
-.app-bar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 60px;
-    padding: 0 1rem;
-    background-color: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    z-index: 1000;
-    transition: all 0.3s ease;
-}
-
-.app-bar .title {
-    font-size: 1.5rem;
-    font-weight: 600;
-    opacity: 1;
-    transition: opacity 0.2s ease-in-out;
-}
-
-.app-bar .title.fade-out {
-    opacity: 0;
-}
-
-.app-bar .app-bar-icons {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.app-bar-icons .icon-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.app-bar-icons .icon-container:hover {
-    background-color: #f0f0f0;
-}
-
-/* Stile per il Navigation Drawer */
-.nav-drawer {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 280px;
-    height: 100%;
-    background-color: #ffffff;
-    box-shadow: 4px 0 8px rgba(0,0,0,0.1);
-    transform: translateX(-100%);
-    transition: transform 0.3s ease-in-out;
-    z-index: 1010;
-    padding-top: 70px; /* Spazio per l'App Bar */
-}
-
-.nav-drawer.open {
-    transform: translateX(0);
-}
-
-/* Overlay per scurire il contenuto principale quando il menu è aperto */
-.overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.4);
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s;
-    z-index: 1005;
-}
-
-.overlay.visible {
-    opacity: 1;
-    visibility: visible;
-}
-
-/* Scala il contenuto quando il menu è aperto */
-.main-content.drawer-open {
-    transform: scale(0.98);
-    filter: blur(1px);
-    transition: transform 0.3s ease, filter 0.3s ease;
-    transform-origin: center;
-}
-
-/* Stili per le voci del menu di navigazione */
-.nav-menu ul {
-    list-style-type: none;
-    padding: 0;
-    margin: 0;
-}
-
-.nav-menu .nav-item > div {
-    padding: 12px 20px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    transition: background-color 0.2s;
-    font-weight: 500;
-}
-
-.nav-menu .nav-item > div:hover {
-    background-color: #eef2f7;
-}
-
-.nav-menu .nav-item.active > div {
-    background-color: #e0eaff;
-    color: #3366ff;
-    border-radius: 8px;
-    margin: 0 10px;
-    padding: 12px 10px;
-}
-
-/* Stile per l'icona chevron (freccetta) */
-.nav-menu .chevron {
-    transition: transform 0.2s ease-in-out;
-}
-
-.nav-menu .chevron.expanded {
-    transform: rotate(90deg);
-}
-
-/* Stili per il sottomenu */
-.nav-submenu {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease-in-out;
-    background-color: #f8f9fa;
-}
-
-.nav-submenu.expanded {
-    max-height: 500px; /* Valore sufficientemente grande */
-}
-
-.nav-submenu li {
-    padding-left: 35px;
-}
-
 /* Stili per i contenuti della pagina e le transizioni */
 .page-content {
     opacity: 1;
@@ -193,4 +44,140 @@ body {
 /* Nasconde la navigazione delle pagine di default di Streamlit nella sidebar */
 [data-testid="stSidebarNav"] {
     display: none;
+}
+
+/* Stile unificato per le card */
+.card {
+    background-color: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+/* Stile per i contenitori di Streamlit con bordo */
+[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > div {
+    border: none !important;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+    border-radius: 8px !important;
+}
+
+/* --- TYPOGRAPHY & SECTION TITLES --- */
+
+/* Base font styles for readability */
+h1, h2, h3, h4, h5, h6 {
+    color: #2c3e50; /* A darker, softer black */
+    font-weight: 600;
+}
+
+/* Style for st.title */
+h1 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+/* Style for st.header */
+h2 {
+    font-size: 1.6rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    color: #34495e;
+}
+
+/* Elegant style for st.subheader */
+h3 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: #34495e;
+    padding-bottom: 10px;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #e0e6ed; /* Light grey thin border */
+    width: 100%;
+}
+
+
+/* --- RESPONSIVE TYPOGRAPHY --- */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 1.7rem;
+    }
+
+    h2 {
+        font-size: 1.4rem;
+    }
+
+    h3 {
+        font-size: 1.1rem;
+    }
+
+    .card {
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+}
+
+/* --- INTERACTIVE ELEMENTS (BUTTONS, TABS) --- */
+
+/* Unified style for all buttons */
+button {
+    border-radius: 8px !important;
+    padding: 10px 16px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease-in-out !important;
+    border: 1px solid #dcdcdc !important; /* Default border */
+}
+
+/* Primary Button Style */
+button[kind="primary"] {
+    background-color: #3366ff !important;
+    color: white !important;
+    border-color: #3366ff !important;
+}
+
+button[kind="primary"]:hover {
+    background-color: #254eda !important;
+    border-color: #254eda !important;
+}
+
+/* Secondary Button Style */
+button[kind="secondary"] {
+    background-color: #f0f2f6 !important;
+    color: #333 !important;
+}
+
+button[kind="secondary"]:hover {
+    background-color: #e0e6ed !important;
+    border-color: #c0c6cf !important;
+}
+
+
+/* Minimalist style for st.tabs */
+[data-baseweb="tab-list"] {
+    border-bottom: 2px solid #e0e6ed !important;
+    padding-bottom: 2px !important;
+}
+
+[data-baseweb="tab"] {
+    background-color: transparent !important;
+    font-weight: 500 !important;
+    color: #555 !important;
+}
+
+[data-baseweb="tab--selected"] {
+    color: #3366ff !important;
+    border-bottom: 2px solid #3366ff !important;
+}
+
+/* Improved st.expander header style */
+.st-expander > summary {
+    font-weight: 500;
+    font-size: 1.05rem;
+    color: #2c3e50;
 }
