@@ -310,6 +310,135 @@ def get_validated_intervention_reports(matricola_tecnico: str = None) -> pd.Data
         if conn:
             conn.close()
 
+def save_table_data(df: pd.DataFrame, table_name: str):
+    """Salva un DataFrame in una tabella del database, sostituendo i dati esistenti."""
+    conn = get_db_connection()
+    try:
+        # Basic validation to prevent SQL injection on table_name
+        if not table_name.isalnum() and '_' not in table_name:
+            raise ValueError("Nome tabella non valido.")
+
+        # Use 'replace' to drop the old table and create a new one with the df data
+        df.to_sql(table_name, conn, if_exists='replace', index=False)
+        return True
+    except (sqlite3.Error, ValueError) as e:
+        print(f"Errore durante il salvataggio dei dati nella tabella {table_name}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_table_data(table_name: str) -> pd.DataFrame:
+    """Carica tutti i dati da una tabella specifica."""
+    conn = get_db_connection()
+    try:
+        # Basic validation to prevent SQL injection on table_name
+        if not table_name.isalnum() and '_' not in table_name:
+             raise ValueError("Nome tabella non valido.")
+        query = f"SELECT * FROM {table_name}"
+        df = pd.read_sql_query(query, conn)
+        return df
+    except (sqlite3.Error, pd.io.sql.DatabaseError, ValueError) as e:
+        print(f"Errore nel caricare i dati dalla tabella {table_name}: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
+
+def get_table_names() -> list:
+    """Restituisce una lista con i nomi di tutte le tabelle nel database."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+        tables = [row[0] for row in cursor.fetchall()]
+        return tables
+    except sqlite3.Error as e:
+        print(f"Errore nel recuperare i nomi delle tabelle: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_report_by_id(report_id: str, table_name: str) -> dict:
+    """Recupera un singolo report da una tabella specifica per ID."""
+    conn = get_db_connection()
+    try:
+        if not table_name.isalnum() and '_' not in table_name:
+            raise ValueError("Nome tabella non valido.")
+        query = f"SELECT * FROM {table_name} WHERE id_report = ?"
+        cursor = conn.cursor()
+        cursor.execute(query, (report_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except (sqlite3.Error, ValueError) as e:
+        print(f"Errore nel recuperare il report {report_id} da {table_name}: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def delete_report_by_id(report_id: str, table_name: str) -> bool:
+    """Cancella un singolo report da una tabella specifica per ID."""
+    conn = get_db_connection()
+    try:
+        if not table_name.isalnum() and '_' not in table_name:
+            raise ValueError("Nome tabella non valido.")
+        with conn:
+            query = f"DELETE FROM {table_name} WHERE id_report = ?"
+            conn.execute(query, (report_id,))
+        return True
+    except (sqlite3.Error, ValueError) as e:
+        print(f"Errore durante la cancellazione del report {report_id} da {table_name}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def insert_report(report_data: dict, table_name: str) -> bool:
+    """Inserisce i dati di un report in una tabella specifica."""
+    conn = get_db_connection()
+    try:
+        if not table_name.isalnum() and '_' not in table_name:
+            raise ValueError("Nome tabella non valido.")
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in report_data.keys())
+            placeholders = ', '.join('?' for _ in report_data)
+            sql = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(report_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'inserimento del report in {table_name}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def move_report_atomically(report_data: dict, source_table: str, dest_table: str) -> bool:
+    """Sposta un report da una tabella all'altra in modo atomico."""
+    conn = get_db_connection()
+    try:
+        if not all(isinstance(name, str) and (name.isalnum() or '_' in name) for name in [source_table, dest_table]):
+            raise ValueError("Nomi delle tabelle non validi.")
+
+        with conn:
+            # 1. Delete from source
+            delete_query = f"DELETE FROM {source_table} WHERE id_report = ?"
+            conn.execute(delete_query, (report_data['id_report'],))
+
+            # 2. Insert into destination
+            cols = ', '.join(f'"{k}"' for k in report_data.keys())
+            placeholders = ', '.join('?' for _ in report_data)
+            insert_query = f"INSERT INTO {dest_table} ({cols}) VALUES ({placeholders})"
+            conn.execute(insert_query, list(report_data.values()))
+        return True
+    except (sqlite3.Error, ValueError) as e:
+        print(f"Errore durante lo spostamento atomico del report: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def get_unvalidated_reports_by_technician(matricola_tecnico: str) -> pd.DataFrame:
     """Carica i report inviati da un tecnico ma non ancora validati."""
     conn = get_db_connection()
