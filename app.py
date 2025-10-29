@@ -43,7 +43,7 @@ from modules.db_manager import (
     get_unvalidated_relazioni, process_and_commit_validated_relazioni,
     get_validated_intervention_reports, get_table_names, get_table_data, save_table_data,
     get_report_by_id, delete_report_by_id, insert_report, move_report_atomically,
-    get_last_login
+    get_last_login, count_unread_notifications
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -309,18 +309,18 @@ def main_app(matricola_utente, ruolo):
             st.session_state.expanded_menu = "Attività"
 
         # App Bar
-        col1, col2 = st.columns([0.9, 0.1])
-        with col1:
-            st.title(st.session_state.main_tab)
-        with col2:
-            user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
-            render_notification_center(user_notifications, gestionale_data, matricola_utente)
+        unread_notifications = count_unread_notifications(matricola_utente)
+        st.title(st.session_state.main_tab)
+        if unread_notifications > 0:
+            st.markdown(f'<div class="notification-badge">{unread_notifications}</div>', unsafe_allow_html=True)
 
         # Sidebar Navigation
         with st.sidebar:
-            st.title("Menu")
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
+
+            user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
+            render_notification_center(user_notifications, gestionale_data, matricola_utente)
 
             last_login = get_last_login(matricola_utente)
             if last_login:
@@ -332,6 +332,12 @@ def main_app(matricola_utente, ruolo):
             # Top-level items
             if st.button("📝 Attività Assegnate", use_container_width=True):
                 st.session_state.main_tab = "Attività Assegnate"
+                st.session_state.navigated = True
+                st.rerun()
+
+            if st.button("🗂️ Storico", use_container_width=True):
+                st.session_state.main_tab = "Storico"
+                st.session_state.navigated = True
                 st.rerun()
 
             st.divider()
@@ -339,7 +345,6 @@ def main_app(matricola_utente, ruolo):
             # Expandable sections
             expandable_menu_items = {
                 "📅 Gestione": ["📅 Gestione Turni", "Richieste"],
-                "🗂️ Archivio": ["Storico"],
             }
             if ruolo == "Amministratore":
                 expandable_menu_items["⚙️ Amministrazione"] = ["Caposquadra", "Sistema"]
@@ -349,17 +354,20 @@ def main_app(matricola_utente, ruolo):
 
                 if st.button(main_item, use_container_width=True):
                     st.session_state.expanded_menu = main_item if not is_expanded else ""
+                    st.session_state.navigated = True
                     st.rerun()
 
                 if is_expanded:
                     for sub_item in sub_items:
                         if st.button(sub_item, key=f"nav_{sub_item}", use_container_width=True):
                             st.session_state.main_tab = sub_item
+                            st.session_state.navigated = True
                             st.rerun()
 
             st.divider()
             if st.button("❓ Guida", use_container_width=True):
                 st.session_state.main_tab = "❓ Guida"
+                st.session_state.navigated = True
                 st.rerun()
             if st.button("Disconnetti", use_container_width=True):
                 token_to_delete = st.session_state.get('session_token')
@@ -995,6 +1003,16 @@ def main_app(matricola_utente, ruolo):
         st.markdown('</div>', unsafe_allow_html=True) # Close page-content
         st.markdown('</div>', unsafe_allow_html=True) # Close main-container
         st.markdown('</div>', unsafe_allow_html=True) # Close main-content
+
+        if st.session_state.get('navigated'):
+            st.components.v1.html("""
+                <script>
+                    setTimeout(() => {
+                        window.parent.document.querySelector('[data-testid="stSidebar"] > div > div > button').click();
+                    }, 100);
+                </script>
+            """, height=0)
+            st.session_state.navigated = False
 
         st.markdown("""
             <script>

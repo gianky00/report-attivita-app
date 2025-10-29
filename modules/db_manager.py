@@ -26,6 +26,22 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+def count_unread_notifications(matricola: str) -> int:
+    """Conta il numero di notifiche non lette per un utente."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        query = "SELECT COUNT(*) FROM notifiche WHERE matricola_utente = ? AND letta = 0"
+        cursor.execute(query, (matricola,))
+        count = cursor.fetchone()[0]
+        return count
+    except sqlite3.Error as e:
+        print(f"Errore nel contare le notifiche non lette: {e}")
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
 def get_last_login(matricola: str):
     """Recupera l'ultimo timestamp di login riuscito per una data matricola."""
     conn = get_db_connection()
