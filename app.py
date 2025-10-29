@@ -42,7 +42,8 @@ from modules.db_manager import (
     process_and_commit_validated_reports, salva_relazione,
     get_unvalidated_relazioni, process_and_commit_validated_relazioni,
     get_validated_intervention_reports, get_table_names, get_table_data, save_table_data,
-    get_report_by_id, delete_report_by_id, insert_report, move_report_atomically
+    get_report_by_id, delete_report_by_id, insert_report, move_report_atomically,
+    get_last_login
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -329,6 +330,12 @@ def main_app(matricola_utente, ruolo):
             st.title("Menu")
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
+
+            last_login = get_last_login(matricola_utente)
+            if last_login:
+                last_login_dt = pd.to_datetime(last_login)
+                st.caption(f"Ultimo accesso: {last_login_dt.strftime('%d/%m/%Y %H:%M')}")
+
             st.divider()
 
             # Top-level items

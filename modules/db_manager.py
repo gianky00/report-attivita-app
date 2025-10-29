@@ -26,6 +26,28 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+def get_last_login(matricola: str):
+    """Recupera l'ultimo timestamp di login riuscito per una data matricola."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        query = """
+            SELECT timestamp
+            FROM access_logs
+            WHERE matricola = ? AND (azione = 'Login 2FA riuscito' OR azione = 'Setup 2FA completato e login riuscito')
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """
+        cursor.execute(query, (matricola,))
+        result = cursor.fetchone()
+        return result['timestamp'] if result else None
+    except sqlite3.Error as e:
+        print(f"Errore nel recuperare l'ultimo login per la matricola {matricola}: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
 def process_and_commit_validated_relazioni(validated_df: pd.DataFrame, validator_id: str) -> bool:
     """Processa le relazioni validate, aggiornandole nel DB."""
     import datetime
