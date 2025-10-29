@@ -307,92 +307,50 @@ def main_app(matricola_utente, ruolo):
         if 'expanded_menu' not in st.session_state:
             st.session_state.expanded_menu = "Attività"
 
-        st.markdown(f"""
-            <div class="app-bar">
-                <div id="hamburger-menu" onclick="document.getElementById('hamburger-button').click()">
-                    &#9776;
-                </div>
-                <div class="title-container">
-                    <h1 class="title" id="app-title">{st.session_state.main_tab}</h1>
-                </div>
-                <div class="app-bar-icons">
-                </div>
-            </div>
-            <style>
-                .main .block-container {{
-                    padding-top: 80px;
-                }}
-                #hamburger-menu {{
-                    font-size: 24px;
-                    cursor: pointer;
-                    padding: 10px;
-                }}
-                /* Hide the actual Streamlit button */
-                #hamburger-button {{
-                    display: none;
-                }}
-            </style>
-        """, unsafe_allow_html=True)
+        # App Bar
+        col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
+        with col1:
+            st.title(st.session_state.main_tab)
+        with col2:
+            user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
+            render_notification_center(user_notifications, gestionale_data, matricola_utente)
+        with col3:
+            if st.button("Logout"):
+                token_to_delete = st.session_state.get('session_token')
+                delete_session(token_to_delete)
+                keys_to_clear = [k for k in st.session_state.keys()]
+                for key in keys_to_clear:
+                    del st.session_state[key]
+                st.query_params.clear()
+                st.rerun()
 
-        if st.button(" ", key="hamburger-button"):
-            st.session_state.drawer_open = not st.session_state.drawer_open
-            st.rerun()
+        # Sidebar Navigation
+        with st.sidebar:
+            st.header(f"Ciao, {nome_utente_autenticato}!")
+            st.caption(f"Ruolo: {ruolo}")
+            st.divider()
 
-        # Navigation Drawer
-        drawer_class = "nav-drawer open" if st.session_state.drawer_open else "nav-drawer"
-        st.markdown(f'<div class="{drawer_class}"></div>', unsafe_allow_html=True)
+            menu_items = {
+                "Attività": ["Attività Assegnate"],
+                "Gestione": ["📅 Gestione Turni", "Richieste"],
+                "Archivio": ["Storico"],
+                "Supporto": ["❓ Guida"]
+            }
+            if ruolo == "Amministratore":
+                menu_items["Amministrazione"] = ["Dashboard Admin"]
 
-        with st.container():
-            with st.markdown(f'<div class="{drawer_class}">', unsafe_allow_html=True):
-                st.markdown('<div class="nav-menu">', unsafe_allow_html=True)
+            for main_item, sub_items in menu_items.items():
+                is_expanded = main_item == st.session_state.expanded_menu
 
-                menu_items = {
-                    "Attività": ["Attività Assegnate"],
-                    "Gestione": ["📅 Gestione Turni", "Richieste"],
-                    "Archivio": ["Storico"],
-                    "Supporto": ["❓ Guida"]
-                }
-                if ruolo == "Amministratore":
-                    menu_items["Amministrazione"] = ["Dashboard Admin"]
-
-                for main_item, sub_items in menu_items.items():
-                    is_expanded = main_item == st.session_state.expanded_menu
-                    chevron_class = "chevron expanded" if is_expanded else "chevron"
-
-                    if st.button(f"{main_item} <span class='{chevron_class}'>&#9654;</span>", use_container_width=True):
-                        st.session_state.expanded_menu = main_item if not is_expanded else ""
-                        st.rerun()
-
-                    if is_expanded:
-                        for sub_item in sub_items:
-                            is_active = sub_item == st.session_state.main_tab
-                            active_class = "active" if is_active else ""
-                            if st.button(sub_item, key=f"nav_{sub_item}", use_container_width=True):
-                                st.session_state.main_tab = sub_item
-                                st.session_state.drawer_open = False
-                                st.rerun()
-
-                st.markdown('</div>', unsafe_allow_html=True)
-
-                # Notifications and Logout in the drawer
-                st.sidebar.subheader("Azioni Rapide")
-                user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
-                render_notification_center(user_notifications, gestionale_data, matricola_utente)
-                if st.sidebar.button("Logout"):
-                    token_to_delete = st.session_state.get('session_token')
-                    delete_session(token_to_delete)
-                    keys_to_clear = [k for k in st.session_state.keys()]
-                    for key in keys_to_clear:
-                        del st.session_state[key]
-                    st.query_params.clear()
+                if st.button(main_item, use_container_width=True):
+                    st.session_state.expanded_menu = main_item if not is_expanded else ""
                     st.rerun()
 
-        # Overlay and content scaling
-        overlay_class = "overlay visible" if st.session_state.drawer_open else "overlay"
-        st.markdown(f'<div class="{overlay_class}" onclick="document.getElementById(\'hamburger-button\').click()"></div>', unsafe_allow_html=True)
-
-        main_content_class = "main-content drawer-open" if st.session_state.drawer_open else "main-content"
-        st.markdown(f'<div class="{main_content_class}">', unsafe_allow_html=True)
+                if is_expanded:
+                    for sub_item in sub_items:
+                        if st.button(sub_item, key=f"nav_{sub_item}", use_container_width=True):
+                            st.session_state.main_tab = sub_item
+                            st.rerun()
 
         st.header(f"Ciao, {nome_utente_autenticato}!")
         st.caption(f"Ruolo: {ruolo}")
