@@ -265,9 +265,6 @@ def main_app(matricola_utente, ruolo):
     st.set_page_config(layout="wide", page_title="Gestionale")
     load_css('styles/style.css')
 
-    if 'sidebar_state' not in st.session_state:
-        st.session_state.sidebar_state = 'expanded'
-
     gestionale_data = carica_gestionale()
     df_contatti = gestionale_data['contatti']
     # Assicura che la matricola sia sempre una stringa per evitare errori di lookup
@@ -293,8 +290,45 @@ def main_app(matricola_utente, ruolo):
         salva_gestionale_async(gestionale_data)
         st.toast("Calendario reperibilità sincronizzato.")
 
-    with st.sidebar:
-        selected_page = render_sidebar(ruolo)
+    # Inizializza lo stato del menu se non esiste
+    if 'menu_visible' not in st.session_state:
+        st.session_state.menu_visible = False
+    if 'selected_page' not in st.session_state:
+        st.session_state.selected_page = "Attività di Oggi"
+
+    # --- HEADER ---
+    header_cols = st.columns([1, 8, 3, 1, 1])
+    with header_cols[0]:
+        if st.button("☰", key="hamburger_button"):
+            st.session_state.menu_visible = not st.session_state.menu_visible
+
+    with header_cols[1]:
+        st.markdown(f"### {st.session_state.selected_page}")
+
+    with header_cols[2]:
+        st.markdown(f"**Ciao, {nome_utente_autenticato}!** ({ruolo})")
+
+    with header_cols[3]:
+        user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
+        render_notification_center(user_notifications, gestionale_data, matricola_utente)
+
+    with header_cols[4]:
+        if st.button("Logout", type="secondary"):
+            token_to_delete = st.session_state.get('session_token')
+            delete_session(token_to_delete)
+            keys_to_clear = [k for k in st.session_state.keys()]
+            for key in keys_to_clear:
+                del st.session_state[key]
+            st.query_params.clear()
+            st.rerun()
+
+    # --- SIDEBAR PERSONALIZZATA ---
+    sidebar_class = "sidebar-open" if st.session_state.menu_visible else "sidebar-closed"
+    with st.container():
+        st.markdown(f'<div class="custom-sidebar {sidebar_class}">', unsafe_allow_html=True)
+        render_sidebar(ruolo)
+        st.markdown('</div>', unsafe_allow_html=True)
+
 
     if st.session_state.get('editing_turno_id'):
         render_edit_shift_form(gestionale_data)
@@ -305,45 +339,13 @@ def main_app(matricola_utente, ruolo):
             data_riferimento_attivita = task_info.get('data_attivita', datetime.date.today())
             render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento_attivita)
     else:
-        # Header con titolo, notifiche e pulsante di logout
-        st.markdown('<div class="header">', unsafe_allow_html=True)
-
-        st.markdown('<div class="hamburger">☰</div>', unsafe_allow_html=True)
-
-        col2, col3, col4 = st.columns([0.7, 0.15, 0.15])
-        with col2:
-            st.markdown(f'<div class="title">{selected_page}</div>', unsafe_allow_html=True)
-        with col3:
-            st.write("") # Spacer
-            st.write("") # Spacer
-            user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
-            render_notification_center(user_notifications, gestionale_data, matricola_utente)
-        with col4:
-            st.write("")
-            st.write("")
-            if st.button("Logout", type="secondary"):
-                token_to_delete = st.session_state.get('session_token')
-                delete_session(token_to_delete)
-
-                # Pulisce completamente lo stato della sessione per un logout sicuro
-                keys_to_clear = [k for k in st.session_state.keys()]
-                for key in keys_to_clear:
-                    del st.session_state[key]
-
-                # Rimuove il token dall'URL
-                st.query_params.clear()
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown(f'<div class="main sidebar-{st.session_state.sidebar_state}">', unsafe_allow_html=True)
-
         oggi = datetime.date.today()
 
         attivita_da_recuperare = recupera_attivita_non_rendicontate(matricola_utente, df_contatti)
 
         st.divider()
 
-        if selected_page == "Attività di Oggi":
+        if st.session_state.selected_page == "Attività di Oggi":
             st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
             lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
 
@@ -357,11 +359,11 @@ def main_app(matricola_utente, ruolo):
             ]
             disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
-        elif selected_page == "Recupero Attività":
+        elif st.session_state.selected_page == "Recupero Attività":
             st.header("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
             disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
-        elif selected_page == "Attività Validate":
+        elif st.session_state.selected_page == "Attività Validate":
             st.header("Elenco Attività Validate")
             report_validati_df = get_validated_intervention_reports(matricola_tecnico=str(matricola_utente))
             if report_validati_df.empty:
@@ -375,7 +377,7 @@ def main_app(matricola_utente, ruolo):
                         st.caption(f"ID Report: {report['id_report']} | Validato il: {pd.to_datetime(report['timestamp_validazione']).strftime('%d/%m/%Y %H:%M')}")
 
         # Contenuto per la nuova scheda "Compila Relazione"
-        elif selected_page == "Compila Relazione":
+        elif st.session_state.selected_page == "Compila Relazione":
             st.header("Compila Relazione di Reperibilità")
 
             kb_count = get_report_knowledge_base_count()
@@ -500,7 +502,7 @@ def main_app(matricola_utente, ruolo):
                 for suggestion in st.session_state.get('technical_suggestions', []):
                     st.info(suggestion)
 
-        elif selected_page == "Gestione Turni":
+        elif st.session_state.selected_page == "Gestione Turni":
             st.subheader("Gestione Turni")
             turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
             with turni_disponibili_tab:
@@ -563,7 +565,7 @@ def main_app(matricola_utente, ruolo):
                     ricevente_nome = matricola_to_name.get(str(richiesta['Ricevente_Matricola']), "Sconosciuto")
                     st.markdown(f"- Richiesta inviata a **{ricevente_nome}** per il turno **{richiesta['ID_Turno']}**.")
 
-        elif selected_page == "Richieste":
+        elif st.session_state.selected_page == "Richieste":
             st.header("Richieste")
             richieste_tabs = st.tabs(["Materiali", "Assenze"])
             with richieste_tabs[0]:
@@ -663,228 +665,17 @@ def main_app(matricola_utente, ruolo):
                         df_richieste_assenze['Data_Fine'] = pd.to_datetime(df_richieste_assenze['Data_Fine']).dt.strftime('%d/%m/%Y')
                         st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), width='stretch')
 
-        elif selected_page == "Storico":
+        elif st.session_state.selected_page == "Storico":
             from components.storico import render_storico_tab
             render_storico_tab()
 
-        elif selected_page == "Guida":
+        elif st.session_state.selected_page == "Guida":
             render_guida_tab(ruolo)
 
-        elif selected_page == "Dashboard Caposquadra":
-            st.subheader("Dashboard di Controllo")
-            if st.session_state.get('detail_technician_matricola'): render_technician_detail_view()
-            else:
+        elif st.session_state.selected_page == "Dashboard Caposquadra":
+            render_admin_dashboard(gestionale_data, matricola_utente)
 
-                caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
-                with caposquadra_tabs[0]:
-                    st.markdown("#### Seleziona Intervallo Temporale")
-                    if 'perf_start_date' not in st.session_state: st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
-                    if 'perf_end_date' not in st.session_state: st.session_state.perf_end_date = datetime.date.today()
-                    c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
-                    if c1.button("Oggi"): st.session_state.perf_start_date = st.session_state.perf_end_date = datetime.date.today()
-                    if c2.button("Ultimi 7 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7); st.session_state.perf_end_date = datetime.date.today()
-                    if c3.button("Ultimi 30 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30); st.session_state.perf_end_date = datetime.date.today()
-                    col1, col2 = st.columns(2)
-                    with col1: st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
-                    with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
-                    st.info("La sezione di performance è in fase di Sviluppo.")
-                with caposquadra_tabs[1]:
-                    with st.form("new_shift_form", clear_on_submit=True):
-                        st.subheader("Dettagli Nuovo Turno")
-                        tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
-                        desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
-                        data_turno = st.date_input("Data Turno")
-                        col1, col2 = st.columns(2)
-                        with col1: ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
-                        with col2: ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
-                        col3, col4 = st.columns(2)
-                        with col3: posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
-                        with col4: posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
-                        if st.form_submit_button("Crea Turno"):
-                            if not desc_turno: st.error("La descrizione non può essere vuota.")
-                            else:
-                                new_id = f"T_{int(datetime.datetime.now().timestamp())}"
-                                nuovo_turno = pd.DataFrame([{'ID_Turno': new_id, 'Descrizione': desc_turno, 'Data': pd.to_datetime(data_turno), 'OrarioInizio': ora_inizio.strftime('%H:%M'), 'OrarioFine': ora_fine.strftime('%H:%M'), 'PostiTecnico': posti_tech, 'PostiAiutante': posti_aiut, 'Tipo': tipo_turno}])
-                                gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
-                                df_contatti = gestionale_data.get('contatti')
-                                if df_contatti is not None:
-                                    utenti_da_notificare = df_contatti['Matricola'].tolist()
-                                    messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
-                                    for matricola in utenti_da_notificare: crea_notifica(gestionale_data, matricola, messaggio)
-                                if salva_gestionale_async(gestionale_data):
-                                    st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
-                                    st.rerun()
-                                else: st.error("Errore nel salvataggio del nuovo turno.")
-                with caposquadra_tabs[2]:
-                    st.header("Gestione Dati Avanzata")
-
-                    editor_tab, report_tab, sync_tab = st.tabs(["Editor Tabelle Database", "Gestione Report", "Sincronizzazione Manuale"])
-
-                    with editor_tab:
-                        st.subheader("Modifica Diretta Tabelle")
-                        st.warning("ATTENZIONE: La modifica diretta dei dati può causare instabilità. Procedere con cautela.")
-
-                        table_names = get_table_names()
-                        if table_names:
-                            selected_table = st.selectbox(
-                                "Seleziona una tabella da modificare",
-                                options=[""] + sorted(table_names),
-                                key="db_editor_table_select"
-                            )
-
-                            if selected_table:
-                                if st.session_state.get("current_table_for_editing") != selected_table:
-                                    st.session_state.current_table_for_editing = selected_table
-                                    with st.spinner(f"Caricamento dati da '{selected_table}'..."):
-                                        df = get_table_data(selected_table)
-                                        st.session_state.edited_df = df.copy()
-
-                                if "edited_df" in st.session_state:
-                                    st.markdown(f"### Modifica Tabella: `{selected_table}`")
-
-                                    edited_df_from_editor = st.data_editor(
-                                        st.session_state.edited_df,
-                                        num_rows="dynamic",
-                                        key=f"editor_{selected_table}",
-                                        width='stretch'
-                                    )
-
-                                    if not st.session_state.edited_df.equals(edited_df_from_editor):
-                                        st.session_state.edited_df = edited_df_from_editor
-                                        st.rerun()
-
-                                    if st.button("Salva Modifiche", key=f"save_{selected_table}", type="primary"):
-                                        with st.spinner("Salvataggio in corso..."):
-                                            if save_table_data(st.session_state.edited_df, selected_table):
-                                                st.success(f"Tabella `{selected_table}` aggiornata con successo!")
-                                                del st.session_state.current_table_for_editing
-                                                del st.session_state.edited_df
-                                                st.rerun()
-                                            else:
-                                                st.error("Errore durante il salvataggio dei dati.")
-                        else:
-                            st.error("Impossibile recuperare l'elenco delle tabelle dal database.")
-
-                    with report_tab:
-                        st.subheader("Gestione Ciclo di Vita dei Report")
-
-                        st.text_input("Cerca Report per ID", key="report_id_search")
-
-                        if st.session_state.report_id_search:
-                            report_id = st.session_state.report_id_search.strip()
-                            report_to_validate = get_report_by_id(report_id, "report_da_validare")
-                            report_validated = get_report_by_id(report_id, "report_interventi")
-
-                            if report_to_validate:
-                                st.markdown(f"#### Dettagli Report `{report_id}`")
-                                st.success("Stato: In Attesa di Validazione")
-                                st.json(report_to_validate)
-
-                                col1, col2 = st.columns(2)
-                                if col1.button("Forza Validazione", key=f"force_validate_{report_id}", type="primary"):
-                                    if move_report_atomically(report_to_validate, "report_da_validare", "report_interventi"):
-                                        st.success(f"Report {report_id} spostato in 'report_interventi'.")
-                                        st.session_state.report_id_search = "" # Clear search
-                                        st.rerun()
-                                    else:
-                                        st.error("Errore durante lo spostamento del report.")
-
-                                if col2.button("Cancella Definitivamente", key=f"delete_unvalidated_{report_id}"):
-                                    if delete_report_by_id(report_id, "report_da_validare"):
-                                        st.success(f"Report {report_id} cancellato da 'report_da_validare'.")
-                                        st.session_state.report_id_search = ""
-                                        st.rerun()
-                                    else:
-                                        st.error("Errore durante la cancellazione del report.")
-
-                            elif report_validated:
-                                st.markdown(f"#### Dettagli Report `{report_id}`")
-                                st.info("Stato: Validato")
-                                st.json(report_validated)
-
-                                col1, col2 = st.columns(2)
-                                if col1.button("Annulla Validazione", key=f"revert_validation_{report_id}"):
-                                    if move_report_atomically(report_validated, "report_interventi", "report_da_validare"):
-                                        st.success(f"Report {report_id} spostato nuovamente in 'report_da_validare'.")
-                                        st.session_state.report_id_search = ""
-                                        st.rerun()
-                                    else:
-                                        st.error("Errore durante lo spostamento del report.")
-
-                                if col2.button("Cancella Definitivamente", key=f"delete_validated_{report_id}"):
-                                    if delete_report_by_id(report_id, "report_interventi"):
-                                        st.success(f"Report {report_id} cancellato da 'report_interventi'.")
-                                        st.session_state.report_id_search = ""
-                                        st.rerun()
-                                    else:
-                                        st.error("Errore durante la cancellazione del report.")
-
-                            else:
-                                st.warning(f"Nessun report trovato con ID `{report_id}` in nessuna delle tabelle di destinazione.")
-
-                    with sync_tab:
-                        st.subheader("Sincronizzazione Manuale DB-Excel")
-                        st.info("Questa operazione avvia la macro `AggiornaRisposte` nel file `Database_Report_Attivita.xlsm` per sincronizzare i dati.")
-                        if st.button("Avvia Sincronizzazione", type="primary"):
-                            with st.spinner("Esecuzione della macro in corso... L'operazione potrebbe richiedere alcuni minuti."):
-                                try:
-                                    python_executable = sys.executable
-                                    script_path = os.path.join(os.path.dirname(__file__), "run_excel_macro.py")
-                                    result = subprocess.run(
-                                        [python_executable, script_path],
-                                        capture_output=True, text=True, check=True, encoding='utf-8'
-                                    )
-                                    st.success("Operazione completata con successo!")
-                                    st.code(result.stdout)
-                                except FileNotFoundError:
-                                    st.error("Errore: Impossibile trovare lo script `run_excel_macro.py`.")
-                                except subprocess.CalledProcessError as e:
-                                    st.error("Errore durante l'esecuzione dello script di sincronizzazione:")
-                                    st.code(e.stderr)
-                                except Exception as e:
-                                    st.error(f"Si è verificato un errore imprevisto: {e}")
-
-                with caposquadra_tabs[3]:
-                    validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
-                    with validation_tabs[0]:
-                        render_report_validation_tab(matricola_utente)
-                    with validation_tabs[1]:
-                        st.subheader("Validazione Relazioni Inviate")
-                        unvalidated_relazioni_df = get_unvalidated_relazioni()
-
-                        if unvalidated_relazioni_df.empty:
-                            st.success("🎉 Nessuna nuova relazione da validare al momento.")
-                        else:
-                            st.info(f"Ci sono {len(unvalidated_relazioni_df)} relazioni da validare.")
-
-                            # Convert date columns for better display in data_editor
-                            if 'data_intervento' in unvalidated_relazioni_df.columns:
-                                unvalidated_relazioni_df['data_intervento'] = pd.to_datetime(unvalidated_relazioni_df['data_intervento'], errors='coerce').dt.strftime('%d/%m/%Y')
-                            if 'timestamp_invio' in unvalidated_relazioni_df.columns:
-                                unvalidated_relazioni_df['timestamp_invio'] = pd.to_datetime(unvalidated_relazioni_df['timestamp_invio'], errors='coerce').dt.strftime('%d/%m/%Y %H:%M')
-
-
-                            edited_relazioni_df = st.data_editor(
-                                unvalidated_relazioni_df,
-                                num_rows="dynamic",
-                                key="relazioni_editor",
-                                width='stretch',
-                                column_config={
-                                    "corpo_relazione": st.column_config.TextColumn(width="large"),
-                                    "id_relazione": st.column_config.Column(disabled=True),
-                                    "timestamp_invio": st.column_config.Column(disabled=True),
-                                }
-                            )
-
-                            if st.button("✅ Salva Relazioni Validate", type="primary"):
-                                with st.spinner("Salvataggio delle relazioni in corso..."):
-                                    if process_and_commit_validated_relazioni(edited_relazioni_df, matricola_utente):
-                                        st.success("Relazioni validate e salvate con successo!")
-                                        st.rerun()
-                                    else:
-                                        st.error("Si è verificato un errore durante il salvataggio delle relazioni.")
-
-        elif selected_page == "Dashboard Tecnica":
+        elif st.session_state.selected_page == "Dashboard Tecnica":
             tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
             with tecnica_tabs[0]: render_gestione_account(gestionale_data)
             with tecnica_tabs[1]:
@@ -930,7 +721,6 @@ def main_app(matricola_utente, ruolo):
                             result = learning_module.build_knowledge_base()
                         if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
                         else: st.error(result.get("message"))
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # --- GESTIONE LOGIN ---
 

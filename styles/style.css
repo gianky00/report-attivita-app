@@ -1,61 +1,55 @@
+
 /* styles.css */
 
-/* Main container */
-.main {
-    padding-top: 60px; /* Adjust based on header height */
-    transition: margin-left 0.3s ease;
-}
-
-.main.sidebar-expanded {
-    margin-left: 250px;
-}
-
-/* Header */
-.header {
+/* --- Custom Sidebar --- */
+.custom-sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 60px; /* Adjust height as needed */
-    background-color: #f8f9fa; /* Example background color */
-    border-bottom: 1px solid #e7e7e7;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 20px;
-    z-index: 1000;
-}
-
-.header .title {
-    font-size: 1.5rem;
-    font-weight: bold;
-}
-
-.header .user-profile {
-    display: flex;
-    align-items: center;
-}
-
-/* Sidebar */
-.sidebar {
-    position: fixed;
-    top: 60px; /* Adjust based on header height */
-    left: -250px; /* Hidden by default */
-    width: 250px;
     height: 100%;
+    width: 250px; /* Sidebar width */
     background-color: #f8f9fa;
-    border-right: 1px solid #e7e7e7;
-    transition: left 0.3s ease;
-    z-index: 999;
     padding: 20px;
+    border-right: 1px solid #e0e0e0;
+    z-index: 100;
+    transform: translateX(-100%); /* Start hidden off-screen */
+    transition: transform 0.3s ease-in-out;
 }
 
-.sidebar.open {
-    left: 0;
+.sidebar-open {
+    transform: translateX(0);
 }
 
-/* Hamburger Icon */
-.hamburger {
-    font-size: 1.5rem;
-    cursor: pointer;
+/* --- Main Content Area --- */
+/* Optional: Add a margin to the main content when the sidebar is open */
+/* This prevents the sidebar from overlapping the content */
+/* Note: This requires the main content to be wrapped in a container */
+/* .main-content {
+    transition: margin-left 0.3s ease-in-out;
+}
+.sidebar-open + .main-content {
+    margin-left: 250px;
+} */
+
+/* --- General Button Styling within Sidebar --- */
+.custom-sidebar .stButton>button {
+    width: 100%;
+    text-align: left;
+    background-color: transparent;
+    border: none;
+    color: #333;
+    padding: 10px 5px;
+    border-radius: 5px;
+    margin-bottom: 5px;
+}
+
+.custom-sidebar .stButton>button:hover {
+    background-color: #e7e7e7;
+    color: #000;
+}
+
+/* --- Header Styling --- */
+/* This targets the columns in the header to align items vertically */
+div[data-testid="stHorizontalBlock"] {
+    align-items: center;
 }
