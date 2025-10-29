@@ -1,0 +1,61 @@
+/* styles.css */
+
+/* Main container */
+.main {
+    padding-top: 60px; /* Adjust based on header height */
+    transition: margin-left 0.3s ease;
+}
+
+.main.sidebar-expanded {
+    margin-left: 250px;
+}
+
+/* Header */
+.header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60px; /* Adjust height as needed */
+    background-color: #f8f9fa; /* Example background color */
+    border-bottom: 1px solid #e7e7e7;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 1000;
+}
+
+.header .title {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.header .user-profile {
+    display: flex;
+    align-items: center;
+}
+
+/* Sidebar */
+.sidebar {
+    position: fixed;
+    top: 60px; /* Adjust based on header height */
+    left: -250px; /* Hidden by default */
+    width: 250px;
+    height: 100%;
+    background-color: #f8f9fa;
+    border-right: 1px solid #e7e7e7;
+    transition: left 0.3s ease;
+    z-index: 999;
+    padding: 20px;
+}
+
+.sidebar.open {
+    left: 0;
+}
+
+/* Hamburger Icon */
+.hamburger {
+    font-size: 1.5rem;
+    cursor: pointer;
+}
