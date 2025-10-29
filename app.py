@@ -326,20 +326,30 @@ def main_app(matricola_utente, ruolo):
 
         # Sidebar Navigation
         with st.sidebar:
+            st.title("Menu")
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
             st.divider()
 
-            menu_items = {
-                "Attività": ["Attività Assegnate"],
-                "Gestione": ["📅 Gestione Turni", "Richieste"],
-                "Archivio": ["Storico"],
-                "Supporto": ["❓ Guida"]
+            # Top-level items
+            if st.button("❓ Guida", use_container_width=True):
+                st.session_state.main_tab = "❓ Guida"
+                st.rerun()
+            if st.button("📝 Attività Assegnate", use_container_width=True):
+                st.session_state.main_tab = "Attività Assegnate"
+                st.rerun()
+
+            st.divider()
+
+            # Expandable sections
+            expandable_menu_items = {
+                "📅 Gestione": ["Gestione Turni", "Richieste"],
+                "🗂️ Archivio": ["Storico"],
             }
             if ruolo == "Amministratore":
-                menu_items["Amministrazione"] = ["Dashboard Admin"]
+                expandable_menu_items["⚙️ Amministrazione"] = ["Caposquadra", "Sistema"]
 
-            for main_item, sub_items in menu_items.items():
+            for main_item, sub_items in expandable_menu_items.items():
                 is_expanded = main_item == st.session_state.expanded_menu
 
                 if st.button(main_item, use_container_width=True):
@@ -366,9 +376,14 @@ def main_app(matricola_utente, ruolo):
 
         main_tabs_list = ["Attività Assegnate", "📅 Gestione Turni", "Richieste", "Storico", "❓ Guida"]
         if ruolo == "Amministratore":
-            main_tabs_list.append("Dashboard Admin")
-
-        selected_tab = st.session_state.main_tab
+            if st.session_state.main_tab == "Caposquadra":
+                selected_tab = "Dashboard Admin"
+            elif st.session_state.main_tab == "Sistema":
+                selected_tab = "Dashboard Admin"
+            else:
+                selected_tab = st.session_state.main_tab
+        else:
+            selected_tab = st.session_state.main_tab
 
         st.markdown('<div class="page-content">', unsafe_allow_html=True)
 
@@ -710,8 +725,7 @@ def main_app(matricola_utente, ruolo):
             st.subheader("Dashboard di Controllo")
             if st.session_state.get('detail_technician_matricola'): render_technician_detail_view()
             else:
-                main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
-                with main_admin_tabs[0]:
+                if st.session_state.main_tab == "Caposquadra":
                     caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
                     with caposquadra_tabs[0]:
                         st.markdown("#### Seleziona Intervallo Temporale")
@@ -920,7 +934,7 @@ def main_app(matricola_utente, ruolo):
                                             st.rerun()
                                         else:
                                             st.error("Si è verificato un errore durante il salvataggio delle relazioni.")
-                with main_admin_tabs[1]:
+                elif st.session_state.main_tab == "Sistema":
                     tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
                     with tecnica_tabs[0]: render_gestione_account(gestionale_data)
                     with tecnica_tabs[1]:
