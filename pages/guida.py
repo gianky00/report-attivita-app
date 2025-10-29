@@ -40,11 +40,21 @@ def render_guida_tab(ruolo):
 
     with st.expander("🗂️ Archivio Storico"):
         st.markdown("""
-        L'archivio ti permette di consultare lo storico di tutte le attività, relazioni e richieste approvate.
+        L'**Archivio Storico** è la memoria a lungo termine dell'applicazione. Qui puoi consultare tutti i report, le relazioni e le richieste che sono state validate e archiviate. La sezione è suddivisa in quattro aree tematiche per facilitare la ricerca.
 
-        - **Storico Attività:** Ricerca e visualizza tutti i report di intervento validati.
-        - **Storico Relazioni:** Consulta tutte le relazioni di reperibilità approvate.
-        - **Storico Materiali e Assenze:** Accedi all'archivio delle richieste approvate.
+        #### Storico Attività
+        Questa scheda contiene l'archivio completo di tutti i **report di intervento** che sono stati validati.
+        - **Ricerca Rapida:** Utilizza la barra di ricerca per filtrare istantaneamente i report per **PdL, descrizione dell'attività o nome del tecnico**.
+        - **Visualizzazione Organizzata:** I risultati sono raggruppati per **PdL (Punto di Lavoro)**. Ogni gruppo può essere espanso per visualizzare i singoli interventi in ordine cronologico.
+
+        #### Storico Relazioni
+        Qui trovi tutte le **relazioni di reperibilità** che sono state approvate. Le relazioni sono ordinate dalla più recente alla meno recente e possono essere espanse per leggere il contenuto completo.
+
+        #### Storico Materiali
+        Questa scheda elenca tutte le **richieste di materiali** che sono state inviate e approvate. Ogni richiesta è presentata in una scheda espandibile che mostra i dettagli, la data e il richiedente.
+
+        #### Storico Assenze
+        In quest'area puoi consultare lo storico di tutte le **richieste di ferie e permessi** approvate. Come per i materiali, ogni richiesta è visualizzabile in dettaglio espandendo la relativa scheda.
         """)
 
     if ruolo == "Amministratore":
