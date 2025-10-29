@@ -309,21 +309,12 @@ def main_app(matricola_utente, ruolo):
             st.session_state.expanded_menu = "Attività"
 
         # App Bar
-        col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
+        col1, col2 = st.columns([0.9, 0.1])
         with col1:
             st.title(st.session_state.main_tab)
         with col2:
             user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
             render_notification_center(user_notifications, gestionale_data, matricola_utente)
-        with col3:
-            if st.button("Logout"):
-                token_to_delete = st.session_state.get('session_token')
-                delete_session(token_to_delete)
-                keys_to_clear = [k for k in st.session_state.keys()]
-                for key in keys_to_clear:
-                    del st.session_state[key]
-                st.query_params.clear()
-                st.rerun()
 
         # Sidebar Navigation
         with st.sidebar:
@@ -368,6 +359,16 @@ def main_app(matricola_utente, ruolo):
                         if st.button(sub_item, key=f"nav_{sub_item}", use_container_width=True):
                             st.session_state.main_tab = sub_item
                             st.rerun()
+
+            st.divider()
+            if st.button("Disconnetti", use_container_width=True):
+                token_to_delete = st.session_state.get('session_token')
+                delete_session(token_to_delete)
+                keys_to_clear = [k for k in st.session_state.keys()]
+                for key in keys_to_clear:
+                    del st.session_state[key]
+                st.query_params.clear()
+                st.rerun()
 
         st.header(f"Ciao, {nome_utente_autenticato}!")
         st.caption(f"Ruolo: {ruolo}")
