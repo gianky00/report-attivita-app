@@ -258,7 +258,13 @@ def recupera_attivita_non_rendicontate(matricola_utente, df_contatti):
     return attivita_da_recuperare
 
 def main_app(matricola_utente, ruolo):
-    st.set_page_config(layout="wide", page_title="Gestionale")
+    st.set_page_config(layout="wide", page_title="Gestionale", initial_sidebar_state="collapsed")
+
+    def load_css(file_name):
+        with open(file_name) as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+
+    load_css('styles/style.css')
 
     gestionale_data = carica_gestionale()
     df_contatti = gestionale_data['contatti']
@@ -294,38 +300,67 @@ def main_app(matricola_utente, ruolo):
             data_riferimento_attivita = task_info.get('data_attivita', datetime.date.today())
             render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento_attivita)
     else:
-        # Header con titolo, notifiche e pulsante di logout
-        col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
+        if 'drawer_open' not in st.session_state:
+            st.session_state.drawer_open = False
+        if 'main_tab' not in st.session_state:
+            st.session_state.main_tab = "Attività Assegnate"
+        if 'expanded_menu' not in st.session_state:
+            st.session_state.expanded_menu = "Attività"
+
+        # App Bar
+        col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
         with col1:
-            st.title(f"Gestionale")
-            st.header(f"Ciao, {nome_utente_autenticato}!")
-            st.caption(f"Ruolo: {ruolo}")
+            st.title(st.session_state.main_tab)
         with col2:
-            st.write("") # Spacer
-            st.write("") # Spacer
             user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
             render_notification_center(user_notifications, gestionale_data, matricola_utente)
         with col3:
-            st.write("")
-            st.write("")
-            if st.button("Logout", type="secondary"):
+            if st.button("Logout"):
                 token_to_delete = st.session_state.get('session_token')
                 delete_session(token_to_delete)
-
-                # Pulisce completamente lo stato della sessione per un logout sicuro
                 keys_to_clear = [k for k in st.session_state.keys()]
                 for key in keys_to_clear:
                     del st.session_state[key]
-
-                # Rimuove il token dall'URL
                 st.query_params.clear()
                 st.rerun()
+
+        # Sidebar Navigation
+        with st.sidebar:
+            st.header(f"Ciao, {nome_utente_autenticato}!")
+            st.caption(f"Ruolo: {ruolo}")
+            st.divider()
+
+            menu_items = {
+                "Attività": ["Attività Assegnate"],
+                "Gestione": ["📅 Gestione Turni", "Richieste"],
+                "Archivio": ["Storico"],
+                "Supporto": ["❓ Guida"]
+            }
+            if ruolo == "Amministratore":
+                menu_items["Amministrazione"] = ["Dashboard Admin"]
+
+            for main_item, sub_items in menu_items.items():
+                is_expanded = main_item == st.session_state.expanded_menu
+
+                if st.button(main_item, use_container_width=True):
+                    st.session_state.expanded_menu = main_item if not is_expanded else ""
+                    st.rerun()
+
+                if is_expanded:
+                    for sub_item in sub_items:
+                        if st.button(sub_item, key=f"nav_{sub_item}", use_container_width=True):
+                            st.session_state.main_tab = sub_item
+                            st.rerun()
+
+        st.header(f"Ciao, {nome_utente_autenticato}!")
+        st.caption(f"Ruolo: {ruolo}")
+
+        st.markdown('<div class="main-container">', unsafe_allow_html=True)
 
         oggi = datetime.date.today()
 
         attivita_da_recuperare = recupera_attivita_non_rendicontate(matricola_utente, df_contatti)
 
-        # Inizializza lo stato della tab principale se non esiste
         if 'main_tab' not in st.session_state:
             st.session_state.main_tab = "Attività Assegnate"
 
@@ -333,16 +368,9 @@ def main_app(matricola_utente, ruolo):
         if ruolo == "Amministratore":
             main_tabs_list.append("Dashboard Admin")
 
-        # Usa st.radio come navigazione principale per mantenere lo stato
-        selected_tab = st.radio(
-            "Menu Principale",
-            options=main_tabs_list,
-            key='main_tab',
-            horizontal=True,
-            label_visibility="collapsed"
-        )
+        selected_tab = st.session_state.main_tab
 
-        st.divider()
+        st.markdown('<div class="page-content">', unsafe_allow_html=True)
 
         if selected_tab == "Attività Assegnate":
             sub_tab_list = ["Attività di Oggi", "Recupero Attività", "Attività Validate"]
@@ -938,6 +966,25 @@ def main_app(matricola_utente, ruolo):
                                     result = learning_module.build_knowledge_base()
                                 if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
                                 else: st.error(result.get("message"))
+
+        st.markdown('</div>', unsafe_allow_html=True) # Close page-content
+        st.markdown('</div>', unsafe_allow_html=True) # Close main-container
+        st.markdown('</div>', unsafe_allow_html=True) # Close main-content
+
+        st.markdown("""
+            <script>
+                const navLinks = window.parent.document.querySelectorAll(".nav-menu button");
+                const pageContent = window.parent.document.querySelector(".page-content");
+
+                navLinks.forEach(link => {
+                    link.addEventListener("click", () => {
+                        pageContent.classList.add("fade-out");
+                        setTimeout(() => {
+                        }, 200); // Corresponds to the CSS transition duration
+                    });
+                });
+            </script>
+        """, unsafe_allow_html=True)
 
 
 # --- GESTIONE LOGIN ---

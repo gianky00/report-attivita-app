@@ -32,17 +32,14 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
     completed_pdls = {task['pdl'] for task in st.session_state.get(f"completed_tasks_{section_key}", [])}
     attivita_da_fare = [task for task in lista_attivita if task['pdl'] not in completed_pdls]
 
-    st.subheader("📝 Attività da Compilare")
+    st.header("📝 Attività da Compilare")
     if not attivita_da_fare:
-        st.info("Tutte le attività per questa sezione sono state compilate.")
+        st.success("Tutte le attività per questa sezione sono state compilate.")
 
     for i, task in enumerate(attivita_da_fare):
-        with st.container(border=True):
-            date_display = ""
-            if 'data_attivita' in task:
-                date_display = f" del **{task['data_attivita'].strftime('%d/%m/%Y')}**"
-
-            st.markdown(f"**PdL `{task['pdl']}`** - {task['attivita']}{date_display}")
+        date_display = f" del {task['data_attivita'].strftime('%d/%m/%Y')}" if 'data_attivita' in task else ""
+        with st.expander(f"**PdL `{task['pdl']}`** - {task['attivita']}{date_display}"):
+            st.markdown('<div class="task-card">', unsafe_allow_html=True)
 
             team = task.get('team', [])
             if len(team) > 1:
@@ -54,15 +51,16 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                 st.info(team_details_md)
 
             visualizza_storico_organizzato(task.get('storico', []), task['pdl'])
-            st.markdown("---")
 
             if len(task.get('team', [])) > 1 and ruolo_utente == "Aiutante":
                 st.warning("ℹ️ Solo i tecnici possono compilare il report per questa attività di team.")
             else:
-                if st.button("📝 Compila Report", key=f"manual_{section_key}_{i}"):
+                if st.button("📝 Compila Report", key=f"manual_{section_key}_{i}", type="primary"):
                     st.session_state.debriefing_task = {**task, "section_key": section_key}
                     st.session_state.report_mode = 'manual'
                     st.rerun()
+
+            st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
 
