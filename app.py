@@ -338,7 +338,7 @@ def main_app(matricola_utente, ruolo):
 
             # Expandable sections
             expandable_menu_items = {
-                "📅 Gestione": ["Gestione Turni", "Richieste"],
+                "📅 Gestione": ["📅 Gestione Turni", "Richieste"],
                 "🗂️ Archivio": ["Storico"],
             }
             if ruolo == "Amministratore":
