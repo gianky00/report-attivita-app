@@ -46,121 +46,123 @@ def render_turni_list(df_turni, gestionale, matricola_utente, ruolo, key_suffix)
         if mostra_solo_disponibili and not is_available:
             continue
 
-        with st.container(border=True):
-            st.markdown(f"**{turno['Descrizione']}**")
-            st.caption(f"{pd.to_datetime(turno['Data']).strftime('%d/%m/%Y')} | {turno['OrarioInizio']} - {turno['OrarioFine']}")
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown(f"**{turno['Descrizione']}**")
+        st.caption(f"{pd.to_datetime(turno['Data']).strftime('%d/%m/%Y')} | {turno['OrarioInizio']} - {turno['OrarioFine']}")
 
-            tech_icon = "✅" if tecnici_prenotati < posti_tecnico else "❌"
-            aiut_icon = "✅" if aiutanti_prenotati < posti_aiutante else "❌"
-            st.markdown(f"**Posti:** `Tecnici: {tecnici_prenotati}/{posti_tecnico}` {tech_icon} | `Aiutanti: {aiutanti_prenotati}/{posti_aiutante}` {aiut_icon}")
+        tech_icon = "✅" if tecnici_prenotati < posti_tecnico else "❌"
+        aiut_icon = "✅" if aiutanti_prenotati < posti_aiutante else "❌"
+        st.markdown(f"**Posti:** `Tecnici: {tecnici_prenotati}/{posti_tecnico}` {tech_icon} | `Aiutanti: {aiutanti_prenotati}/{posti_aiutante}` {aiut_icon}")
 
-            if not prenotazioni_turno.empty:
-                st.markdown("**Personale Prenotato:**")
-                df_contatti = gestionale.get('contatti', pd.DataFrame())
-                matricola_to_name = pd.Series(df_contatti['Nome Cognome'].values, index=df_contatti['Matricola'].astype(str)).to_dict()
+        if not prenotazioni_turno.empty:
+            st.markdown("**Personale Prenotato:**")
+            df_contatti = gestionale.get('contatti', pd.DataFrame())
+            matricola_to_name = pd.Series(df_contatti['Nome Cognome'].values, index=df_contatti['Matricola'].astype(str)).to_dict()
 
-                for _, p in prenotazioni_turno.iterrows():
-                    matricola = str(p['Matricola'])
-                    nome_utente = matricola_to_name.get(matricola, f"Matricola {matricola}")
-                    ruolo_utente_turno = p['RuoloOccupato']
+            for _, p in prenotazioni_turno.iterrows():
+                matricola = str(p['Matricola'])
+                nome_utente = matricola_to_name.get(matricola, f"Matricola {matricola}")
+                ruolo_utente_turno = p['RuoloOccupato']
 
-                    user_details = df_contatti[df_contatti['Matricola'] == matricola]
-                    is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('PasswordHash'))
+                user_details = df_contatti[df_contatti['Matricola'] == matricola]
+                is_placeholder = user_details.empty or pd.isna(user_details.iloc[0].get('PasswordHash'))
 
-                    display_name = f"*{nome_utente} (Esterno)*" if is_placeholder else nome_utente
-                    st.markdown(f"- {display_name} (*{ruolo_utente_turno}*)", unsafe_allow_html=True)
+                display_name = f"*{nome_utente} (Esterno)*" if is_placeholder else nome_utente
+                st.markdown(f"- {display_name} (*{ruolo_utente_turno}*)", unsafe_allow_html=True)
 
+        st.markdown("---")
+
+        if ruolo == "Amministratore":
+            if st.button("✏️ Modifica Turno", key=f"edit_{turno['ID_Turno']}_{key_suffix}"):
+                st.session_state['editing_turno_id'] = turno['ID_Turno']
+                st.rerun()
             st.markdown("---")
 
-            if ruolo == "Amministratore":
-                if st.button("✏️ Modifica Turno", key=f"edit_{turno['ID_Turno']}_{key_suffix}"):
-                    st.session_state['editing_turno_id'] = turno['ID_Turno']
-                    st.rerun()
-                st.markdown("---")
+        prenotazione_utente = prenotazioni_turno[prenotazioni_turno['Matricola'] == str(matricola_utente)]
 
-            prenotazione_utente = prenotazioni_turno[prenotazioni_turno['Matricola'] == str(matricola_utente)]
+        if not prenotazione_utente.empty:
+            st.success("Sei prenotato per questo turno.")
+
+            if 'confirm_action' not in st.session_state:
+                st.session_state.confirm_action = None
+
+            is_confirmation_pending = st.session_state.confirm_action and st.session_state.confirm_action.get('turno_id') == turno['ID_Turno']
+
+            if is_confirmation_pending:
+                action_type = st.session_state.confirm_action['type']
+                if action_type == 'cancel':
+                    st.warning("❓ Sei sicuro di voler cancellare la tua prenotazione?")
+                elif action_type == 'publish':
+                    st.warning("❓ Sei sicuro di voler pubblicare il tuo turno in bacheca?")
+
+                col_yes, col_no, col_spacer = st.columns([1, 1, 2])
+                with col_yes:
+                    if st.button("✅ Sì", key=f"confirm_yes_{turno['ID_Turno']}", width='stretch'):
+                        success = False
+                        if action_type == 'cancel':
+                            if cancella_prenotazione_logic(gestionale, matricola_utente, turno['ID_Turno']):
+                                success = True
+                        elif action_type == 'publish':
+                            if pubblica_turno_in_bacheca_logic(gestionale, matricola_utente, turno['ID_Turno']):
+                                success = True
+
+                        if success:
+                            salva_gestionale_async(gestionale)
+
+                        st.session_state.confirm_action = None
+                        st.rerun()
+                with col_no:
+                    if st.button("❌ No", key=f"confirm_no_{turno['ID_Turno']}", width='stretch'):
+                        st.session_state.confirm_action = None
+                        st.rerun()
+            else:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}", help="Rimuove la tua prenotazione dal turno."):
+                        st.session_state.confirm_action = {'type': 'cancel', 'turno_id': turno['ID_Turno']}
+                        st.rerun()
+                with col2:
+                    if st.button("📢 Pubblica in Bacheca", key=f"pub_{turno['ID_Turno']}_{key_suffix}", help="Rilascia il tuo turno e rendilo disponibile a tutti in bacheca."):
+                        st.session_state.confirm_action = {'type': 'publish', 'turno_id': turno['ID_Turno']}
+                        st.rerun()
+                with col3:
+                    if st.button("🔄 Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}", help="Chiedi a un collega specifico di sostituirti."):
+                        st.session_state['sostituzione_turno_id'] = turno['ID_Turno']
+                        st.rerun()
+        else:
+            opzioni = []
+            if tecnici_prenotati < posti_tecnico: opzioni.append("Tecnico")
+            if aiutanti_prenotati < posti_aiutante: opzioni.append("Aiutante")
+            if opzioni:
+                ruolo_scelto = st.selectbox("Prenota come:", opzioni, key=f"sel_{turno['ID_Turno']}_{key_suffix}")
+                if st.button("Conferma Prenotazione", key=f"add_{turno['ID_Turno']}_{key_suffix}"):
+                    if prenota_turno_logic(gestionale, matricola_utente, turno['ID_Turno'], ruolo_scelto):
+                        salva_gestionale_async(gestionale); st.rerun()
+            else:
+                st.warning("Turno al completo.")
+                if st.button("Chiedi Sostituzione", key=f"ask_full_{turno['ID_Turno']}_{key_suffix}"):
+                    st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
+
+        if st.session_state.get('sostituzione_turno_id') == turno['ID_Turno']:
+            st.markdown("---")
+            st.markdown("**A chi vuoi chiedere il cambio?**")
+
+            matricola_to_name = pd.Series(gestionale['contatti']['Nome Cognome'].values, index=gestionale['contatti']['Matricola'].astype(str)).to_dict()
 
             if not prenotazione_utente.empty:
-                st.success("Sei prenotato per questo turno.")
-
-                if 'confirm_action' not in st.session_state:
-                    st.session_state.confirm_action = None
-
-                is_confirmation_pending = st.session_state.confirm_action and st.session_state.confirm_action.get('turno_id') == turno['ID_Turno']
-
-                if is_confirmation_pending:
-                    action_type = st.session_state.confirm_action['type']
-                    if action_type == 'cancel':
-                        st.warning("❓ Sei sicuro di voler cancellare la tua prenotazione?")
-                    elif action_type == 'publish':
-                        st.warning("❓ Sei sicuro di voler pubblicare il tuo turno in bacheca?")
-
-                    col_yes, col_no, col_spacer = st.columns([1, 1, 2])
-                    with col_yes:
-                        if st.button("✅ Sì", key=f"confirm_yes_{turno['ID_Turno']}", width='stretch'):
-                            success = False
-                            if action_type == 'cancel':
-                                if cancella_prenotazione_logic(gestionale, matricola_utente, turno['ID_Turno']):
-                                    success = True
-                            elif action_type == 'publish':
-                                if pubblica_turno_in_bacheca_logic(gestionale, matricola_utente, turno['ID_Turno']):
-                                    success = True
-
-                            if success:
-                                salva_gestionale_async(gestionale)
-
-                            st.session_state.confirm_action = None
-                            st.rerun()
-                    with col_no:
-                        if st.button("❌ No", key=f"confirm_no_{turno['ID_Turno']}", width='stretch'):
-                            st.session_state.confirm_action = None
-                            st.rerun()
-                else:
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("Cancella Prenotazione", key=f"del_{turno['ID_Turno']}_{key_suffix}", help="Rimuove la tua prenotazione dal turno."):
-                            st.session_state.confirm_action = {'type': 'cancel', 'turno_id': turno['ID_Turno']}
-                            st.rerun()
-                    with col2:
-                        if st.button("📢 Pubblica in Bacheca", key=f"pub_{turno['ID_Turno']}_{key_suffix}", help="Rilascia il tuo turno e rendilo disponibile a tutti in bacheca."):
-                            st.session_state.confirm_action = {'type': 'publish', 'turno_id': turno['ID_Turno']}
-                            st.rerun()
-                    with col3:
-                        if st.button("🔄 Chiedi Sostituzione", key=f"ask_{turno['ID_Turno']}_{key_suffix}", help="Chiedi a un collega specifico di sostituirti."):
-                            st.session_state['sostituzione_turno_id'] = turno['ID_Turno']
-                            st.rerun()
+                ricevente_options = prenotazioni_turno['Matricola'].tolist()
             else:
-                opzioni = []
-                if tecnici_prenotati < posti_tecnico: opzioni.append("Tecnico")
-                if aiutanti_prenotati < posti_aiutante: opzioni.append("Aiutante")
-                if opzioni:
-                    ruolo_scelto = st.selectbox("Prenota come:", opzioni, key=f"sel_{turno['ID_Turno']}_{key_suffix}")
-                    if st.button("Conferma Prenotazione", key=f"add_{turno['ID_Turno']}_{key_suffix}"):
-                        if prenota_turno_logic(gestionale, matricola_utente, turno['ID_Turno'], ruolo_scelto):
-                            salva_gestionale_async(gestionale); st.rerun()
-                else:
-                    st.warning("Turno al completo.")
-                    if st.button("Chiedi Sostituzione", key=f"ask_full_{turno['ID_Turno']}_{key_suffix}"):
-                        st.session_state['sostituzione_turno_id'] = turno['ID_Turno']; st.rerun()
+                ricevente_options = gestionale['contatti']['Matricola'].tolist()
 
-            if st.session_state.get('sostituzione_turno_id') == turno['ID_Turno']:
-                st.markdown("---")
-                st.markdown("**A chi vuoi chiedere il cambio?**")
+            ricevente_options = [str(m) for m in ricevente_options if str(m) != str(matricola_utente)]
 
-                matricola_to_name = pd.Series(gestionale['contatti']['Nome Cognome'].values, index=gestionale['contatti']['Matricola'].astype(str)).to_dict()
+            ricevente_matricola = st.selectbox("Seleziona collega:", ricevente_options, format_func=lambda m: matricola_to_name.get(m, m), key=f"swap_select_{turno['ID_Turno']}_{key_suffix}")
 
-                if not prenotazione_utente.empty:
-                    ricevente_options = prenotazioni_turno['Matricola'].tolist()
-                else:
-                    ricevente_options = gestionale['contatti']['Matricola'].tolist()
+            if st.button("Invia Richiesta", key=f"swap_confirm_{turno['ID_Turno']}_{key_suffix}"):
+                if richiedi_sostituzione_logic(gestionale, matricola_utente, ricevente_matricola, turno['ID_Turno']):
+                    salva_gestionale_async(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
 
-                ricevente_options = [str(m) for m in ricevente_options if str(m) != str(matricola_utente)]
-
-                ricevente_matricola = st.selectbox("Seleziona collega:", ricevente_options, format_func=lambda m: matricola_to_name.get(m, m), key=f"swap_select_{turno['ID_Turno']}_{key_suffix}")
-
-                if st.button("Invia Richiesta", key=f"swap_confirm_{turno['ID_Turno']}_{key_suffix}"):
-                    if richiedi_sostituzione_logic(gestionale, matricola_utente, ricevente_matricola, turno['ID_Turno']):
-                        salva_gestionale_async(gestionale); del st.session_state['sostituzione_turno_id']; st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 def render_reperibilita_tab(gestionale_data, matricola_utente, ruolo_utente):
     st.subheader("📅 Calendario Reperibilità Settimanale")

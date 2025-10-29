@@ -402,7 +402,7 @@ def main_app(matricola_utente, ruolo):
             sub_tabs = st.tabs(sub_tab_list)
 
             with sub_tabs[0]:
-                st.header(f"Attività del {oggi.strftime('%d/%m/%Y')}")
+                st.subheader(f"Attività del {oggi.strftime('%d/%m/%Y')}")
                 lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
 
                 # Applica la logica dei falsi positivi anche per le attività di oggi
@@ -416,11 +416,11 @@ def main_app(matricola_utente, ruolo):
                 disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
 
             with sub_tabs[1]:
-                st.header("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
+                st.subheader("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             with sub_tabs[2]:
-                st.header("Elenco Attività Validate")
+                st.subheader("Elenco Attività Validate")
                 report_validati_df = get_validated_intervention_reports(matricola_tecnico=str(matricola_utente))
                 if report_validati_df.empty:
                     st.info("Non hai ancora report validati.")
@@ -435,7 +435,8 @@ def main_app(matricola_utente, ruolo):
             # Contenuto per la nuova scheda "Compila Relazione"
             if ruolo in ["Tecnico", "Amministratore"] and len(sub_tabs) > 3:
                 with sub_tabs[3]:
-                    st.header("Compila Relazione di Reperibilità")
+                    st.markdown('<div class="card">', unsafe_allow_html=True)
+                    st.subheader("Compila Relazione di Reperibilità")
 
                     kb_count = get_report_knowledge_base_count()
                     if kb_count > 0:
@@ -558,9 +559,10 @@ def main_app(matricola_utente, ruolo):
                         st.subheader("💡 Suggerimenti Tecnici")
                         for suggestion in st.session_state.get('technical_suggestions', []):
                             st.info(suggestion)
-
+                    st.markdown('</div>', unsafe_allow_html=True)
         elif selected_tab == "📅 Gestione Turni":
             st.subheader("Gestione Turni")
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
             with turni_disponibili_tab:
                 assistenza_tab, straordinario_tab, reperibilita_tab = st.tabs(["Turni Assistenza", "Turni Straordinario", "Turni Reperibilità"])
@@ -621,9 +623,10 @@ def main_app(matricola_utente, ruolo):
                 for _, richiesta in richieste_inviate.iterrows():
                     ricevente_nome = matricola_to_name.get(str(richiesta['Ricevente_Matricola']), "Sconosciuto")
                     st.markdown(f"- Richiesta inviata a **{ricevente_nome}** per il turno **{richiesta['ID_Turno']}**.")
-
+            st.markdown('</div>', unsafe_allow_html=True)
         elif selected_tab == "Richieste":
-            st.header("Richieste")
+            st.subheader("Richieste")
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             richieste_tabs = st.tabs(["Materiali", "Assenze"])
             with richieste_tabs[0]:
                 st.subheader("Richiesta Materiali")
@@ -721,7 +724,7 @@ def main_app(matricola_utente, ruolo):
                         df_richieste_assenze['Data_Inizio'] = pd.to_datetime(df_richieste_assenze['Data_Inizio']).dt.strftime('%d/%m/%Y')
                         df_richieste_assenze['Data_Fine'] = pd.to_datetime(df_richieste_assenze['Data_Fine']).dt.strftime('%d/%m/%Y')
                         st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), width='stretch')
-
+            st.markdown('</div>', unsafe_allow_html=True)
         elif selected_tab == "Storico":
             from pages.storico import render_storico_tab
             render_storico_tab()
@@ -775,7 +778,7 @@ def main_app(matricola_utente, ruolo):
                                         st.rerun()
                                     else: st.error("Errore nel salvataggio del nuovo turno.")
                     with caposquadra_tabs[2]:
-                        st.header("Gestione Dati Avanzata")
+                        st.subheader("Gestione Dati Avanzata")
 
                         editor_tab, report_tab, sync_tab = st.tabs(["Editor Tabelle Database", "Gestione Report", "Sincronizzazione Manuale"])
 
@@ -953,7 +956,7 @@ def main_app(matricola_utente, ruolo):
                         else:
                             st.dataframe(access_logs_df.sort_values(by="timestamp", ascending=False), width='stretch')
                     with tecnica_tabs[2]:
-                        st.header("Gestione Intelligenza Artificiale")
+                        st.subheader("Gestione Intelligenza Artificiale")
                         ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
                         with ia_sub_tabs[0]:
                             st.markdown("### 🧠 Revisione Voci del Knowledge Core")
