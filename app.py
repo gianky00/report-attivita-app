@@ -318,7 +318,6 @@ def main_app(matricola_utente, ruolo):
 
         # Sidebar Navigation
         with st.sidebar:
-            st.title("Menu")
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
 
@@ -332,6 +331,12 @@ def main_app(matricola_utente, ruolo):
             # Top-level items
             if st.button("📝 Attività Assegnate", use_container_width=True):
                 st.session_state.main_tab = "Attività Assegnate"
+                st.session_state.navigated = True
+                st.rerun()
+
+            if st.button("🗂️ Storico", use_container_width=True):
+                st.session_state.main_tab = "Storico"
+                st.session_state.navigated = True
                 st.rerun()
 
             st.divider()
@@ -339,7 +344,6 @@ def main_app(matricola_utente, ruolo):
             # Expandable sections
             expandable_menu_items = {
                 "📅 Gestione": ["📅 Gestione Turni", "Richieste"],
-                "🗂️ Archivio": ["Storico"],
             }
             if ruolo == "Amministratore":
                 expandable_menu_items["⚙️ Amministrazione"] = ["Caposquadra", "Sistema"]
@@ -349,17 +353,20 @@ def main_app(matricola_utente, ruolo):
 
                 if st.button(main_item, use_container_width=True):
                     st.session_state.expanded_menu = main_item if not is_expanded else ""
+                    st.session_state.navigated = True
                     st.rerun()
 
                 if is_expanded:
                     for sub_item in sub_items:
                         if st.button(sub_item, key=f"nav_{sub_item}", use_container_width=True):
                             st.session_state.main_tab = sub_item
+                            st.session_state.navigated = True
                             st.rerun()
 
             st.divider()
             if st.button("❓ Guida", use_container_width=True):
                 st.session_state.main_tab = "❓ Guida"
+                st.session_state.navigated = True
                 st.rerun()
             if st.button("Disconnetti", use_container_width=True):
                 token_to_delete = st.session_state.get('session_token')
@@ -995,6 +1002,14 @@ def main_app(matricola_utente, ruolo):
         st.markdown('</div>', unsafe_allow_html=True) # Close page-content
         st.markdown('</div>', unsafe_allow_html=True) # Close main-container
         st.markdown('</div>', unsafe_allow_html=True) # Close main-content
+
+        if st.session_state.get('navigated'):
+            st.components.v1.html("""
+                <script>
+                    window.parent.document.querySelector('[data-testid="stSidebar"] > div > div > button').click();
+                </script>
+            """, height=0)
+            st.session_state.navigated = False
 
         st.markdown("""
             <script>
