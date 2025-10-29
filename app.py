@@ -7,6 +7,8 @@ import re
 import os
 import json
 import uuid
+import subprocess
+import sys
 from collections import defaultdict
 import requests
 import google.generativeai as genai
@@ -39,7 +41,8 @@ from modules.db_manager import (
     get_shifts_by_type, get_reports_to_validate, delete_reports_by_ids,
     process_and_commit_validated_reports, salva_relazione,
     get_unvalidated_relazioni, process_and_commit_validated_relazioni,
-    get_validated_intervention_reports
+    get_validated_intervention_reports, get_table_names, get_table_data, save_table_data,
+    get_report_by_id, delete_report_by_id, insert_report, move_report_atomically
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -721,6 +724,135 @@ def main_app(matricola_utente, ruolo):
                                         st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
                                         st.rerun()
                                     else: st.error("Errore nel salvataggio del nuovo turno.")
+                    with caposquadra_tabs[2]:
+                        st.header("Gestione Dati Avanzata")
+
+                        editor_tab, report_tab, sync_tab = st.tabs(["Editor Tabelle Database", "Gestione Report", "Sincronizzazione Manuale"])
+
+                        with editor_tab:
+                            st.subheader("Modifica Diretta Tabelle")
+                            st.warning("ATTENZIONE: La modifica diretta dei dati può causare instabilità. Procedere con cautela.")
+
+                            table_names = get_table_names()
+                            if table_names:
+                                selected_table = st.selectbox(
+                                    "Seleziona una tabella da modificare",
+                                    options=[""] + sorted(table_names),
+                                    key="db_editor_table_select"
+                                )
+
+                                if selected_table:
+                                    if st.session_state.get("current_table_for_editing") != selected_table:
+                                        st.session_state.current_table_for_editing = selected_table
+                                        with st.spinner(f"Caricamento dati da '{selected_table}'..."):
+                                            df = get_table_data(selected_table)
+                                            st.session_state.edited_df = df.copy()
+
+                                    if "edited_df" in st.session_state:
+                                        st.markdown(f"### Modifica Tabella: `{selected_table}`")
+
+                                        edited_df_from_editor = st.data_editor(
+                                            st.session_state.edited_df,
+                                            num_rows="dynamic",
+                                            key=f"editor_{selected_table}",
+                                            width='stretch'
+                                        )
+
+                                        if not st.session_state.edited_df.equals(edited_df_from_editor):
+                                            st.session_state.edited_df = edited_df_from_editor
+                                            st.rerun()
+
+                                        if st.button("Salva Modifiche", key=f"save_{selected_table}", type="primary"):
+                                            with st.spinner("Salvataggio in corso..."):
+                                                if save_table_data(st.session_state.edited_df, selected_table):
+                                                    st.success(f"Tabella `{selected_table}` aggiornata con successo!")
+                                                    del st.session_state.current_table_for_editing
+                                                    del st.session_state.edited_df
+                                                    st.rerun()
+                                                else:
+                                                    st.error("Errore durante il salvataggio dei dati.")
+                            else:
+                                st.error("Impossibile recuperare l'elenco delle tabelle dal database.")
+
+                        with report_tab:
+                            st.subheader("Gestione Ciclo di Vita dei Report")
+
+                            st.text_input("Cerca Report per ID", key="report_id_search")
+
+                            if st.session_state.report_id_search:
+                                report_id = st.session_state.report_id_search.strip()
+                                report_to_validate = get_report_by_id(report_id, "report_da_validare")
+                                report_validated = get_report_by_id(report_id, "report_interventi")
+
+                                if report_to_validate:
+                                    st.markdown(f"#### Dettagli Report `{report_id}`")
+                                    st.success("Stato: In Attesa di Validazione")
+                                    st.json(report_to_validate)
+
+                                    col1, col2 = st.columns(2)
+                                    if col1.button("Forza Validazione", key=f"force_validate_{report_id}", type="primary"):
+                                        if move_report_atomically(report_to_validate, "report_da_validare", "report_interventi"):
+                                            st.success(f"Report {report_id} spostato in 'report_interventi'.")
+                                            st.session_state.report_id_search = "" # Clear search
+                                            st.rerun()
+                                        else:
+                                            st.error("Errore durante lo spostamento del report.")
+
+                                    if col2.button("Cancella Definitivamente", key=f"delete_unvalidated_{report_id}"):
+                                        if delete_report_by_id(report_id, "report_da_validare"):
+                                            st.success(f"Report {report_id} cancellato da 'report_da_validare'.")
+                                            st.session_state.report_id_search = ""
+                                            st.rerun()
+                                        else:
+                                            st.error("Errore durante la cancellazione del report.")
+
+                                elif report_validated:
+                                    st.markdown(f"#### Dettagli Report `{report_id}`")
+                                    st.info("Stato: Validato")
+                                    st.json(report_validated)
+
+                                    col1, col2 = st.columns(2)
+                                    if col1.button("Annulla Validazione", key=f"revert_validation_{report_id}"):
+                                        if move_report_atomically(report_validated, "report_interventi", "report_da_validare"):
+                                            st.success(f"Report {report_id} spostato nuovamente in 'report_da_validare'.")
+                                            st.session_state.report_id_search = ""
+                                            st.rerun()
+                                        else:
+                                            st.error("Errore durante lo spostamento del report.")
+
+                                    if col2.button("Cancella Definitivamente", key=f"delete_validated_{report_id}"):
+                                        if delete_report_by_id(report_id, "report_interventi"):
+                                            st.success(f"Report {report_id} cancellato da 'report_interventi'.")
+                                            st.session_state.report_id_search = ""
+                                            st.rerun()
+                                        else:
+                                            st.error("Errore durante la cancellazione del report.")
+
+                                else:
+                                    st.warning(f"Nessun report trovato con ID `{report_id}` in nessuna delle tabelle di destinazione.")
+
+                        with sync_tab:
+                            st.subheader("Sincronizzazione Manuale DB-Excel")
+                            st.info("Questa operazione avvia la macro `AggiornaRisposte` nel file `Database_Report_Attivita.xlsm` per sincronizzare i dati.")
+                            if st.button("Avvia Sincronizzazione", type="primary"):
+                                with st.spinner("Esecuzione della macro in corso... L'operazione potrebbe richiedere alcuni minuti."):
+                                    try:
+                                        python_executable = sys.executable
+                                        script_path = os.path.join(os.path.dirname(__file__), "run_excel_macro.py")
+                                        result = subprocess.run(
+                                            [python_executable, script_path],
+                                            capture_output=True, text=True, check=True, encoding='utf-8'
+                                        )
+                                        st.success("Operazione completata con successo!")
+                                        st.code(result.stdout)
+                                    except FileNotFoundError:
+                                        st.error("Errore: Impossibile trovare lo script `run_excel_macro.py`.")
+                                    except subprocess.CalledProcessError as e:
+                                        st.error("Errore durante l'esecuzione dello script di sincronizzazione:")
+                                        st.code(e.stderr)
+                                    except Exception as e:
+                                        st.error(f"Si è verificato un errore imprevisto: {e}")
+
                     with caposquadra_tabs[3]:
                         validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
                         with validation_tabs[0]:
