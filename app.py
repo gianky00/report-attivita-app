@@ -330,9 +330,6 @@ def main_app(matricola_utente, ruolo):
             st.divider()
 
             # Top-level items
-            if st.button("❓ Guida", use_container_width=True):
-                st.session_state.main_tab = "❓ Guida"
-                st.rerun()
             if st.button("📝 Attività Assegnate", use_container_width=True):
                 st.session_state.main_tab = "Attività Assegnate"
                 st.rerun()
@@ -361,6 +358,9 @@ def main_app(matricola_utente, ruolo):
                             st.rerun()
 
             st.divider()
+            if st.button("❓ Guida", use_container_width=True):
+                st.session_state.main_tab = "❓ Guida"
+                st.rerun()
             if st.button("Disconnetti", use_container_width=True):
                 token_to_delete = st.session_state.get('session_token')
                 delete_session(token_to_delete)

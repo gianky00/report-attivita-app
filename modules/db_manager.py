@@ -34,7 +34,7 @@ def get_last_login(matricola: str):
         query = """
             SELECT timestamp
             FROM access_logs
-            WHERE matricola = ? AND (azione = 'Login 2FA riuscito' OR azione = 'Setup 2FA completato e login riuscito')
+            WHERE username = ? AND (status = 'Login 2FA riuscito' OR status = 'Setup 2FA completato e login riuscito')
             ORDER BY timestamp DESC
             LIMIT 1
         """
