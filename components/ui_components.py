@@ -41,6 +41,13 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
         with st.expander(f"**PdL `{task['pdl']}`** - {task['attivita']}{date_display}"):
             st.markdown('<div class="task-card">', unsafe_allow_html=True)
 
+            if 'data_attivita' in task and task['data_attivita']:
+                try:
+                    activity_date = pd.to_datetime(task['data_attivita']).strftime('%d/%m/%Y')
+                    st.markdown(f"**Assegnato il:** {activity_date}")
+                except (ValueError, TypeError):
+                    st.markdown(f"**Assegnato il:** Data non disponibile")
+
             team = task.get('team', [])
             if len(team) > 1:
                 team_details_md = "**Team:**\n"

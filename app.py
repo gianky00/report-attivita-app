@@ -256,6 +256,8 @@ def recupera_attivita_non_rendicontate(matricola_utente, df_contatti):
     for i in range(1, 31):
         giorno_controllo = oggi - datetime.timedelta(days=i)
         attivita_giorno = trova_attivita(matricola_utente, giorno_controllo.day, giorno_controllo.month, giorno_controllo.year, df_contatti)
+        for task in attivita_giorno:
+            task['data_attivita'] = giorno_controllo
         attivita_da_recuperare.extend(attivita_giorno)
     return attivita_da_recuperare
 
@@ -405,6 +407,8 @@ def main_app(matricola_utente, ruolo):
             with sub_tabs[0]:
                 st.subheader(f"Attività del {oggi.strftime('%d/%m/%Y')}")
                 lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, df_contatti)
+                for task in lista_attivita_raw:
+                    task['data_attivita'] = oggi
                 disegna_sezione_attivita(lista_attivita_raw, "today", ruolo)
 
             with sub_tabs[1]:

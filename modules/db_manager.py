@@ -26,6 +26,7 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+
 def add_shift_log(log_data: dict) -> bool:
     """Aggiunge un nuovo log di modifica turno al database."""
     conn = get_db_connection()
