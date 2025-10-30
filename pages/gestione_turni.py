@@ -210,7 +210,7 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
     st.divider()
 
     oncall_shifts_df = df_turni_reperibilita.copy()
-    oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'])
+    oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'], format='mixed', errors='coerce')
     oncall_shifts_df['date_only'] = oncall_shifts_df['Data'].dt.date
 
     week_dates = [st.session_state.week_start_date + datetime.timedelta(days=i) for i in range(7)]
