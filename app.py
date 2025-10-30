@@ -310,7 +310,7 @@ def main_app(matricola_utente, ruolo):
             st.caption(f"Ruolo: {ruolo}")
 
             user_notifications = leggi_notifiche(matricola_utente)
-            render_notification_center(user_notifications)
+            render_notification_center(user_notifications, matricola_utente)
 
             last_login = get_last_login(matricola_utente)
             if last_login:
