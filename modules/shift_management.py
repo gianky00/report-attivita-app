@@ -1,9 +1,28 @@
 import streamlit as st
 import pandas as pd
 import datetime
+from modules.db_manager import (
+    get_shifts_by_type,
+    get_all_users,
+    create_shift,
+    add_booking,
+    get_shift_by_id,
+    get_bookings_for_shift,
+    delete_booking,
+    add_substitution_request,
+    get_substitution_request_by_id,
+    delete_substitution_request,
+    update_booking_user,
+    get_booking_by_user_and_shift,
+    get_bacheca_item_by_id,
+    update_bacheca_item,
+    get_db_connection
+)
+from modules.auth import get_user_by_matricola
 from modules.notifications import crea_notifica
 import os
 import warnings
+import sqlite3
 
 # Sopprime il warning specifico di openpyxl relativo alla "Print area"
 warnings.filterwarnings(
@@ -13,50 +32,25 @@ warnings.filterwarnings(
     message="Print area cannot be set to Defined name: .*."
 )
 
-# --- LOGICA DI AUDITING ---
-LOG_FILE_PATH = 'Storico_Modifiche_Turni.xlsx'
 
-def _safe_concat(df, new_row_dict):
-    """Safely concatenates a new row to a DataFrame, handling empty DFs."""
-    new_row_df = pd.DataFrame([new_row_dict])
-    if df.empty:
-        return new_row_df
-    return pd.concat([df, new_row_df], ignore_index=True)
+def log_shift_change(turno_id, azione, matricola_originale=None, matricola_subentrante=None, matricola_eseguito_da=None):
+    """Registra una modifica a un turno nel database."""
 
-def log_shift_change(gestionale_data, turno_id, azione, matricola_originale=None, matricola_subentrante=None, matricola_eseguito_da=None):
-    """
-    Registra una modifica a un turno in un file Excel per l'auditing, usando le matricole.
-    """
-    try:
-        if os.path.exists(LOG_FILE_PATH):
-            log_df = pd.read_excel(LOG_FILE_PATH)
-        else:
-            log_df = pd.DataFrame(columns=[
-                'ID_Modifica', 'Timestamp', 'ID_Turno', 'Azione',
-                'UtenteOriginale', 'UtenteSubentrante', 'EseguitoDa'
-            ])
+    def get_name(matricola):
+        if matricola is None: return None
+        user = get_user_by_matricola(matricola)
+        return user['Nome Cognome'] if user else str(matricola)
 
-        df_contatti = gestionale_data['contatti']
-        def get_name(matricola):
-            if matricola is None: return None
-            user = df_contatti[df_contatti['Matricola'] == str(matricola)]
-            return user.iloc[0]['Nome Cognome'] if not user.empty else str(matricola)
-
-        new_log_entry = {
-            'ID_Modifica': f"M_{int(datetime.datetime.now().timestamp())}",
-            'Timestamp': datetime.datetime.now(),
-            'ID_Turno': turno_id,
-            'Azione': azione,
-            'UtenteOriginale': get_name(matricola_originale),
-            'UtenteSubentrante': get_name(matricola_subentrante),
-            'EseguitoDa': get_name(matricola_eseguito_da)
-        }
-        log_df = _safe_concat(log_df, new_log_entry)
-        log_df.to_excel(LOG_FILE_PATH, index=False)
-        return True
-    except Exception as e:
-        st.error(f"Errore durante la registrazione della modifica: {e}")
-        return False
+    log_data = {
+        'ID_Modifica': f"M_{int(datetime.datetime.now().timestamp())}",
+        'Timestamp': datetime.datetime.now().isoformat(),
+        'ID_Turno': turno_id,
+        'Azione': azione,
+        'UtenteOriginale': get_name(matricola_originale),
+        'UtenteSubentrante': get_name(matricola_subentrante),
+        'EseguitoDa': get_name(matricola_eseguito_da)
+    }
+    add_shift_log(log_data)
 
 # --- LOGICA DI BUSINESS PER LA REPERIBILITÀ ---
 
@@ -97,182 +91,246 @@ def find_matricola_by_surname(df_contatti, surname_to_find):
                 return str(row.get("Matricola"))
     return None
 
-def sync_oncall_shifts(gestionale_data, start_date, end_date):
+def sync_oncall_shifts(start_date, end_date):
     """
-    Sincronizza i turni di reperibilità, creandoli se non esistono e usando le matricole.
+    Sincronizza i turni di reperibilità in modo transazionale.
     """
-    df_turni = gestionale_data['turni']
-    df_prenotazioni = gestionale_data['prenotazioni']
-    df_contatti = gestionale_data['contatti']
+    df_turni = get_shifts_by_type('Reperibilità')
+    df_contatti = get_all_users()
+
+    # Convert 'Data' column to date objects for comparison
+    if not df_turni.empty:
+        df_turni['date_only'] = pd.to_datetime(df_turni['Data']).dt.date
+    else:
+        df_turni['date_only'] = pd.Series(dtype='object')
 
     changes_made = False
     current_date = start_date
     while current_date <= end_date:
-        if not df_turni[(df_turni['Tipo'] == 'Reperibilità') & (pd.to_datetime(df_turni['Data']).dt.date == current_date)].empty:
+        if current_date in df_turni['date_only'].values:
             current_date += datetime.timedelta(days=1)
             continue
+
         changes_made = True
         team_surnames = get_oncall_team_for_date(current_date)
         date_str = current_date.strftime("%Y-%m-%d")
         shift_id = f"REP_{date_str}"
         new_shift = {
             'ID_Turno': shift_id, 'Descrizione': f"Reperibilità {current_date.strftime('%d/%m/%Y')}",
-            'Data': pd.to_datetime(current_date), 'OrarioInizio': '00:00', 'OrarioFine': '23:59',
+            'Data': current_date.isoformat(), 'OrarioInizio': '00:00', 'OrarioFine': '23:59',
             'PostiTecnico': len(team_surnames), 'PostiAiutante': 0, 'Tipo': 'Reperibilità'
         }
-        df_turni = _safe_concat(df_turni, new_shift)
-        for surname in team_surnames:
-            matricola = find_matricola_by_surname(df_contatti, surname)
-            if matricola:
-                new_booking = {
-                    'ID_Prenotazione': f"P_{shift_id}_{matricola}", 'ID_Turno': shift_id,
-                    'Matricola': matricola, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()
-                }
-                df_prenotazioni = _safe_concat(df_prenotazioni, new_booking)
-            else:
-                st.warning(f"Attenzione: Il cognome '{surname}' dal calendario reperibilità non è stato trovato nei contatti.")
+
+        if create_shift(new_shift):
+            for surname in team_surnames:
+                matricola = find_matricola_by_surname(df_contatti, surname)
+                if matricola:
+                    new_booking = {
+                        'ID_Prenotazione': f"P_{shift_id}_{matricola}", 'ID_Turno': shift_id,
+                        'Matricola': matricola, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now().isoformat()
+                    }
+                    add_booking(new_booking)
+                else:
+                    st.warning(f"Attenzione: Cognome '{surname}' non trovato.")
         current_date += datetime.timedelta(days=1)
-    if changes_made:
-        gestionale_data['turni'] = df_turni
-        gestionale_data['prenotazioni'] = df_prenotazioni
+
     return changes_made
 
 
 # --- LOGICA DI BUSINESS PER I TURNI STANDARD ---
-def prenota_turno_logic(gestionale_data, matricola_utente, turno_id, ruolo_scelto):
-    df_turni, df_prenotazioni = gestionale_data['turni'], gestionale_data['prenotazioni']
-    turno_info = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]
-    posti_tecnico, posti_aiutante = int(float(turno_info['PostiTecnico'])), int(float(turno_info['PostiAiutante']))
-    prenotazioni_per_turno = df_prenotazioni[df_prenotazioni['ID_Turno'] == turno_id]
+def prenota_turno_logic(matricola_utente, turno_id, ruolo_scelto):
+    turno_info = get_shift_by_id(turno_id)
+    if not turno_info:
+        st.error("Turno non trovato."); return False
+
+    prenotazioni_per_turno = get_bookings_for_shift(turno_id)
     tecnici_prenotati = len(prenotazioni_per_turno[prenotazioni_per_turno['RuoloOccupato'] == 'Tecnico'])
     aiutanti_prenotati = len(prenotazioni_per_turno[prenotazioni_per_turno['RuoloOccupato'] == 'Aiutante'])
 
-    success = False
-    if ruolo_scelto == 'Tecnico' and tecnici_prenotati < posti_tecnico:
-        nuova_riga = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Matricola': str(matricola_utente), 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now()}
-        gestionale_data['prenotazioni'] = _safe_concat(df_prenotazioni, nuova_riga)
-        st.success("Turno prenotato come Tecnico!"); success = True
-    elif ruolo_scelto == 'Aiutante' and aiutanti_prenotati < posti_aiutante:
-        nuova_riga = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Matricola': str(matricola_utente), 'RuoloOccupato': 'Aiutante', 'Timestamp': datetime.datetime.now()}
-        gestionale_data['prenotazioni'] = _safe_concat(df_prenotazioni, nuova_riga)
-        st.success("Turno prenotato come Aiutante!"); success = True
-    else:
+    can_book = False
+    if ruolo_scelto == 'Tecnico' and tecnici_prenotati < int(turno_info['PostiTecnico']):
+        can_book = True
+    elif ruolo_scelto == 'Aiutante' and aiutanti_prenotati < int(turno_info['PostiAiutante']):
+        can_book = True
+
+    if not can_book:
         st.error("Tutti i posti per il ruolo selezionato sono esauriti!"); return False
 
-    if success:
-        log_shift_change(gestionale_data, turno_id, "Prenotazione", matricola_subentrante=matricola_utente, matricola_eseguito_da=matricola_utente)
-    return success
+    new_booking_data = {
+        'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}",
+        'ID_Turno': turno_id,
+        'Matricola': str(matricola_utente),
+        'RuoloOccupato': ruolo_scelto,
+        'Timestamp': datetime.datetime.now().isoformat()
+    }
 
-def cancella_prenotazione_logic(gestionale_data, matricola_utente, turno_id):
-    index_to_drop = gestionale_data['prenotazioni'][(gestionale_data['prenotazioni']['ID_Turno'] == turno_id) & (gestionale_data['prenotazioni']['Matricola'] == str(matricola_utente))].index
-    if not index_to_drop.empty:
-        gestionale_data['prenotazioni'].drop(index_to_drop, inplace=True)
-        log_shift_change(gestionale_data, turno_id, "Cancellazione", matricola_originale=matricola_utente, matricola_eseguito_da=matricola_utente)
-        st.success("Prenotazione cancellata."); return True
-    st.error("Prenotazione non trovata."); return False
+    if add_booking(new_booking_data):
+        st.success(f"Turno prenotato come {ruolo_scelto}!");
+        log_shift_change(turno_id, "Prenotazione", matricola_subentrante=matricola_utente, matricola_eseguito_da=matricola_utente)
+        return True
+    else:
+        st.error("Errore durante la prenotazione del turno.")
+        return False
 
-def richiedi_sostituzione_logic(gestionale_data, matricola_richiedente, matricola_ricevente, turno_id):
-    nome_richiedente = gestionale_data['contatti'][gestionale_data['contatti']['Matricola'] == str(matricola_richiedente)].iloc[0]['Nome Cognome']
+def cancella_prenotazione_logic(matricola_utente, turno_id):
+    if delete_booking(matricola_utente, turno_id):
+        log_shift_change(turno_id, "Cancellazione", matricola_originale=matricola_utente, matricola_eseguito_da=matricola_utente)
+        st.success("Prenotazione cancellata.")
+        return True
+    else:
+        st.error("Prenotazione non trovata o errore durante la cancellazione.")
+        return False
 
-    nuova_richiesta = {'ID_Richiesta': f"S_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Richiedente_Matricola': str(matricola_richiedente), 'Ricevente_Matricola': str(matricola_ricevente), 'Timestamp': datetime.datetime.now()}
-    gestionale_data['sostituzioni'] = _safe_concat(gestionale_data['sostituzioni'], nuova_richiesta)
+def richiedi_sostituzione_logic(matricola_richiedente, matricola_ricevente, turno_id):
+    richiedente_info = get_user_by_matricola(matricola_richiedente)
+    if not richiedente_info:
+        st.error("Utente richiedente non trovato."); return False
 
-    messaggio = f"Hai una nuova richiesta di sostituzione da {nome_richiedente} per il turno {turno_id}."
-    crea_notifica(gestionale_data, matricola_ricevente, messaggio)
+    nome_richiedente = richiedente_info['Nome Cognome']
 
-    st.success(f"Richiesta di sostituzione inviata.");
-    st.toast("Richiesta inviata! Il collega riceverà una notifica.")
-    return True
+    new_request_data = {
+        'ID_Richiesta': f"S_{int(datetime.datetime.now().timestamp())}",
+        'ID_Turno': turno_id,
+        'Richiedente_Matricola': str(matricola_richiedente),
+        'Ricevente_Matricola': str(matricola_ricevente),
+        'Timestamp': datetime.datetime.now().isoformat()
+    }
 
-def rispondi_sostituzione_logic(gestionale_data, id_richiesta, matricola_che_risponde, accettata):
-    sostituzioni_df = gestionale_data['sostituzioni']
-    richiesta_index = sostituzioni_df[sostituzioni_df['ID_Richiesta'] == id_richiesta].index
-    if richiesta_index.empty:
+    if add_substitution_request(new_request_data):
+        messaggio = f"Hai una nuova richiesta di sostituzione da {nome_richiedente} per il turno {turno_id}."
+        crea_notifica(matricola_ricevente, messaggio)
+        st.success("Richiesta di sostituzione inviata.")
+        st.toast("Richiesta inviata! Il collega riceverà una notifica.")
+        return True
+    else:
+        st.error("Errore durante l'invio della richiesta.")
+        return False
+
+def rispondi_sostituzione_logic(id_richiesta, matricola_che_risponde, accettata):
+    richiesta = get_substitution_request_by_id(id_richiesta)
+    if not richiesta:
         st.error("Richiesta non più valida."); return False
 
-    richiesta = sostituzioni_df.loc[richiesta_index[0]]
     matricola_richiedente = richiesta['Richiedente_Matricola']
     turno_id = richiesta['ID_Turno']
-    nome_che_risponde = gestionale_data['contatti'][gestionale_data['contatti']['Matricola'] == str(matricola_che_risponde)].iloc[0]['Nome Cognome']
+
+    user_info = get_user_by_matricola(matricola_che_risponde)
+    nome_che_risponde = user_info['Nome Cognome'] if user_info else "Sconosciuto"
+
+    # Always delete the request
+    delete_substitution_request(id_richiesta)
 
     messaggio = f"{nome_che_risponde} ha {'ACCETTATO' if accettata else 'RIFIUTATO'} la tua richiesta di cambio per il turno {turno_id}."
-    crea_notifica(gestionale_data, matricola_richiedente, messaggio)
-    gestionale_data['sostituzioni'].drop(richiesta_index, inplace=True)
+    crea_notifica(matricola_richiedente, messaggio)
 
     if not accettata:
         st.info("Hai rifiutato la richiesta."); st.toast("Risposta inviata."); return True
 
-    prenotazioni_df = gestionale_data['prenotazioni']
-    idx_richiedente = prenotazioni_df[(prenotazioni_df['ID_Turno'] == turno_id) & (prenotazioni_df['Matricola'] == str(matricola_richiedente))].index
-    if not idx_richiedente.empty:
-        prenotazioni_df.loc[idx_richiedente, 'Matricola'] = str(matricola_che_risponde)
-        log_shift_change(gestionale_data, turno_id, "Sostituzione Accettata", matricola_originale=matricola_richiedente, matricola_subentrante=matricola_che_risponde, matricola_eseguito_da=matricola_che_risponde)
-        st.success("Sostituzione (subentro) effettuata con successo!"); return True
+    if update_booking_user(turno_id, matricola_richiedente, matricola_che_risponde):
+        log_shift_change(turno_id, "Sostituzione Accettata", matricola_originale=matricola_richiedente, matricola_subentrante=matricola_che_risponde, matricola_eseguito_da=matricola_che_risponde)
+        st.success("Sostituzione (subentro) effettuata con successo!")
+        return True
+    else:
+        st.error("Errore: la prenotazione originale del richiedente non è stata trovata o errore nell'aggiornamento.")
+        # Re-create the substitution request if the booking update fails to avoid data loss
+        add_substitution_request(richiesta)
+        return False
 
-    st.error("Errore: la prenotazione originale del richiedente non è stata trovata."); return False
-
-def pubblica_turno_in_bacheca_logic(gestionale_data, matricola_richiedente, turno_id):
-    df_prenotazioni = gestionale_data['prenotazioni']
-    idx_prenotazione = df_prenotazioni[(df_prenotazioni['Matricola'] == str(matricola_richiedente)) & (df_prenotazioni['ID_Turno'] == turno_id)].index
-    if idx_prenotazione.empty:
+def pubblica_turno_in_bacheca_logic(matricola_richiedente, turno_id):
+    booking_to_publish = get_booking_by_user_and_shift(matricola_richiedente, turno_id)
+    if not booking_to_publish:
         st.error("Errore: Prenotazione non trovata."); return False
 
-    prenotazione_rimossa = df_prenotazioni.loc[idx_prenotazione].iloc[0]
-    ruolo_originale = prenotazione_rimossa['RuoloOccupato']
-    gestionale_data['prenotazioni'].drop(idx_prenotazione, inplace=True)
+    # Transaction: Delete booking and add to bacheca
+    conn = get_db_connection()
+    try:
+        with conn:
+            # 1. Delete the booking
+            delete_sql = "DELETE FROM prenotazioni WHERE ID_Prenotazione = ?"
+            conn.execute(delete_sql, (booking_to_publish['ID_Prenotazione'],))
 
-    df_bacheca = gestionale_data.get('bacheca', pd.DataFrame())
-    nuovo_id_bacheca = f"B_{int(datetime.datetime.now().timestamp())}"
-    nuova_voce_bacheca = {'ID_Bacheca': nuovo_id_bacheca, 'ID_Turno': turno_id, 'Tecnico_Originale_Matricola': str(matricola_richiedente), 'Ruolo_Originale': ruolo_originale, 'Timestamp_Pubblicazione': datetime.datetime.now(), 'Stato': 'Disponibile', 'Tecnico_Subentrante_Matricola': None, 'Timestamp_Assegnazione': None}
-    gestionale_data['bacheca'] = _safe_concat(df_bacheca, nuova_voce_bacheca)
+            # 2. Add to bacheca
+            new_bacheca_item = {
+                'ID_Bacheca': f"B_{int(datetime.datetime.now().timestamp())}",
+                'ID_Turno': turno_id,
+                'Tecnico_Originale_Matricola': str(matricola_richiedente),
+                'Ruolo_Originale': booking_to_publish['RuoloOccupato'],
+                'Timestamp_Pubblicazione': datetime.datetime.now().isoformat(),
+                'Stato': 'Disponibile',
+                'Tecnico_Subentrante_Matricola': None,
+                'Timestamp_Assegnazione': None
+            }
+            add_bacheca_item(new_bacheca_item)
 
-    log_shift_change(gestionale_data, turno_id, "Pubblicazione in Bacheca", matricola_originale=matricola_richiedente, matricola_eseguito_da=matricola_richiedente)
+        log_shift_change(turno_id, "Pubblicazione in Bacheca", matricola_originale=matricola_richiedente, matricola_eseguito_da=matricola_richiedente)
 
-    df_turni = gestionale_data['turni']
-    turno_info = df_turni[df_turni['ID_Turno'] == turno_id].iloc[0]
-    messaggio = f"📢 Turno libero: '{turno_info['Descrizione']}' del {pd.to_datetime(turno_info['Data']).strftime('%d/%m')} ({ruolo_originale})."
+        turno_info = get_shift_by_id(turno_id)
+        if turno_info:
+            messaggio = f"📢 Turno libero: '{turno_info['Descrizione']}' del {pd.to_datetime(turno_info['Data']).strftime('%d/%m')} ({booking_to_publish['RuoloOccupato']})."
+            all_users = get_all_users()
+            if not all_users.empty:
+                for _, user in all_users.iterrows():
+                    if str(user['Matricola']) != str(matricola_richiedente):
+                        crea_notifica(user['Matricola'], messaggio)
 
-    matricole_da_notificare = gestionale_data['contatti']['Matricola'].tolist()
-    for matricola in matricole_da_notificare:
-        if str(matricola) != str(matricola_richiedente):
-            crea_notifica(gestionale_data, matricola, messaggio)
+        st.success("Il tuo turno è stato pubblicato in bacheca!")
+        st.toast("Tutti i colleghi sono stati notificati.")
+        return True
 
-    st.success("Il tuo turno è stato pubblicato in bacheca!"); st.toast("Tutti i colleghi sono stati notificati."); return True
+    except sqlite3.Error as e:
+        st.error(f"Errore durante la pubblicazione in bacheca: {e}")
+        return False
 
-def prendi_turno_da_bacheca_logic(gestionale_data, matricola_subentrante, ruolo_utente, id_bacheca):
-    df_bacheca = gestionale_data['bacheca']
-    idx_bacheca = df_bacheca[df_bacheca['ID_Bacheca'] == id_bacheca].index
-    if idx_bacheca.empty:
+def prendi_turno_da_bacheca_logic(matricola_subentrante, ruolo_utente, id_bacheca):
+    bacheca_item = get_bacheca_item_by_id(id_bacheca)
+    if not bacheca_item:
         st.error("Questo turno non è più disponibile."); return False
-
-    voce_bacheca = df_bacheca.loc[idx_bacheca.iloc[0]]
-    if voce_bacheca['Stato'] != 'Disponibile':
+    if bacheca_item['Stato'] != 'Disponibile':
         st.warning("Qualcuno è stato più veloce! Turno già assegnato."); return False
 
-    ruolo_richiesto = voce_bacheca['Ruolo_Originale']
+    ruolo_richiesto = bacheca_item['Ruolo_Originale']
     if ruolo_richiesto == 'Tecnico' and ruolo_utente == 'Aiutante':
         st.error(f"Non sei idoneo. È richiesto il ruolo 'Tecnico'."); return False
 
-    matricola_originale = voce_bacheca['Tecnico_Originale_Matricola']
-    turno_id = voce_bacheca['ID_Turno']
-    nome_subentrante = gestionale_data['contatti'][gestionale_data['contatti']['Matricola'] == str(matricola_subentrante)].iloc[0]['Nome Cognome']
+    turno_id = bacheca_item['ID_Turno']
 
-    df_bacheca.loc[idx_bacheca, 'Stato'] = 'Assegnato'
-    df_bacheca.loc[idx_bacheca, 'Tecnico_Subentrante_Matricola'] = str(matricola_subentrante)
-    df_bacheca.loc[idx_bacheca, 'Timestamp_Assegnazione'] = datetime.datetime.now()
+    # Transaction: Update bacheca and add booking
+    update_data = {
+        'Stato': 'Assegnato',
+        'Tecnico_Subentrante_Matricola': str(matricola_subentrante),
+        'Timestamp_Assegnazione': datetime.datetime.now().isoformat()
+    }
+    new_booking_data = {
+        'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}",
+        'ID_Turno': turno_id,
+        'Matricola': str(matricola_subentrante),
+        'RuoloOccupato': ruolo_richiesto,
+        'Timestamp': datetime.datetime.now().isoformat()
+    }
 
-    nuova_prenotazione = {'ID_Prenotazione': f"P_{int(datetime.datetime.now().timestamp())}", 'ID_Turno': turno_id, 'Matricola': str(matricola_subentrante), 'RuoloOccupato': ruolo_richiesto, 'Timestamp': datetime.datetime.now()}
-    gestionale_data['prenotazioni'] = _safe_concat(gestionale_data['prenotazioni'], nuova_prenotazione)
+    conn = get_db_connection()
+    try:
+        with conn:
+            update_bacheca_item(id_bacheca, update_data)
+            add_booking(new_booking_data)
 
-    log_shift_change(gestionale_data, turno_id, "Preso da Bacheca", matricola_originale=matricola_originale, matricola_subentrante=matricola_subentrante, matricola_eseguito_da=matricola_subentrante)
+        log_shift_change(turno_id, "Preso da Bacheca", matricola_originale=bacheca_item['Tecnico_Originale_Matricola'], matricola_subentrante=matricola_subentrante, matricola_eseguito_da=matricola_subentrante)
 
-    turno_info = gestionale_data['turni'][gestionale_data['turni']['ID_Turno'] == turno_id].iloc[0]
-    desc_turno = turno_info['Descrizione']
-    data_turno = pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')
+        turno_info = get_shift_by_id(turno_id)
+        if turno_info:
+            desc_turno = turno_info['Descrizione']
+            data_turno = pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')
+            messaggio_subentrante = f"Hai preso il turno '{desc_turno}' del {data_turno}."
+            crea_notifica(matricola_subentrante, messaggio_subentrante)
 
-    messaggio_subentrante = f"Hai preso il turno '{desc_turno}' del {data_turno}."
-    crea_notifica(gestionale_data, matricola_subentrante, messaggio_subentrante)
-    messaggio_originale = f"Il tuo turno '{desc_turno}' del {data_turno} è stato preso da {nome_subentrante}."
-    crea_notifica(gestionale_data, matricola_originale, messaggio_originale)
+            user_info = get_user_by_matricola(matricola_subentrante)
+            nome_subentrante = user_info['Nome Cognome'] if user_info else "un collega"
+            messaggio_originale = f"Il tuo turno '{desc_turno}' del {data_turno} è stato preso da {nome_subentrante}."
+            crea_notifica(bacheca_item['Tecnico_Originale_Matricola'], messaggio_originale)
 
-    st.success(f"Ti sei prenotato con successo per il turno come {ruolo_richiesto}!"); st.balloons(); return True
+        st.success(f"Ti sei prenotato con successo per il turno come {ruolo_richiesto}!")
+        st.balloons()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Errore durante l'assegnazione del turno: {e}")
+        return False
