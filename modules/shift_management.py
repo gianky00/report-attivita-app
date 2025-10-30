@@ -16,10 +16,13 @@ from modules.db_manager import (
     get_booking_by_user_and_shift,
     get_bacheca_item_by_id,
     update_bacheca_item,
-    get_db_connection
+    get_db_connection,
+    add_shift_log,
+    delete_bookings_for_shift
 )
 from modules.auth import get_user_by_matricola
 from modules.notifications import crea_notifica
+from modules.oncall_logic import get_on_call_pair
 import os
 import warnings
 import sqlite3
@@ -54,21 +57,6 @@ def log_shift_change(turno_id, azione, matricola_originale=None, matricola_suben
 
 # --- LOGICA DI BUSINESS PER LA REPERIBILITÀ ---
 
-def get_oncall_team_for_date(target_date):
-    """
-    Calcola il team di reperibilità per una data specifica basandosi su una rotazione di 28 giorni.
-    """
-    teams = [
-        ["RICIPUTO", "GUARINO"],
-        ["SPINALI", "ALLEGRETTI"],
-        ["MILLO", "GUARINO"],
-        ["TARASCIO", "PARTESANO"],
-    ]
-    reference_date = datetime.date(2025, 10, 3)
-    delta_days = (target_date - reference_date).days
-    team_index = (delta_days // 7) % 4
-    return teams[team_index]
-
 def find_matricola_by_surname(df_contatti, surname_to_find):
     """Cerca la matricola di un contatto basandosi sul cognome (case-insensitive)."""
     if df_contatti.empty or not isinstance(surname_to_find, str):
@@ -100,7 +88,7 @@ def sync_oncall_shifts(start_date, end_date):
 
     # Convert 'Data' column to date objects for comparison
     if not df_turni.empty:
-        df_turni['date_only'] = pd.to_datetime(df_turni['Data']).dt.date
+        df_turni['date_only'] = pd.to_datetime(df_turni['Data'], format='mixed', errors='coerce').dt.date
     else:
         df_turni['date_only'] = pd.Series(dtype='object')
 
@@ -112,30 +100,72 @@ def sync_oncall_shifts(start_date, end_date):
             continue
 
         changes_made = True
-        team_surnames = get_oncall_team_for_date(current_date)
+
+        # Usa la nuova logica di rotazione per ottenere la coppia di reperibilità
+        pair = get_on_call_pair(current_date)
+        (technician1, tech1_role), (technician2, tech2_role) = pair
+
         date_str = current_date.strftime("%Y-%m-%d")
         shift_id = f"REP_{date_str}"
         new_shift = {
             'ID_Turno': shift_id, 'Descrizione': f"Reperibilità {current_date.strftime('%d/%m/%Y')}",
             'Data': current_date.isoformat(), 'OrarioInizio': '00:00', 'OrarioFine': '23:59',
-            'PostiTecnico': len(team_surnames), 'PostiAiutante': 0, 'Tipo': 'Reperibilità'
+            'PostiTecnico': 1, 'PostiAiutante': 1, 'Tipo': 'Reperibilità'
         }
 
         if create_shift(new_shift):
-            for surname in team_surnames:
+            # Aggiunge le prenotazioni per entrambi i membri della coppia
+            for surname, role in [(technician1, tech1_role), (technician2, tech2_role)]:
                 matricola = find_matricola_by_surname(df_contatti, surname)
                 if matricola:
                     new_booking = {
                         'ID_Prenotazione': f"P_{shift_id}_{matricola}", 'ID_Turno': shift_id,
-                        'Matricola': matricola, 'RuoloOccupato': 'Tecnico', 'Timestamp': datetime.datetime.now().isoformat()
+                        'Matricola': matricola, 'RuoloOccupato': role, 'Timestamp': datetime.datetime.now().isoformat()
                     }
                     add_booking(new_booking)
                 else:
-                    st.warning(f"Attenzione: Cognome '{surname}' non trovato.")
+                    st.warning(f"Attenzione: Cognome '{surname}' non trovato per la data {date_str}.")
+
         current_date += datetime.timedelta(days=1)
 
     return changes_made
 
+def manual_override_logic(shift_id, new_tech1_matricola, new_tech2_matricola, admin_matricola):
+    """
+    Sovrascrive manualmente le prenotazioni per un turno di reperibilità in modo transazionale.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        conn.execute("BEGIN TRANSACTION")
+
+        # 1. Rimuove le prenotazioni esistenti per questo turno
+        delete_bookings_for_shift(shift_id, cursor=cursor)
+
+        # 2. Aggiunge le nuove prenotazioni
+        for i, tech_matricola in enumerate([new_tech1_matricola, new_tech2_matricola]):
+            user_info = get_user_by_matricola(tech_matricola)
+            role = user_info.get('Ruolo', 'Tecnico') if user_info else 'Tecnico'
+
+            new_booking = {
+                'ID_Prenotazione': f"P_{shift_id}_{tech_matricola}_{i}",
+                'ID_Turno': shift_id,
+                'Matricola': tech_matricola,
+                'RuoloOccupato': role,
+                'Timestamp': datetime.datetime.now().isoformat()
+            }
+            add_booking(new_booking, cursor=cursor)
+
+        conn.commit()
+        log_shift_change(shift_id, "Sovrascrittura Manuale", matricola_eseguito_da=admin_matricola)
+        return True
+    except sqlite3.Error as e:
+        conn.rollback()
+        st.error(f"Errore durante la sovrascrittura manuale: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
 
 # --- LOGICA DI BUSINESS PER I TURNI STANDARD ---
 def prenota_turno_logic(matricola_utente, turno_id, ruolo_scelto):

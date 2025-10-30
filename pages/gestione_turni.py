@@ -9,7 +9,8 @@ from modules.shift_management import (
     richiedi_sostituzione_logic,
     rispondi_sostituzione_logic,
     pubblica_turno_in_bacheca_logic,
-    prendi_turno_da_bacheca_logic
+    prendi_turno_da_bacheca_logic,
+    manual_override_logic
 )
 from modules.db_manager import (
     get_shifts_by_type,
@@ -119,6 +120,34 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
 
     df_turni_reperibilita = get_shifts_by_type('Reperibilità')
 
+    if 'editing_oncall_shift_id' in st.session_state and st.session_state.editing_oncall_shift_id:
+        shift_id_to_edit = st.session_state.editing_oncall_shift_id
+        turno_info = get_shift_by_id(shift_id_to_edit)
+        with st.container(border=True):
+            st.subheader(f"Modifica Assegnazione per il {pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')}")
+
+            all_users = get_all_users()
+            user_list = all_users['Matricola'].tolist()
+            user_dict = pd.Series(all_users['Nome Cognome'].values, index=all_users['Matricola']).to_dict()
+
+            new_tech1 = st.selectbox("Seleziona Tecnico 1:", options=user_list, format_func=lambda x: user_dict.get(x, x))
+            new_tech2 = st.selectbox("Seleziona Tecnico 2:", options=user_list, format_func=lambda x: user_dict.get(x, x), index=1 if len(user_list) > 1 else 0)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Salva Modifiche", type="primary"):
+                    if manual_override_logic(shift_id_to_edit, new_tech1, new_tech2, matricola_utente):
+                        st.success("Assegnazione modificata con successo!")
+                        del st.session_state.editing_oncall_shift_id
+                        st.rerun()
+                    else:
+                        st.error("Errore durante il salvataggio delle modifiche.")
+            with col2:
+                if st.button("Annulla"):
+                    del st.session_state.editing_oncall_shift_id
+                    st.rerun()
+        st.stop()
+
     if 'managing_oncall_shift_id' in st.session_state and st.session_state.managing_oncall_shift_id:
         shift_id_to_manage = st.session_state.managing_oncall_shift_id
         matricola_to_manage = st.session_state.managing_oncall_user_matricola
@@ -176,10 +205,41 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
     if 'week_start_date' not in st.session_state:
         st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
 
-    # Calendar navigation UI remains the same...
+    # Filtri per mese e anno
+    filter_cols = st.columns(2)
+    with filter_cols[0]:
+        selected_year = st.selectbox("Anno", list(range(today.year - 2, today.year + 3)), index=2)
+    with filter_cols[1]:
+        selected_month = st.selectbox("Mese", MESI_ITALIANI, index=today.month - 1)
+
+    if st.button("Vai al mese selezionato"):
+        first_day_of_month = datetime.date(selected_year, MESI_ITALIANI.index(selected_month) + 1, 1)
+        st.session_state.week_start_date = first_day_of_month - datetime.timedelta(days=first_day_of_month.weekday())
+        st.rerun()
+
+    st.divider()
+
+    # Interfaccia di navigazione settimanale
+    nav_cols = st.columns([1, 2, 1])
+    with nav_cols[0]:
+        if st.button("<"):
+            st.session_state.week_start_date -= datetime.timedelta(days=7)
+            st.rerun()
+
+    with nav_cols[1]:
+        start_date_str = st.session_state.week_start_date.strftime("%d %b")
+        end_date_str = (st.session_state.week_start_date + datetime.timedelta(days=6)).strftime("%d %b %Y")
+        st.markdown(f"<h5 style='text-align: center; white-space: nowrap;'>{start_date_str} - {end_date_str}</h5>", unsafe_allow_html=True)
+
+    with nav_cols[2]:
+        if st.button(">"):
+            st.session_state.week_start_date += datetime.timedelta(days=7)
+            st.rerun()
+
+    st.divider()
 
     oncall_shifts_df = df_turni_reperibilita.copy()
-    oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'])
+    oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'], format='mixed', errors='coerce')
     oncall_shifts_df['date_only'] = oncall_shifts_df['Data'].dt.date
 
     week_dates = [st.session_state.week_start_date + datetime.timedelta(days=i) for i in range(7)]
@@ -240,10 +300,17 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
 
             can_manage = (user_is_on_call or ruolo_utente == "Amministratore") and shift_id_today
             if can_manage:
-                if st.button("Gestisci", key=f"manage_{day}", width='stretch'):
-                    st.session_state.managing_oncall_shift_id = shift_id_today
-                    st.session_state.managing_oncall_user_matricola = managed_user_matricola
-                    st.rerun()
+                btn_cols = st.columns(2)
+                with btn_cols[0]:
+                    if st.button("Gestisci", key=f"manage_{day}"):
+                        st.session_state.managing_oncall_shift_id = shift_id_today
+                        st.session_state.managing_oncall_user_matricola = managed_user_matricola
+                        st.rerun()
+                with btn_cols[1]:
+                    if ruolo_utente == "Amministratore":
+                        if st.button("Modifica", key=f"edit_{day}"):
+                            st.session_state.editing_oncall_shift_id = shift_id_today
+                            st.rerun()
 
 def render_gestione_turni_tab(matricola_utente, ruolo):
     st.subheader("Gestione Turni")
