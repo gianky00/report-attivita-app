@@ -360,18 +360,45 @@ def get_bookings_for_shift(shift_id: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
-def add_booking(booking_data: dict) -> bool:
-    """Aggiunge una nuova prenotazione al database."""
-    conn = get_db_connection()
+def add_booking(booking_data: dict, cursor=None) -> bool:
+    """Aggiunge una nuova prenotazione al database, usando un cursore esistente se fornito."""
+    conn = None
     try:
-        with conn:
-            cols = ', '.join(f'"{k}"' for k in booking_data.keys())
-            placeholders = ', '.join('?' for _ in booking_data)
-            sql = f"INSERT INTO prenotazioni ({cols}) VALUES ({placeholders})"
-            conn.execute(sql, list(booking_data.values()))
+        if cursor is None:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+        cols = ', '.join(f'"{k}"' for k in booking_data.keys())
+        placeholders = ', '.join('?' for _ in booking_data)
+        sql = f"INSERT INTO prenotazioni ({cols}) VALUES ({placeholders})"
+        cursor.execute(sql, list(booking_data.values()))
+
+        if conn: # Se abbiamo creato una nuova connessione, committiamo
+            conn.commit()
         return True
     except sqlite3.Error as e:
         print(f"Errore durante l'aggiunta della prenotazione: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_bookings_for_shift(shift_id: str, cursor=None) -> bool:
+    """Cancella tutte le prenotazioni per un turno specifico, usando un cursore esistente se fornito."""
+    conn = None
+    try:
+        if cursor is None:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+        sql = "DELETE FROM prenotazioni WHERE ID_Turno = ?"
+        cursor.execute(sql, (shift_id,))
+
+        if conn:
+            conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante la cancellazione delle prenotazioni per il turno {shift_id}: {e}")
         return False
     finally:
         if conn:

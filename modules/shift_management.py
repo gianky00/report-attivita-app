@@ -16,7 +16,9 @@ from modules.db_manager import (
     get_booking_by_user_and_shift,
     get_bacheca_item_by_id,
     update_bacheca_item,
-    get_db_connection
+    get_db_connection,
+    add_shift_log,
+    delete_bookings_for_shift
 )
 from modules.auth import get_user_by_matricola
 from modules.notifications import crea_notifica
@@ -130,33 +132,40 @@ def sync_oncall_shifts(start_date, end_date):
 
 def manual_override_logic(shift_id, new_tech1_matricola, new_tech2_matricola, admin_matricola):
     """
-    Sovrascrive manualmente le prenotazioni per un turno di reperibilità.
+    Sovrascrive manualmente le prenotazioni per un turno di reperibilità in modo transazionale.
     """
     conn = get_db_connection()
     try:
-        with conn:
-            # 1. Rimuove le prenotazioni esistenti per questo turno
-            conn.execute("DELETE FROM prenotazioni WHERE ID_Turno = ?", (shift_id,))
+        cursor = conn.cursor()
+        conn.execute("BEGIN TRANSACTION")
 
-            # 2. Aggiunge le nuove prenotazioni
-            for i, tech_matricola in enumerate([new_tech1_matricola, new_tech2_matricola]):
-                user_info = get_user_by_matricola(tech_matricola)
-                role = user_info.get('Ruolo', 'Tecnico') if user_info else 'Tecnico'
+        # 1. Rimuove le prenotazioni esistenti per questo turno
+        delete_bookings_for_shift(shift_id, cursor=cursor)
 
-                new_booking = {
-                    'ID_Prenotazione': f"P_{shift_id}_{tech_matricola}_{i}",
-                    'ID_Turno': shift_id,
-                    'Matricola': tech_matricola,
-                    'RuoloOccupato': role,
-                    'Timestamp': datetime.datetime.now().isoformat()
-                }
-                add_booking(new_booking)
+        # 2. Aggiunge le nuove prenotazioni
+        for i, tech_matricola in enumerate([new_tech1_matricola, new_tech2_matricola]):
+            user_info = get_user_by_matricola(tech_matricola)
+            role = user_info.get('Ruolo', 'Tecnico') if user_info else 'Tecnico'
 
+            new_booking = {
+                'ID_Prenotazione': f"P_{shift_id}_{tech_matricola}_{i}",
+                'ID_Turno': shift_id,
+                'Matricola': tech_matricola,
+                'RuoloOccupato': role,
+                'Timestamp': datetime.datetime.now().isoformat()
+            }
+            add_booking(new_booking, cursor=cursor)
+
+        conn.commit()
         log_shift_change(shift_id, "Sovrascrittura Manuale", matricola_eseguito_da=admin_matricola)
         return True
     except sqlite3.Error as e:
+        conn.rollback()
         st.error(f"Errore durante la sovrascrittura manuale: {e}")
         return False
+    finally:
+        if conn:
+            conn.close()
 
 # --- LOGICA DI BUSINESS PER I TURNI STANDARD ---
 def prenota_turno_logic(matricola_utente, turno_id, ruolo_scelto):
