@@ -27,30 +27,6 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
             conn.close()
 
 
-def get_assignment_dates_by_pdl(pdls: list):
-    """Recupera le date di assegnazione per una lista di PdL."""
-    if not pdls:
-        return {}
-    conn = get_db_connection()
-    try:
-        placeholders = ','.join('?' for _ in pdls)
-        query = f"""
-            SELECT pdl, MAX(data_riferimento_attivita) as last_assignment_date
-            FROM report_interventi
-            WHERE pdl IN ({placeholders})
-            GROUP BY pdl
-        """
-        cursor = conn.cursor()
-        cursor.execute(query, pdls)
-        results = cursor.fetchall()
-        return {row['pdl']: row['last_assignment_date'] for row in results}
-    except sqlite3.Error as e:
-        print(f"Errore nel recuperare le date di assegnazione per i PdL: {e}")
-        return {}
-    finally:
-        if conn:
-            conn.close()
-
 def add_shift_log(log_data: dict) -> bool:
     """Aggiunge un nuovo log di modifica turno al database."""
     conn = get_db_connection()
