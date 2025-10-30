@@ -26,6 +26,30 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+def get_assignments_by_technician(matricola: str) -> pd.DataFrame:
+    """Recupera gli assegnamenti di attività per un tecnico specifico."""
+    df = get_unvalidated_reports_by_technician(matricola)
+    # Rename id_report to id_attivita to match the UI expectation
+    if 'id_report' in df.columns:
+        df.rename(columns={'id_report': 'id_attivita'}, inplace=True)
+    return df
+
+def add_assignment_exclusion(matricola: str, id_attivita: str) -> bool:
+    """Aggiunge una regola di esclusione per un assegnamento."""
+    import datetime
+    conn = get_db_connection()
+    try:
+        with conn:
+            sql = "INSERT INTO esclusioni_assegnamenti (matricola_tecnico, id_attivita, timestamp) VALUES (?, ?, ?)"
+            conn.execute(sql, (matricola, id_attivita, datetime.datetime.now().isoformat()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiunta della regola di esclusione: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 
 def add_shift_log(log_data: dict) -> bool:
     """Aggiunge un nuovo log di modifica turno al database."""
@@ -675,8 +699,11 @@ def save_table_data(df: pd.DataFrame, table_name: str):
         if not table_name.isalnum() and '_' not in table_name:
             raise ValueError("Nome tabella non valido.")
 
-        # Use 'replace' to drop the old table and create a new one with the df data
-        df.to_sql(table_name, conn, if_exists='replace', index=False)
+        with conn:
+            # Delete existing data
+            conn.execute(f"DELETE FROM {table_name}")
+            # Append new data
+            df.to_sql(table_name, conn, if_exists='append', index=False)
         return True
     except (sqlite3.Error, ValueError) as e:
         print(f"Errore durante il salvataggio dei dati nella tabella {table_name}: {e}")
