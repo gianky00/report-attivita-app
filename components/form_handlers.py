@@ -4,7 +4,6 @@ import datetime
 from modules.data_manager import scrivi_o_aggiorna_risposta
 from modules.shift_management import log_shift_change
 from modules.notifications import crea_notifica
-from modules.data_manager import salva_gestionale_async
 
 @st.cache_data
 def to_csv(df):
