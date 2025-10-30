@@ -176,7 +176,38 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
     if 'week_start_date' not in st.session_state:
         st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
 
-    # Calendar navigation UI remains the same...
+    # Filtri per mese e anno
+    filter_cols = st.columns(2)
+    with filter_cols[0]:
+        selected_year = st.selectbox("Anno", list(range(today.year - 2, today.year + 3)), index=2)
+    with filter_cols[1]:
+        selected_month = st.selectbox("Mese", MESI_ITALIANI, index=today.month - 1)
+
+    if st.button("Vai al mese selezionato"):
+        first_day_of_month = datetime.date(selected_year, MESI_ITALIANI.index(selected_month) + 1, 1)
+        st.session_state.week_start_date = first_day_of_month - datetime.timedelta(days=first_day_of_month.weekday())
+        st.rerun()
+
+    st.divider()
+
+    # Interfaccia di navigazione settimanale
+    nav_cols = st.columns([1, 2, 1])
+    with nav_cols[0]:
+        if st.button("<"):
+            st.session_state.week_start_date -= datetime.timedelta(days=7)
+            st.rerun()
+
+    with nav_cols[1]:
+        start_date_str = st.session_state.week_start_date.strftime("%d %b")
+        end_date_str = (st.session_state.week_start_date + datetime.timedelta(days=6)).strftime("%d %b %Y")
+        st.markdown(f"<h5 style='text-align: center; white-space: nowrap;'>{start_date_str} - {end_date_str}</h5>", unsafe_allow_html=True)
+
+    with nav_cols[2]:
+        if st.button(">"):
+            st.session_state.week_start_date += datetime.timedelta(days=7)
+            st.rerun()
+
+    st.divider()
 
     oncall_shifts_df = df_turni_reperibilita.copy()
     oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'])
@@ -211,7 +242,9 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
                         technician_matricola = str(booking['Matricola'])
                         technician_name = matricola_to_name.get(technician_matricola, f"Matricola {technician_matricola}")
                         surname = technician_name.split()[-1].upper()
-                        tech_display_list.append(surname)
+                        role = booking.get('RuoloOccupato', 'N/D')
+                        display_text = f"{surname} ({role})"
+                        tech_display_list.append(display_text)
                         if technician_matricola == str(matricola_utente):
                             user_is_on_call = True
                     if tech_display_list:
