@@ -300,13 +300,13 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
 
             can_manage = (user_is_on_call or ruolo_utente == "Amministratore") and shift_id_today
             if can_manage:
-                cols = st.columns(2)
-                with cols[0]:
+                btn_cols = st.columns(2)
+                with btn_cols[0]:
                     if st.button("Gestisci", key=f"manage_{day}"):
                         st.session_state.managing_oncall_shift_id = shift_id_today
                         st.session_state.managing_oncall_user_matricola = managed_user_matricola
                         st.rerun()
-                with cols[1]:
+                with btn_cols[1]:
                     if ruolo_utente == "Amministratore":
                         if st.button("Modifica", key=f"edit_{day}"):
                             st.session_state.editing_oncall_shift_id = shift_id_today
