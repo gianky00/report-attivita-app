@@ -173,7 +173,8 @@ from components.form_handlers import (
 )
 from pages.gestione_turni import (
     render_turni_list,
-    render_reperibilita_tab
+    render_reperibilita_tab,
+    render_gestione_turni_tab
 )
 from pages.richieste import render_richieste_tab
 from pages.admin import (
@@ -334,10 +335,18 @@ def main_app(matricola_utente, ruolo):
 
             st.divider()
 
+            if st.button("📅 Gestione Turni", use_container_width=True):
+                st.session_state.main_tab = "📅 Gestione Turni"
+                st.session_state.navigated = True
+                st.rerun()
+
+            if st.button("Richieste", use_container_width=True):
+                st.session_state.main_tab = "Richieste"
+                st.session_state.navigated = True
+                st.rerun()
+
             # Expandable sections
-            expandable_menu_items = {
-                "📅 Gestione": ["📅 Gestione Turni", "Richieste"],
-            }
+            expandable_menu_items = {}
             if ruolo == "Amministratore":
                 expandable_menu_items["⚙️ Amministrazione"] = ["Caposquadra", "Sistema"]
 
