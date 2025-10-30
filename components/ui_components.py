@@ -80,7 +80,9 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                             st.session_state.report_mode = 'manual'
                             st.rerun()
 
-def render_notification_center(notifications_df, gestionale_data, matricola_utente):
+from modules.notifications import segna_notifica_letta
+
+def render_notification_center(notifications_df, matricola_utente):
     unread_count = len(notifications_df[notifications_df['Stato'] == 'non letta'])
     icon_label = f"🔔 {unread_count}" if unread_count > 0 else "🔔"
 
@@ -104,7 +106,6 @@ def render_notification_center(notifications_df, gestionale_data, matricola_uten
                 with col2:
                     if is_unread:
                         if st.button(" letto", key=f"read_{notifica_id}", help="Segna come letto"):
-                            segna_notifica_letta(gestionale_data, notifica_id)
-                            salva_gestionale_async(gestionale_data)
+                            segna_notifica_letta(notifica_id)
                             st.rerun()
                 st.divider()
