@@ -106,7 +106,7 @@ def get_notifications_for_user(matricola: str) -> pd.DataFrame:
     """Recupera le notifiche per un utente specifico."""
     conn = get_db_connection()
     try:
-        query = "SELECT * FROM notifiche WHERE Destinatario = ? ORDER BY Timestamp DESC"
+        query = "SELECT * FROM notifiche WHERE Destinatario_Matricola = ? ORDER BY Timestamp DESC"
         df = pd.read_sql_query(query, conn, params=(str(matricola),))
         return df
     finally:
@@ -349,7 +349,7 @@ def count_unread_notifications(matricola: str) -> int:
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        query = "SELECT COUNT(*) FROM notifiche WHERE matricola_utente = ? AND letta = 0"
+        query = "SELECT COUNT(*) FROM notifiche WHERE Destinatario_Matricola = ? AND Stato = 'Non letta'"
         cursor.execute(query, (matricola,))
         count = cursor.fetchone()[0]
         return count
