@@ -184,10 +184,10 @@ def crea_tabelle_se_non_esistono():
             )""",
             "esclusioni_assegnamenti": """(
                 id_esclusione INTEGER PRIMARY KEY AUTOINCREMENT,
-                matricola_tecnico TEXT NOT NULL,
+                matricola_escludente TEXT NOT NULL,
                 id_attivita TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
-                FOREIGN KEY (matricola_tecnico) REFERENCES contatti(Matricola) ON DELETE CASCADE
+                FOREIGN KEY (matricola_escludente) REFERENCES contatti(Matricola) ON DELETE CASCADE
             )"""
         }
 

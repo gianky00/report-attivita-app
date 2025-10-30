@@ -34,18 +34,34 @@ def get_assignments_by_technician(matricola: str) -> pd.DataFrame:
         df.rename(columns={'id_report': 'id_attivita'}, inplace=True)
     return df
 
-def add_assignment_exclusion(matricola: str, id_attivita: str) -> bool:
+def add_assignment_exclusion(matricola_escludente: str, id_attivita: str) -> bool:
     """Aggiunge una regola di esclusione per un assegnamento."""
     import datetime
     conn = get_db_connection()
     try:
         with conn:
-            sql = "INSERT INTO esclusioni_assegnamenti (matricola_tecnico, id_attivita, timestamp) VALUES (?, ?, ?)"
-            conn.execute(sql, (matricola, id_attivita, datetime.datetime.now().isoformat()))
+            sql = "INSERT INTO esclusioni_assegnamenti (matricola_escludente, id_attivita, timestamp) VALUES (?, ?, ?)"
+            conn.execute(sql, (matricola_escludente, id_attivita, datetime.datetime.now().isoformat()))
         return True
     except sqlite3.Error as e:
         print(f"Errore durante l'aggiunta della regola di esclusione: {e}")
         return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_globally_excluded_activities() -> list:
+    """Recupera una lista di ID di attività escluse globalmente."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT id_attivita FROM esclusioni_assegnamenti"
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        return [row['id_attivita'] for row in rows]
+    except sqlite3.Error as e:
+        print(f"Errore nel recuperare le attività escluse globalmente: {e}")
+        return []
     finally:
         if conn:
             conn.close()
