@@ -565,39 +565,6 @@ def main_app(matricola_utente, ruolo):
 
         elif selected_tab == "Dashboard Admin" and ruolo == "Amministratore":
             render_admin_dashboard(matricola_utente)
-                        with ia_sub_tabs[0]:
-                            st.markdown("### 🧠 Revisione Voci del Knowledge Core")
-                            unreviewed_entries = learning_module.load_unreviewed_knowledge()
-                            pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
-                            if not pending_entries: st.success("🎉 Nessuna nuova voce da revisionare!")
-                            else: st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
-                            for i, entry in enumerate(pending_entries):
-                                with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
-                                    st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
-                                    st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
-                                    st.write("**Dettagli del report compilato:**"); st.json(entry['dettagli_report'])
-                                    st.markdown("---"); st.markdown("**Azione di Integrazione**")
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
-                                        new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
-                                    with col2:
-                                        if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
-                                            if new_equipment_key and new_display_name:
-                                                first_question = {"id": "sintomo_iniziale", "text": "Qual era il sintomo principale?", "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}}
-                                                details = {"equipment_key": new_equipment_key, "display_name": new_display_name, "new_question": first_question}
-                                                result = learning_module.integrate_knowledge(entry['id'], details)
-                                                if result.get("success"): st.success(f"Voce '{entry['id']}' integrata con successo!"); st.cache_data.clear(); st.rerun()
-                                                else: st.error(f"Errore integrazione: {result.get('error')}")
-                                            else: st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
-                        with ia_sub_tabs[1]:
-                            st.subheader("Gestione Modello IA")
-                            st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
-                            if st.button("🧠 Aggiorna Memoria IA", type="primary"):
-                                with st.spinner("Ricostruzione dell'indice in corso..."):
-                                    result = learning_module.build_knowledge_base()
-                                if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
-                                else: st.error(result.get("message"))
 
         st.markdown('</div>', unsafe_allow_html=True) # Close page-content
         st.markdown('</div>', unsafe_allow_html=True) # Close main-container
