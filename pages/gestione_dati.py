@@ -7,6 +7,7 @@ from modules.db_manager import (
     get_assignments_by_technician,
     add_assignment_exclusion,
     delete_reports_by_ids,
+    get_all_users,
 )
 
 def render_gestione_dati_tab():
@@ -34,13 +35,19 @@ def render_gestione_dati_tab():
     st.divider()
 
     st.subheader("Gestione Esclusioni Assegnamenti")
-    st.info("Questa sezione permette di eliminare e bloccare permanentemente un assegnamento di attività.")
+    st.info("Questa sezione permette di eliminare un assegnamento di attività per un tecnico e bloccarlo per tutto il team.")
 
-    matricola_utente = st.session_state.get('authenticated_user')
-    if matricola_utente:
-        assignments_df = get_assignments_by_technician(matricola_utente)
+    users_df = get_all_users()
+    technicians = users_df[users_df['Ruolo'] == 'Tecnico']
+    technician_names = technicians['Nome Cognome'].tolist()
+    selected_technician_name = st.selectbox("Seleziona un tecnico", [""] + technician_names)
+
+
+    if selected_technician_name:
+        selected_technician_matricola = technicians[technicians['Nome Cognome'] == selected_technician_name].iloc[0]['Matricola']
+        assignments_df = get_assignments_by_technician(selected_technician_matricola)
         if assignments_df.empty:
-            st.info("Nessun assegnamento da visualizzare.")
+            st.info(f"Nessun assegnamento da visualizzare per {selected_technician_name}.")
         else:
             assignments_df["seleziona"] = False
             edited_assignments_df = st.data_editor(
@@ -56,9 +63,13 @@ def render_gestione_dati_tab():
             selected_assignment = edited_assignments_df[edited_assignments_df["seleziona"]]
             if not selected_assignment.empty:
                 if st.button("Elimina e Blocca Assegnamento Selezionato"):
-                    id_attivita_to_block = selected_assignment.iloc[0]["id_attivita"]
-                    if add_assignment_exclusion(matricola_utente, id_attivita_to_block):
-                        if delete_reports_by_ids([id_attivita_to_block]):
+                    id_report_to_delete = selected_assignment.iloc[0]["id_attivita"]
+                    pdl_to_block = selected_assignment.iloc[0]["pdl"]
+                    descrizione_attivita_to_block = selected_assignment.iloc[0]["descrizione_attivita"]
+                    activity_identifier = f"{pdl_to_block}-{descrizione_attivita_to_block}"
+                    admin_matricola = st.session_state.get('authenticated_user')
+                    if add_assignment_exclusion(admin_matricola, activity_identifier):
+                        if delete_reports_by_ids([id_report_to_delete]):
                             st.success("Assegnamento bloccato ed eliminato con successo!")
                             st.rerun()
                         else:

@@ -9,6 +9,7 @@ import openpyxl
 
 import config
 from config import get_attivita_programmate_path, get_storico_db_path, get_gestionale_path
+from .db_manager import get_globally_excluded_activities
 
 @st.cache_data
 def carica_knowledge_core():
@@ -261,6 +262,13 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
             activity_data['team'] = team_list
             del activity_data['team_members']
             lista_attivita_finale.append(activity_data)
+
+        excluded_activities = get_globally_excluded_activities()
+        if excluded_activities:
+            lista_attivita_finale = [
+                task for task in lista_attivita_finale
+                if task.get('pdl') and task.get('attivita') and f"{task['pdl']}-{task['attivita']}" not in excluded_activities
+            ]
 
         return lista_attivita_finale
 
