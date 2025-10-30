@@ -275,7 +275,7 @@ def trova_attivita(matricola, giorno, mese, anno, df_contatti):
     except Exception as e:
         # Evita di mostrare errori se il file non esiste (comportamento atteso per giorni futuri)
         if not isinstance(e, FileNotFoundError):
-            st.error(f"Errore during la ricerca attività per il {giorno}/{mese}/{anno}: {e}")
+            st.error(f"Errore durante la ricerca attività per il {giorno}/{mese}/{anno}: {e}")
         return []
 
 def get_all_assigned_activities(matricola, df_contatti, days_to_check=60):

@@ -39,6 +39,13 @@ def crea_tabelle_se_non_esistono():
         cursor.execute("PRAGMA foreign_keys = ON;")
 
         tabelle_gestionali = {
+            "esclusioni_assegnamenti": """(
+                id_esclusione INTEGER PRIMARY KEY AUTOINCREMENT,
+                matricola_escludente TEXT NOT NULL,
+                id_attivita TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY (matricola_escludente) REFERENCES contatti(Matricola) ON DELETE CASCADE
+            )""",
             "contatti": """(
                 Matricola TEXT PRIMARY KEY NOT NULL,
                 "Nome Cognome" TEXT NOT NULL UNIQUE,
