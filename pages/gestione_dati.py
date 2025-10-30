@@ -7,6 +7,7 @@ from modules.db_manager import (
     save_table_data,
     add_assignment_exclusion,
     get_all_users,
+    get_unvalidated_reports_by_technician,
 )
 from modules.data_manager import trova_attivita
 
@@ -30,7 +31,7 @@ def render_gestione_dati_tab():
             if save_table_data(edited_df, selected_table):
                 st.success("Dati salvati con successo!")
             else:
-                st.error("Errore durante il salvataggio dei dati.")
+                st.error("Errore durante il salvagg-io dei dati.")
 
     st.divider()
 
@@ -38,21 +39,41 @@ def render_gestione_dati_tab():
     st.info("Questa sezione permette di eliminare un assegnamento di attività per un tecnico e bloccarlo per tutto il team.")
 
     users_df = get_all_users()
-    technicians = users_df[users_df['Ruolo'] == 'Tecnico']
-    technician_names = technicians['Nome Cognome'].tolist()
-    selected_technician_name = st.selectbox("Seleziona un tecnico", [""] + technician_names)
+    technicians_and_admins = users_df[users_df['Ruolo'].isin(['Tecnico', 'Amministratore'])]
+    technician_names = technicians_and_admins['Nome Cognome'].tolist()
+    selected_technician_name = st.selectbox("Seleziona un tecnico", [""] + sorted(technician_names))
 
 
     if selected_technician_name:
-        selected_technician_matricola = technicians[technicians['Nome Cognome'] == selected_technician_name].iloc[0]['Matricola']
+        selected_technician_matricola = technicians_and_admins[technicians_and_admins['Nome Cognome'] == selected_technician_name].iloc[0]['Matricola']
 
-        today = datetime.date.today()
-        assignments = trova_attivita(selected_technician_matricola, today.day, today.month, today.year, users_df)
+        reports_df = get_unvalidated_reports_by_technician(selected_technician_matricola)
 
-        if not assignments:
-            st.info(f"Nessun assegnamento da visualizzare per {selected_technician_name} per la data di oggi.")
+        if reports_df.empty:
+            st.info(f"Nessun report da validare per {selected_technician_name}.")
         else:
-            assignments_df = pd.DataFrame(assignments)
+            assignments_to_display = []
+            for _, report in reports_df.iterrows():
+                report_date = pd.to_datetime(report['data_riferimento_attivita']).date()
+                activities = trova_attivita(selected_technician_matricola, report_date.day, report_date.month, report_date.year, users_df)
+
+                for activity in activities:
+                    if activity['pdl'] == report['pdl'] and activity['attivita'] == report['descrizione_attivita']:
+                        team_names = ", ".join([member['nome'] for member in activity.get('team', [])])
+                        assignments_to_display.append({
+                            "pdl": report['pdl'],
+                            "attivita": report['descrizione_attivita'],
+                            "team": team_names,
+                            "Data Assegnamento": report_date,
+                            "id_report": report['id_report']
+                        })
+                        break
+
+            if not assignments_to_display:
+                st.info(f"Nessun assegnamento corrispondente trovato per {selected_technician_name}.")
+                return
+
+            assignments_df = pd.DataFrame(assignments_to_display)
             assignments_df["seleziona"] = False
 
             edited_assignments_df = st.data_editor(
@@ -60,7 +81,8 @@ def render_gestione_dati_tab():
                 column_config={
                     "seleziona": st.column_config.CheckboxColumn(
                         "Seleziona", help="Seleziona per bloccare l'assegnamento."
-                    )
+                    ),
+                    "id_report": None, # Hide the report ID column
                 },
                 disabled=assignments_df.columns.drop("seleziona"),
             )
