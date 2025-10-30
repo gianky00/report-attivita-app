@@ -21,6 +21,7 @@ from modules.auth import (
     reset_user_2fa,
 )
 from modules.notifications import crea_notifica
+from pages.gestione_dati import render_gestione_dati_tab
 import learning_module
 
 # --- Funzioni di supporto ---
@@ -373,12 +374,14 @@ def render_admin_dashboard(matricola_utente):
             st.markdown('</div>', unsafe_allow_html=True)
         with main_admin_tabs[1]:
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
+            tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione Dati", "Gestione IA"])
             with tecnica_tabs[0]:
                 render_gestione_account()
             with tecnica_tabs[1]:
                 render_access_logs_tab()
             with tecnica_tabs[2]:
+                render_gestione_dati_tab()
+            with tecnica_tabs[3]:
                 st.subheader("Gestione Intelligenza Artificiale")
                 ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
                 with ia_sub_tabs[0]:

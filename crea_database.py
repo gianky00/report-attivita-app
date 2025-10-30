@@ -181,6 +181,13 @@ def crea_tabelle_se_non_esistono():
                 UtenteOriginale TEXT,
                 UtenteSubentrante TEXT,
                 EseguitoDa TEXT
+            )""",
+            "esclusioni_assegnamenti": """(
+                id_esclusione INTEGER PRIMARY KEY AUTOINCREMENT,
+                matricola_tecnico TEXT NOT NULL,
+                id_attivita TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY (matricola_tecnico) REFERENCES contatti(Matricola) ON DELETE CASCADE
             )"""
         }
 
