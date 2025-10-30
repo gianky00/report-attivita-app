@@ -26,14 +26,6 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
-def get_assignments_by_technician(matricola: str) -> pd.DataFrame:
-    """Recupera gli assegnamenti di attività per un tecnico specifico."""
-    df = get_unvalidated_reports_by_technician(matricola)
-    # Rename id_report to id_attivita to match the UI expectation
-    if 'id_report' in df.columns:
-        df.rename(columns={'id_report': 'id_attivita'}, inplace=True)
-    return df
-
 def add_assignment_exclusion(matricola_escludente: str, id_attivita: str) -> bool:
     """Aggiunge una regola di esclusione per un assegnamento."""
     import datetime
