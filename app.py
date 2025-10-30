@@ -179,7 +179,8 @@ from pages.gestione_turni import (
 )
 from pages.richieste import render_richieste_tab
 from pages.admin import (
-    render_admin_dashboard,
+    render_caposquadra_view,
+    render_sistema_view,
     render_gestione_account,
     render_technician_detail_view,
     render_report_validation_tab,
@@ -397,13 +398,12 @@ def main_app(matricola_utente, ruolo):
         main_tabs_list = ["Attività Assegnate", "📅 Gestione Turni", "Richieste", "Storico", "❓ Guida"]
         if ruolo == "Amministratore":
             if st.session_state.main_tab == "Caposquadra":
-                selected_tab = "Dashboard Admin"
+                render_caposquadra_view(matricola_utente)
+                return  # Aggiunto per terminare l'esecuzione qui
             elif st.session_state.main_tab == "Sistema":
-                selected_tab = "Dashboard Admin"
-            else:
-                selected_tab = st.session_state.main_tab
-        else:
-            selected_tab = st.session_state.main_tab
+                render_sistema_view()
+                return  # Aggiunto per terminare l'esecuzione qui
+        selected_tab = st.session_state.main_tab
 
         st.markdown('<div class="page-content">', unsafe_allow_html=True)
 
@@ -578,9 +578,6 @@ def main_app(matricola_utente, ruolo):
 
         elif selected_tab == "❓ Guida":
             render_guida_tab(ruolo)
-
-        elif selected_tab == "Dashboard Admin" and ruolo == "Amministratore":
-            render_admin_dashboard(matricola_utente)
 
         st.markdown('</div>', unsafe_allow_html=True) # Close page-content
         st.markdown('</div>', unsafe_allow_html=True) # Close main-container

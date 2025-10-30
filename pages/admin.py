@@ -287,142 +287,148 @@ def render_access_logs_tab():
         display_df.rename(columns={'timestamp': 'Data e Ora', 'username': 'Nome Utente/Matricola', 'status': 'Esito'}, inplace=True)
         st.dataframe(display_df[['Data e Ora', 'Nome Utente/Matricola', 'Esito']], width='stretch')
 
-# --- Funzione principale della dashboard Admin ---
+# --- Funzioni principali delle view Admin ---
 
-def render_admin_dashboard(matricola_utente):
-    st.subheader("Dashboard di Controllo")
-    if st.session_state.get('detail_technician_matricola'):
-        render_technician_detail_view()
-    else:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
-        with main_admin_tabs[0]:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            caposquadra_tabs = st.tabs(["Crea Nuovo Turno", "Validazione Report"])
-            with caposquadra_tabs[0]:
-                with st.form("new_shift_form", clear_on_submit=True):
-                    st.subheader("Dettagli Nuovo Turno")
-                    tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
-                    desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
-                    data_turno = st.date_input("Data Turno")
+def render_caposquadra_view(matricola_utente):
+    """
+    Renderizza la vista per il Caposquadra, che include la creazione di turni
+    e la validazione dei report.
+    """
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    caposquadra_tabs = st.tabs(["Crea Nuovo Turno", "Validazione Report"])
+
+    with caposquadra_tabs[0]:
+        with st.form("new_shift_form", clear_on_submit=True):
+            st.subheader("Dettagli Nuovo Turno")
+            tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
+            desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
+            data_turno = st.date_input("Data Turno")
+            col1, col2 = st.columns(2)
+            ora_inizio = col1.time_input("Orario Inizio", datetime.time(8, 0))
+            ora_fine = col2.time_input("Orario Fine", datetime.time(17, 0))
+            col3, col4 = st.columns(2)
+            posti_tech = col3.number_input("Numero Posti Tecnico", min_value=0, step=1)
+            posti_aiut = col4.number_input("Numero Posti Aiutante", min_value=0, step=1)
+
+            if st.form_submit_button("Crea Turno"):
+                if not desc_turno:
+                    st.error("La descrizione non può essere vuota.")
+                else:
+                    new_id = f"T_{int(datetime.datetime.now().timestamp())}"
+                    new_shift_data = {
+                        'ID_Turno': new_id,
+                        'Descrizione': desc_turno,
+                        'Data': data_turno.isoformat(),
+                        'OrarioInizio': ora_inizio.strftime('%H:%M'),
+                        'OrarioFine': ora_fine.strftime('%H:%M'),
+                        'PostiTecnico': posti_tech,
+                        'PostiAiutante': posti_aiut,
+                        'Tipo': tipo_turno
+                    }
+                    if create_shift(new_shift_data):
+                        st.success(f"Turno '{desc_turno}' creato con successo!")
+                        df_contatti = get_all_users()
+                        if not df_contatti.empty:
+                            utenti_da_notificare = df_contatti['Matricola'].tolist()
+                            messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {data_turno.strftime('%d/%m/%Y')}."
+                            for matricola in utenti_da_notificare:
+                                crea_notifica(matricola, messaggio)
+                        st.rerun()
+                    else:
+                        st.error("Errore nel salvataggio del nuovo turno.")
+
+    with caposquadra_tabs[1]:
+        validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
+        with validation_tabs[0]:
+            render_report_validation_tab(matricola_utente)
+        with validation_tabs[1]:
+            st.subheader("Validazione Relazioni Inviate")
+            unvalidated_relazioni_df = get_unvalidated_relazioni()
+            if unvalidated_relazioni_df.empty:
+                st.success("🎉 Nessuna nuova relazione da validare al momento.")
+            else:
+                st.info(f"Ci sono {len(unvalidated_relazioni_df)} relazioni da validare.")
+                if 'data_intervento' in unvalidated_relazioni_df.columns:
+                    unvalidated_relazioni_df['data_intervento'] = pd.to_datetime(unvalidated_relazioni_df['data_intervento'], errors='coerce').dt.strftime('%d/%m/%Y')
+                if 'timestamp_invio' in unvalidated_relazioni_df.columns:
+                    unvalidated_relazioni_df['timestamp_invio'] = pd.to_datetime(unvalidated_relazioni_df['timestamp_invio'], errors='coerce').dt.strftime('%d/%m/%Y %H:%M')
+                edited_relazioni_df = st.data_editor(
+                    unvalidated_relazioni_df,
+                    num_rows="dynamic",
+                    key="relazioni_editor",
+                    width='stretch',
+                    column_config={
+                        "corpo_relazione": st.column_config.TextColumn(width="large"),
+                        "id_relazione": st.column_config.Column(disabled=True),
+                        "timestamp_invio": st.column_config.Column(disabled=True),
+                    }
+                )
+                if st.button("✅ Salva Relazioni Validate", type="primary"):
+                    with st.spinner("Salvataggio delle relazioni in corso..."):
+                        if process_and_commit_validated_relazioni(edited_relazioni_df, matricola_utente):
+                            st.success("Relazioni validate e salvate con successo!")
+                            st.rerun()
+                        else:
+                            st.error("Si è verificato un errore durante il salvataggio delle relazioni.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def render_sistema_view():
+    """
+    Renderizza la vista "Sistema", che include la gestione degli account,
+    la cronologia degli accessi, la gestione dei dati e dell'IA.
+    """
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione Dati", "Gestione IA"])
+
+    with tecnica_tabs[0]:
+        render_gestione_account()
+    with tecnica_tabs[1]:
+        render_access_logs_tab()
+    with tecnica_tabs[2]:
+        render_gestione_dati_tab()
+    with tecnica_tabs[3]:
+        st.subheader("Gestione Intelligenza Artificiale")
+        ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
+        with ia_sub_tabs[0]:
+            st.markdown("### 🧠 Revisione Voci del Knowledge Core")
+            unreviewed_entries = learning_module.load_unreviewed_knowledge()
+            pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
+            if not pending_entries:
+                st.success("🎉 Nessuna nuova voce da revisionare!")
+            else:
+                st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
+            for i, entry in enumerate(pending_entries):
+                with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
+                    st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
+                    st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
+                    st.write("**Dettagli del report compilato:**"); st.json(entry['dettagli_report'])
+                    st.markdown("---"); st.markdown("**Azione di Integrazione**")
                     col1, col2 = st.columns(2)
-                    ora_inizio = col1.time_input("Orario Inizio", datetime.time(8, 0))
-                    ora_fine = col2.time_input("Orario Fine", datetime.time(17, 0))
-                    col3, col4 = st.columns(2)
-                    posti_tech = col3.number_input("Numero Posti Tecnico", min_value=0, step=1)
-                    posti_aiut = col4.number_input("Numero Posti Aiutante", min_value=0, step=1)
-
-                    if st.form_submit_button("Crea Turno"):
-                        if not desc_turno:
-                            st.error("La descrizione non può essere vuota.")
-                        else:
-                            new_id = f"T_{int(datetime.datetime.now().timestamp())}"
-                            new_shift_data = {
-                                'ID_Turno': new_id,
-                                'Descrizione': desc_turno,
-                                'Data': data_turno.isoformat(),
-                                'OrarioInizio': ora_inizio.strftime('%H:%M'),
-                                'OrarioFine': ora_fine.strftime('%H:%M'),
-                                'PostiTecnico': posti_tech,
-                                'PostiAiutante': posti_aiut,
-                                'Tipo': tipo_turno
-                            }
-                            if create_shift(new_shift_data):
-                                st.success(f"Turno '{desc_turno}' creato con successo!")
-                                df_contatti = get_all_users()
-                                if not df_contatti.empty:
-                                    utenti_da_notificare = df_contatti['Matricola'].tolist()
-                                    messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {data_turno.strftime('%d/%m/%Y')}."
-                                    for matricola in utenti_da_notificare:
-                                        crea_notifica(matricola, messaggio)
-                                st.rerun()
-                            else:
-                                st.error("Errore nel salvataggio del nuovo turno.")
-            with caposquadra_tabs[1]:
-                validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
-                with validation_tabs[0]:
-                    render_report_validation_tab(matricola_utente)
-                with validation_tabs[1]:
-                    st.subheader("Validazione Relazioni Inviate")
-                    unvalidated_relazioni_df = get_unvalidated_relazioni()
-                    if unvalidated_relazioni_df.empty:
-                        st.success("🎉 Nessuna nuova relazione da validare al momento.")
-                    else:
-                        st.info(f"Ci sono {len(unvalidated_relazioni_df)} relazioni da validare.")
-                        if 'data_intervento' in unvalidated_relazioni_df.columns:
-                            unvalidated_relazioni_df['data_intervento'] = pd.to_datetime(unvalidated_relazioni_df['data_intervento'], errors='coerce').dt.strftime('%d/%m/%Y')
-                        if 'timestamp_invio' in unvalidated_relazioni_df.columns:
-                            unvalidated_relazioni_df['timestamp_invio'] = pd.to_datetime(unvalidated_relazioni_df['timestamp_invio'], errors='coerce').dt.strftime('%d/%m/%Y %H:%M')
-                        edited_relazioni_df = st.data_editor(
-                            unvalidated_relazioni_df,
-                            num_rows="dynamic",
-                            key="relazioni_editor",
-                            width='stretch',
-                            column_config={
-                                "corpo_relazione": st.column_config.TextColumn(width="large"),
-                                "id_relazione": st.column_config.Column(disabled=True),
-                                "timestamp_invio": st.column_config.Column(disabled=True),
-                            }
-                        )
-                        if st.button("✅ Salva Relazioni Validate", type="primary"):
-                            with st.spinner("Salvataggio delle relazioni in corso..."):
-                                if process_and_commit_validated_relazioni(edited_relazioni_df, matricola_utente):
-                                    st.success("Relazioni validate e salvate con successo!")
-                                    st.rerun()
+                    with col1:
+                        new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
+                        new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
+                    with col2:
+                        if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
+                            if new_equipment_key and new_display_name:
+                                first_question = {"id": "sintomo_iniziale", "text": "Qual era il sintomo principale?", "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}}
+                                details = {"equipment_key": new_equipment_key, "display_name": new_display_name, "new_question": first_question}
+                                result = learning_module.integrate_knowledge(entry['id'], details)
+                                if result.get("success"):
+                                    st.success(f"Voce '{entry['id']}' integrata con successo!"); st.cache_data.clear(); st.rerun()
                                 else:
-                                    st.error("Si è verificato un errore durante il salvataggio delle relazioni.")
-            st.markdown('</div>', unsafe_allow_html=True)
-        with main_admin_tabs[1]:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione Dati", "Gestione IA"])
-            with tecnica_tabs[0]:
-                render_gestione_account()
-            with tecnica_tabs[1]:
-                render_access_logs_tab()
-            with tecnica_tabs[2]:
-                render_gestione_dati_tab()
-            with tecnica_tabs[3]:
-                st.subheader("Gestione Intelligenza Artificiale")
-                ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
-                with ia_sub_tabs[0]:
-                    st.markdown("### 🧠 Revisione Voci del Knowledge Core")
-                    unreviewed_entries = learning_module.load_unreviewed_knowledge()
-                    pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
-                    if not pending_entries:
-                        st.success("🎉 Nessuna nuova voce da revisionare!")
-                    else:
-                        st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
-                    for i, entry in enumerate(pending_entries):
-                        with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
-                            st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
-                            st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
-                            st.write("**Dettagli del report compilato:**"); st.json(entry['dettagli_report'])
-                            st.markdown("---"); st.markdown("**Azione di Integrazione**")
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
-                                new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
-                            with col2:
-                                if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
-                                    if new_equipment_key and new_display_name:
-                                        first_question = {"id": "sintomo_iniziale", "text": "Qual era il sintomo principale?", "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}}
-                                        details = {"equipment_key": new_equipment_key, "display_name": new_display_name, "new_question": first_question}
-                                        result = learning_module.integrate_knowledge(entry['id'], details)
-                                        if result.get("success"):
-                                            st.success(f"Voce '{entry['id']}' integrata con successo!"); st.cache_data.clear(); st.rerun()
-                                        else:
-                                            st.error(f"Errore integrazione: {result.get('error')}")
-                                    else:
-                                        st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
-                with ia_sub_tabs[1]:
-                    st.subheader("Gestione Modello IA")
-                    st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
-                    if st.button("🧠 Aggiorna Memoria IA", type="primary"):
-                        with st.spinner("Ricostruzione dell'indice in corso..."):
-                            result = learning_module.build_knowledge_base()
-                        if result.get("success"):
-                            st.success(result.get("message")); st.cache_data.clear()
-                        else:
-                            st.error(result.get("message"))
-            st.markdown('</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+                                    st.error(f"Errore integrazione: {result.get('error')}")
+                            else:
+                                st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
+
+        with ia_sub_tabs[1]:
+            st.subheader("Gestione Modello IA")
+            st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
+            if st.button("🧠 Aggiorna Memoria IA", type="primary"):
+                with st.spinner("Ricostruzione dell'indice in corso..."):
+                    result = learning_module.build_knowledge_base()
+                if result.get("success"):
+                    st.success(result.get("message")); st.cache_data.clear()
+                else:
+                    st.error(result.get("message"))
+    st.markdown('</div>', unsafe_allow_html=True)
