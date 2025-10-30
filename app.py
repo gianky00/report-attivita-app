@@ -375,6 +375,7 @@ def main_app(matricola_utente, ruolo):
 
         oggi = datetime.date.today()
 
+        df_contatti = get_all_users()
         attivita_da_recuperare = recupera_attivita_non_rendicontate(matricola_utente, df_contatti)
 
         if 'main_tab' not in st.session_state:
