@@ -44,7 +44,7 @@ from modules.db_manager import (
     get_unvalidated_relazioni, process_and_commit_validated_relazioni, get_all_users,
     get_validated_intervention_reports, get_table_names, get_table_data, save_table_data,
     get_report_by_id, delete_report_by_id, insert_report, move_report_atomically,
-    get_last_login, count_unread_notifications
+    get_last_login, count_unread_notifications, get_assignment_dates_by_pdl
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
 from modules.shift_management import (
@@ -405,11 +405,19 @@ def main_app(matricola_utente, ruolo):
             with sub_tabs[0]:
                 st.subheader(f"Attività del {oggi.strftime('%d/%m/%Y')}")
                 lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, df_contatti)
+                pdls = [task['pdl'] for task in lista_attivita_raw]
+                assignment_dates = get_assignment_dates_by_pdl(pdls)
+                for task in lista_attivita_raw:
+                    task['data_assegnazione'] = assignment_dates.get(task['pdl'])
                 disegna_sezione_attivita(lista_attivita_raw, "today", ruolo)
 
             with sub_tabs[1]:
                 st.subheader("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
                 attivita_da_recuperare = recupera_attivita_non_rendicontate(matricola_utente, df_contatti)
+                pdls = [task['pdl'] for task in attivita_da_recuperare]
+                assignment_dates = get_assignment_dates_by_pdl(pdls)
+                for task in attivita_da_recuperare:
+                    task['data_assegnazione'] = assignment_dates.get(task['pdl'])
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             with sub_tabs[2]:
