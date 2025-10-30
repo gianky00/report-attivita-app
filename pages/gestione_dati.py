@@ -7,8 +7,9 @@ from modules.db_manager import (
     save_table_data,
     add_assignment_exclusion,
     get_all_users,
+    get_validated_intervention_reports,
 )
-from modules.data_manager import trova_attivita
+from modules.data_manager import get_all_assigned_activities
 
 def render_gestione_dati_tab():
     st.subheader("Gestione Dati")
@@ -38,21 +39,32 @@ def render_gestione_dati_tab():
     st.info("Questa sezione permette di eliminare un assegnamento di attività per un tecnico e bloccarlo per tutto il team.")
 
     users_df = get_all_users()
-    technicians = users_df[users_df['Ruolo'] == 'Tecnico']
-    technician_names = technicians['Nome Cognome'].tolist()
-    selected_technician_name = st.selectbox("Seleziona un tecnico", [""] + technician_names)
+    technicians_and_admins = users_df[users_df['Ruolo'].isin(['Tecnico', 'Amministratore'])]
+    technician_names = technicians_and_admins['Nome Cognome'].tolist()
+    selected_technician_name = st.selectbox("Seleziona un tecnico", [""] + sorted(technician_names))
 
 
     if selected_technician_name:
-        selected_technician_matricola = technicians[technicians['Nome Cognome'] == selected_technician_name].iloc[0]['Matricola']
+        selected_technician_matricola = technicians_and_admins[technicians_and_admins['Nome Cognome'] == selected_technician_name].iloc[0]['Matricola']
 
-        today = datetime.date.today()
-        assignments = trova_attivita(selected_technician_matricola, today.day, today.month, today.year, users_df)
+        all_activities = get_all_assigned_activities(selected_technician_matricola, users_df)
 
-        if not assignments:
-            st.info(f"Nessun assegnamento da visualizzare per {selected_technician_name} per la data di oggi.")
+        validated_reports_df = get_validated_intervention_reports(selected_technician_matricola)
+        validated_activities = set()
+        if not validated_reports_df.empty:
+            for _, report in validated_reports_df.iterrows():
+                validated_activities.add((report['pdl'], report['descrizione_attivita']))
+
+        unvalidated_activities = [
+            activity for activity in all_activities
+            if (activity['pdl'], activity['attivita']) not in validated_activities
+        ]
+
+        if not unvalidated_activities:
+            st.info(f"Nessuna attività non validata trovata per {selected_technician_name}.")
         else:
-            assignments_df = pd.DataFrame(assignments)
+            assignments_df = pd.DataFrame(unvalidated_activities)
+            assignments_df["team"] = assignments_df["team"].apply(lambda team: ", ".join([member['nome'] for member in team]))
             assignments_df["seleziona"] = False
 
             edited_assignments_df = st.data_editor(
@@ -60,7 +72,7 @@ def render_gestione_dati_tab():
                 column_config={
                     "seleziona": st.column_config.CheckboxColumn(
                         "Seleziona", help="Seleziona per bloccare l'assegnamento."
-                    )
+                    ),
                 },
                 disabled=assignments_df.columns.drop("seleziona"),
             )

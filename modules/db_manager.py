@@ -707,11 +707,8 @@ def save_table_data(df: pd.DataFrame, table_name: str):
         if not table_name.isalnum() and '_' not in table_name:
             raise ValueError("Nome tabella non valido.")
 
-        with conn:
-            # Delete existing data
-            conn.execute(f"DELETE FROM {table_name}")
-            # Append new data
-            df.to_sql(table_name, conn, if_exists='append', index=False)
+        # Use 'replace' to drop the old table and create a new one with the df data
+        df.to_sql(table_name, conn, if_exists='replace', index=False)
         return True
     except (sqlite3.Error, ValueError) as e:
         print(f"Errore durante il salvataggio dei dati nella tabella {table_name}: {e}")
