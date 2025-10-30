@@ -41,7 +41,7 @@ from modules.data_manager import (
 from modules.db_manager import (
     get_shifts_by_type, get_reports_to_validate, delete_reports_by_ids,
     process_and_commit_validated_reports, salva_relazione,
-    get_unvalidated_relazioni, process_and_commit_validated_relazioni,
+    get_unvalidated_relazioni, process_and_commit_validated_relazioni, get_all_users,
     get_validated_intervention_reports, get_table_names, get_table_data, save_table_data,
     get_report_by_id, delete_report_by_id, insert_report, move_report_atomically,
     get_last_login, count_unread_notifications
