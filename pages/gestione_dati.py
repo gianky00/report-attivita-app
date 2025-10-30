@@ -65,6 +65,7 @@ def render_gestione_dati_tab():
         else:
             assignments_df = pd.DataFrame(unvalidated_activities)
             assignments_df["team"] = assignments_df["team"].apply(lambda team: ", ".join([member['nome'] for member in team]))
+            assignments_df["Data Assegnamento"] = pd.to_datetime(assignments_df["Data Assegnamento"]).dt.strftime('%d/%m/%Y')
             assignments_df["seleziona"] = False
 
             edited_assignments_df = st.data_editor(

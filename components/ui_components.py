@@ -54,7 +54,7 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                 for member in team:
                     orari_accorpati = merge_time_slots(member['orari'])
                     orari_str = ", ".join(orari_accorpati)
-                    team_details_md += f"- {member['nome']} ({member['ruolo']}) | 🕒 {orari_str}\n"
+                    team_details_md += f"- {member['nome']} ({member['ruolo']})\n  🕒 {orari_str}\n"
                 st.info(team_details_md)
 
             visualizza_storico_organizzato(task.get('storico', []), task['pdl'])
