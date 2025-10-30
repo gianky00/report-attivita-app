@@ -138,19 +138,21 @@ def _match_partial_name(partial_name, full_name):
 
     return True
 
-@st.cache_data(ttl=300)
-def trova_attivita(matricola, giorno, mese, anno, df_contatti):
-    # Funzione interna cachata per caricare il file Excel una sola volta per mese/anno
-    @st.cache_data(ttl=3600)
-    def _carica_giornaliera_mese(path):
-        try:
-            return pd.read_excel(path, sheet_name=None, header=None)
-        except FileNotFoundError:
-            return None
-        except Exception as e:
-            st.error(f"Errore imprevisto durante la lettura di {path}: {e}")
-            return None
+@st.cache_data(ttl=3600)
+def _carica_giornaliera_mese(path):
+    """
+    Funzione cachata per caricare il file Excel una sola volta per mese/anno.
+    Spostata al livello superiore del modulo per permettere la pulizia della cache.
+    """
+    try:
+        return pd.read_excel(path, sheet_name=None, header=None)
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        st.error(f"Errore imprevisto durante la lettura di {path}: {e}")
+        return None
 
+def trova_attivita(matricola, giorno, mese, anno, df_contatti):
     try:
         # --- FASE 1: Trova il nome completo dell'utente dalla matricola ---
         if df_contatti is None or df_contatti.empty:
