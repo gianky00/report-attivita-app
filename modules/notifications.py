@@ -1,48 +1,38 @@
 import pandas as pd
 import datetime
+from modules.db_manager import get_notifications_for_user, add_notification
 
-def leggi_notifiche(gestionale_data, utente):
-    df_notifiche = gestionale_data.get('notifiche')
+def leggi_notifiche(utente):
+    """Legge le notifiche di un utente direttamente dal database."""
+    return get_notifications_for_user(utente)
 
-    required_cols = ['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione']
-    if df_notifiche is None or df_notifiche.empty:
-        return pd.DataFrame(columns=required_cols)
-
-    user_notifiche = df_notifiche[df_notifiche['Destinatario'] == utente].copy()
-
-    if user_notifiche.empty:
-        return user_notifiche
-
-    user_notifiche['Timestamp'] = pd.to_datetime(user_notifiche['Timestamp'], errors='coerce')
-    return user_notifiche.sort_values(by='Timestamp', ascending=False)
-
-def crea_notifica(gestionale_data, destinatario, messaggio, link_azione=""):
-    if 'notifiche' not in gestionale_data:
-        gestionale_data['notifiche'] = pd.DataFrame(columns=['ID_Notifica', 'Timestamp', 'Destinatario', 'Messaggio', 'Stato', 'Link_Azione'])
-
+def crea_notifica(destinatario, messaggio, link_azione=""):
+    """Crea una nuova notifica nel database."""
     new_id = f"N_{int(datetime.datetime.now().timestamp())}"
-    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    timestamp = datetime.datetime.now().isoformat()
 
-    nuova_notifica = pd.DataFrame([{
+    nuova_notifica = {
         'ID_Notifica': new_id,
         'Timestamp': timestamp,
         'Destinatario': destinatario,
         'Messaggio': messaggio,
         'Stato': 'non letta',
         'Link_Azione': link_azione
-    }])
+    }
 
-    gestionale_data['notifiche'] = pd.concat([gestionale_data['notifiche'], nuova_notifica], ignore_index=True)
-    return True
+    return add_notification(nuova_notifica)
 
-def segna_notifica_letta(gestionale_data, id_notifica):
-    if 'notifiche' not in gestionale_data or gestionale_data['notifiche'].empty:
+def segna_notifica_letta(id_notifica):
+    """Segna una notifica come letta nel database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            sql = "UPDATE notifiche SET Stato = 'letta' WHERE ID_Notifica = ?"
+            cursor = conn.execute(sql, (id_notifica,))
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiornamento della notifica: {e}")
         return False
-
-    df_notifiche = gestionale_data['notifiche']
-    idx = df_notifiche[df_notifiche['ID_Notifica'] == id_notifica].index
-
-    if not idx.empty:
-        df_notifiche.loc[idx, 'Stato'] = 'letta'
-        return True
-    return False
+    finally:
+        if conn:
+            conn.close()

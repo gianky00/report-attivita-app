@@ -1,6 +1,86 @@
 import pandas as pd
 import bcrypt
 import pyotp
+import sqlite3
+from modules.db_manager import get_db_connection
+
+# --- Database-backed User Management Functions ---
+
+def get_user_by_matricola(matricola: str) -> dict:
+    """Recupera un utente dal database tramite la sua matricola."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        query = "SELECT * FROM contatti WHERE Matricola = ?"
+        cursor.execute(query, (str(matricola),))
+        user_row = cursor.fetchone()
+        return dict(user_row) if user_row else None
+    except sqlite3.Error as e:
+        print(f"Errore nel recuperare l'utente {matricola}: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def create_user(user_data: dict) -> bool:
+    """Crea un nuovo utente nel database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in user_data.keys())
+            placeholders = ', '.join('?' for _ in user_data)
+            sql = f"INSERT INTO contatti ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(user_data.values()))
+        return True
+    except sqlite3.IntegrityError: # Specific error for duplicate matricola
+        return False
+    except sqlite3.Error as e:
+        print(f"Errore durante la creazione dell'utente: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def update_user(matricola: str, update_data: dict) -> bool:
+    """Aggiorna i dati di un utente esistente."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            set_clause = ', '.join(f'"{k}" = ?' for k in update_data.keys())
+            sql = f"UPDATE contatti SET {set_clause} WHERE Matricola = ?"
+            params = list(update_data.values()) + [str(matricola)]
+            conn.execute(sql, params)
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiornamento dell'utente {matricola}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_user(matricola: str) -> bool:
+    """Cancella un utente dal database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            sql = "DELETE FROM contatti WHERE Matricola = ?"
+            conn.execute(sql, (str(matricola),))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'eliminazione dell'utente {matricola}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def reset_user_password(matricola: str) -> bool:
+    """Resetta la password di un utente impostando PasswordHash a NULL."""
+    return update_user(matricola, {'PasswordHash': None})
+
+def reset_user_2fa(matricola: str) -> bool:
+    """Resetta il 2FA di un utente impostando 2FA_Secret a NULL."""
+    return update_user(matricola, {'2FA_Secret': None})
+
 
 # --- Funzioni 2FA ---
 
@@ -33,90 +113,67 @@ def verify_2fa_code(secret, code):
 
 # --- Funzione di Autenticazione Principale ---
 
-def authenticate_user(matricola, password, df_contatti):
+def authenticate_user(matricola, password):
     """
     Autentica un utente tramite Matricola e gestisce il flusso 2FA.
-    Questa è la nuova logica robusta.
-
-    Returns:
-        tuple: (status, data) dove lo status può essere:
-               - 'FIRST_LOGIN_SETUP': L'utente esiste ma non ha una password. `data` = (nome_completo, ruolo, password_fornisca)
-               - '2FA_REQUIRED': Password corretta, serve il codice 2FA. `data` = nome_completo
-               - '2FA_SETUP_REQUIRED': Password corretta, serve configurare la 2FA. `data` = (nome_completo, ruolo)
-               - 'FAILED': Credenziali non valide. `data` = None
+    Utilizza l'accesso diretto al database.
     """
-    if df_contatti is None or df_contatti.empty:
-        if not matricola or not password:
-            return 'FAILED', None
-        # Se la tabella è vuota, questo è il primo utente in assoluto.
-        # Viene creato come Amministratore.
-        nome_completo = f"Admin User ({matricola})"
-        return 'FIRST_LOGIN_SETUP', (nome_completo, 'Amministratore', password)
-
     if not matricola or not password:
         return 'FAILED', None
 
-    # Cerca l'utente direttamente tramite Matricola (case-insensitive)
-    # Assicurati che la colonna Matricola sia di tipo stringa per il confronto
-    df_contatti['Matricola'] = df_contatti['Matricola'].astype(str)
-    user_row_series = df_contatti[df_contatti['Matricola'].str.lower() == str(matricola).lower()]
-
-    if user_row_series.empty:
-        return 'FAILED', None # Utente non trovato
-
-    user_row = user_row_series.iloc[0]
-    nome_completo = str(user_row['Nome Cognome']).strip()
-    ruolo = user_row.get('Ruolo', 'Tecnico')
-    password_bytes = str(password).encode('utf-8')
-
-    # --- Logica di autenticazione ---
-
-    # 1. Caso speciale: primo login o reset password.
-    # Controlliamo se 'PasswordHash' non esiste, è None, o una stringa vuota/whitespace.
-    password_hash = user_row.get('PasswordHash')
-    if pd.isna(password_hash) or not str(password_hash).strip():
-        # Questo è il primo login. L'utente ha fornito una password che dobbiamo impostare.
-        return 'FIRST_LOGIN_SETUP', (nome_completo, ruolo, password)
-
-    # 2. Autenticazione Standard
+    conn = get_db_connection()
     try:
-        hashed_password_bytes = str(password_hash).encode('utf-8')
-        if bcrypt.checkpw(password_bytes, hashed_password_bytes):
-            # La password è valida, procedi alla verifica 2FA
-            if '2FA_Secret' in user_row and pd.notna(user_row['2FA_Secret']) and user_row['2FA_Secret']:
-                return '2FA_REQUIRED', nome_completo
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM contatti")
+        user_count = cursor.fetchone()[0]
+
+        if user_count == 0:
+            # Se la tabella è vuota, questo è il primo utente in assoluto.
+            # Viene creato come Amministratore.
+            nome_completo = f"Admin User ({matricola})"
+            return 'FIRST_LOGIN_SETUP', (nome_completo, 'Amministratore', password)
+
+        user_row = get_user_by_matricola(matricola)
+
+        if not user_row:
+            return 'FAILED', None # Utente non trovato
+
+        nome_completo = str(user_row['Nome Cognome']).strip()
+        ruolo = user_row.get('Ruolo', 'Tecnico')
+        password_bytes = str(password).encode('utf-8')
+
+        password_hash = user_row.get('PasswordHash')
+        if not password_hash or not str(password_hash).strip():
+            return 'FIRST_LOGIN_SETUP', (nome_completo, ruolo, password)
+
+        try:
+            hashed_password_bytes = str(password_hash).encode('utf-8')
+            if bcrypt.checkpw(password_bytes, hashed_password_bytes):
+                if user_row.get('2FA_Secret'):
+                    return '2FA_REQUIRED', nome_completo
+                else:
+                    return '2FA_SETUP_REQUIRED', (nome_completo, ruolo)
             else:
-                return '2FA_SETUP_REQUIRED', (nome_completo, ruolo)
-        else:
-            # La password non corrisponde all'hash
-            return 'FAILED', None
-    except (ValueError, TypeError):
-        # L'hash memorizzato non è valido (es. vecchio formato o corrotto)
-        # Trattiamo questo caso come un primo login per forzare il reset della password
-        return 'FIRST_LOGIN_SETUP', (nome_completo, ruolo, password)
+                return 'FAILED', None
+        except (ValueError, TypeError):
+            return 'FIRST_LOGIN_SETUP', (nome_completo, ruolo, password)
 
-def log_access_attempt(gestionale_data, username, status):
-    """
-    Registra un tentativo di accesso nella cronologia (DataFrame-based).
-    """
+    finally:
+        if conn:
+            conn.close()
+
+def log_access_attempt(username: str, status: str):
+    """Registra un tentativo di accesso direttamente nel database."""
     import datetime
-    import pandas as pd
-
-    # Assicura che il DataFrame dei log esista
-    if 'access_logs' not in gestionale_data or not isinstance(gestionale_data.get('access_logs'), pd.DataFrame):
-        logs_df = pd.DataFrame(columns=["timestamp", "username", "status"])
-    else:
-        logs_df = gestionale_data['access_logs']
-
-    # Crea il nuovo record di log come un DataFrame
-    new_log_entry_df = pd.DataFrame([{
-        "timestamp": datetime.datetime.now().isoformat(),
-        "username": username,
-        "status": status,
-    }])
-
-    # Concatena il nuovo log al DataFrame esistente, gestendo il caso di DataFrame vuoto
-    if logs_df.empty:
-        gestionale_data['access_logs'] = new_log_entry_df
-    else:
-        gestionale_data['access_logs'] = pd.concat([logs_df, new_log_entry_df], ignore_index=True)
+    conn = get_db_connection()
+    try:
+        with conn:
+            sql = "INSERT INTO access_logs (timestamp, username, status) VALUES (?, ?, ?)"
+            conn.execute(sql, (datetime.datetime.now().isoformat(), username, status))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante la registrazione del tentativo di accesso: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()

@@ -172,6 +172,15 @@ def crea_tabelle_se_non_esistono():
                 data_fine TEXT,
                 note TEXT,
                 timestamp_approvazione TEXT
+            )""",
+            "shift_logs": """(
+                ID_Modifica TEXT PRIMARY KEY NOT NULL,
+                Timestamp TEXT,
+                ID_Turno TEXT,
+                Azione TEXT,
+                UtenteOriginale TEXT,
+                UtenteSubentrante TEXT,
+                EseguitoDa TEXT
             )"""
         }
 

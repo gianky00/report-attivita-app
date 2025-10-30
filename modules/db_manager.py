@@ -26,12 +26,330 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
         if conn:
             conn.close()
 
+def add_shift_log(log_data: dict) -> bool:
+    """Aggiunge un nuovo log di modifica turno al database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in log_data.keys())
+            placeholders = ', '.join('?' for _ in log_data)
+            sql = f"INSERT INTO shift_logs ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(log_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiunta del log di modifica turno: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def update_shift(shift_id: str, update_data: dict) -> bool:
+    """Aggiorna i dati di un turno."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            set_clause = ', '.join(f'"{k}" = ?' for k in update_data.keys())
+            sql = f"UPDATE turni SET {set_clause} WHERE ID_Turno = ?"
+            params = list(update_data.values()) + [shift_id]
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiornamento del turno: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def add_material_request(request_data: dict) -> bool:
+    """Aggiunge una nuova richiesta di materiali al database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in request_data.keys())
+            placeholders = ', '.join('?' for _ in request_data)
+            sql = f"INSERT INTO richieste_materiali ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(request_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiunta della richiesta materiali: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def add_leave_request(request_data: dict) -> bool:
+    """Aggiunge una nuova richiesta di assenza al database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in request_data.keys())
+            placeholders = ', '.join('?' for _ in request_data)
+            sql = f"INSERT INTO richieste_assenze ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(request_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiunta della richiesta di assenza: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_material_requests() -> pd.DataFrame:
+    """Carica tutte le richieste di materiali dal database."""
+    return get_table_data('richieste_materiali')
+
+def get_leave_requests() -> pd.DataFrame:
+    """Carica tutte le richieste di assenza dal database."""
+    return get_table_data('richieste_assenze')
+
+def get_notifications_for_user(matricola: str) -> pd.DataFrame:
+    """Recupera le notifiche per un utente specifico."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM notifiche WHERE Destinatario_Matricola = ? ORDER BY Timestamp DESC"
+        df = pd.read_sql_query(query, conn, params=(str(matricola),))
+        return df
+    finally:
+        if conn:
+            conn.close()
+
+def add_notification(notification_data: dict) -> bool:
+    """Aggiunge una nuova notifica al database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in notification_data.keys())
+            placeholders = ', '.join('?' for _ in notification_data)
+            sql = f"INSERT INTO notifiche ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(notification_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiunta della notifica: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_bacheca_item_by_id(item_id: str) -> dict:
+    """Recupera un annuncio in bacheca per ID."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM bacheca WHERE ID_Bacheca = ?"
+        cursor = conn.cursor()
+        cursor.execute(query, (item_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        if conn:
+            conn.close()
+
+def update_bacheca_item(item_id: str, update_data: dict) -> bool:
+    """Aggiorna un annuncio in bacheca."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            set_clause = ', '.join(f'"{k}" = ?' for k in update_data.keys())
+            sql = f"UPDATE bacheca SET {set_clause} WHERE ID_Bacheca = ?"
+            params = list(update_data.values()) + [item_id]
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiornamento dell'annuncio in bacheca: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_booking_by_user_and_shift(matricola: str, shift_id: str) -> dict:
+    """Recupera una prenotazione specifica per utente e turno."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM prenotazioni WHERE Matricola = ? AND ID_Turno = ?"
+        cursor = conn.cursor()
+        cursor.execute(query, (str(matricola), shift_id))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        if conn:
+            conn.close()
+
+def add_bacheca_item(item_data: dict) -> bool:
+    """Aggiunge un nuovo annuncio in bacheca."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in item_data.keys())
+            placeholders = ', '.join('?' for _ in item_data)
+            sql = f"INSERT INTO bacheca ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(item_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiunta dell'annuncio in bacheca: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_substitution_request_by_id(request_id: str) -> dict:
+    """Recupera una richiesta di sostituzione per ID."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM sostituzioni WHERE ID_Richiesta = ?"
+        cursor = conn.cursor()
+        cursor.execute(query, (request_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        if conn:
+            conn.close()
+
+def delete_substitution_request(request_id: str) -> bool:
+    """Cancella una richiesta di sostituzione per ID."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            sql = "DELETE FROM sostituzioni WHERE ID_Richiesta = ?"
+            cursor = conn.execute(sql, (request_id,))
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Errore durante la cancellazione della richiesta di sostituzione: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def update_booking_user(shift_id: str, old_matricola: str, new_matricola: str) -> bool:
+    """Aggiorna la matricola di una prenotazione."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            sql = "UPDATE prenotazioni SET Matricola = ? WHERE ID_Turno = ? AND Matricola = ?"
+            cursor = conn.execute(sql, (new_matricola, shift_id, old_matricola))
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiornamento della prenotazione: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def add_substitution_request(request_data: dict) -> bool:
+    """Aggiunge una nuova richiesta di sostituzione al database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in request_data.keys())
+            placeholders = ', '.join('?' for _ in request_data)
+            sql = f"INSERT INTO sostituzioni ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(request_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiunta della richiesta di sostituzione: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def delete_booking(matricola: str, shift_id: str) -> bool:
+    """Cancella una prenotazione dal database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            sql = "DELETE FROM prenotazioni WHERE Matricola = ? AND ID_Turno = ?"
+            cursor = conn.execute(sql, (str(matricola), shift_id))
+            # Check if any row was actually deleted
+            return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Errore durante la cancellazione della prenotazione: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def create_shift(shift_data: dict) -> bool:
+    """Crea un nuovo turno nel database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in shift_data.keys())
+            placeholders = ', '.join('?' for _ in shift_data)
+            sql = f"INSERT INTO turni ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(shift_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante la creazione del turno: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def get_all_users() -> pd.DataFrame:
+    """Carica tutti gli utenti (contatti) dal database."""
+    return get_table_data('contatti')
+
+def get_access_logs() -> pd.DataFrame:
+    """Carica la cronologia degli accessi dal database."""
+    return get_table_data('access_logs')
+
+def get_all_bookings() -> pd.DataFrame:
+    """Carica tutte le prenotazioni dal database."""
+    return get_table_data('prenotazioni')
+
+def get_all_substitutions() -> pd.DataFrame:
+    """Carica tutte le richieste di sostituzione dal database."""
+    return get_table_data('sostituzioni')
+
+def get_all_bacheca_items() -> pd.DataFrame:
+    """Carica tutti gli annunci in bacheca dal database."""
+    return get_table_data('bacheca')
+
+def get_shift_by_id(shift_id: str) -> dict:
+    """Recupera un turno specifico per ID."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM turni WHERE ID_Turno = ?"
+        cursor = conn.cursor()
+        cursor.execute(query, (shift_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        if conn:
+            conn.close()
+
+def get_bookings_for_shift(shift_id: str) -> pd.DataFrame:
+    """Recupera le prenotazioni per un turno specifico."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM prenotazioni WHERE ID_Turno = ?"
+        df = pd.read_sql_query(query, conn, params=(shift_id,))
+        return df
+    finally:
+        if conn:
+            conn.close()
+
+def add_booking(booking_data: dict) -> bool:
+    """Aggiunge una nuova prenotazione al database."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            cols = ', '.join(f'"{k}"' for k in booking_data.keys())
+            placeholders = ', '.join('?' for _ in booking_data)
+            sql = f"INSERT INTO prenotazioni ({cols}) VALUES ({placeholders})"
+            conn.execute(sql, list(booking_data.values()))
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore durante l'aggiunta della prenotazione: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def count_unread_notifications(matricola: str) -> int:
     """Conta il numero di notifiche non lette per un utente."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        query = "SELECT COUNT(*) FROM notifiche WHERE matricola_utente = ? AND letta = 0"
+        query = "SELECT COUNT(*) FROM notifiche WHERE Destinatario_Matricola = ? AND Stato = 'Non letta'"
         cursor.execute(query, (matricola,))
         count = cursor.fetchone()[0]
         return count

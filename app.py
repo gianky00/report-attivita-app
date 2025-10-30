@@ -28,19 +28,20 @@ from modules.auth import (
     generate_2fa_secret,
     get_provisioning_uri,
     verify_2fa_code,
-    log_access_attempt
+    log_access_attempt,
+    get_user_by_matricola,
+    create_user,
+    update_user
 )
 from modules.data_manager import (
     carica_knowledge_core,
-    carica_gestionale,
-    salva_gestionale_async,
     scrivi_o_aggiorna_risposta,
     trova_attivita
 )
 from modules.db_manager import (
     get_shifts_by_type, get_reports_to_validate, delete_reports_by_ids,
     process_and_commit_validated_reports, salva_relazione,
-    get_unvalidated_relazioni, process_and_commit_validated_relazioni,
+    get_unvalidated_relazioni, process_and_commit_validated_relazioni, get_all_users,
     get_validated_intervention_reports, get_table_names, get_table_data, save_table_data,
     get_report_by_id, delete_report_by_id, insert_report, move_report_atomically,
     get_last_login, count_unread_notifications
@@ -267,33 +268,22 @@ def main_app(matricola_utente, ruolo):
 
     load_css('styles/style.css')
 
-    gestionale_data = carica_gestionale()
-    df_contatti = gestionale_data['contatti']
-    # Assicura che la matricola sia sempre una stringa per evitare errori di lookup
-    df_contatti['Matricola'] = df_contatti['Matricola'].astype(str)
-
-    # Ottieni il nome utente dalla matricola
-    user_info = df_contatti[df_contatti['Matricola'] == str(matricola_utente)]
-    if not user_info.empty:
-        nome_utente_autenticato = user_info.iloc[0]['Nome Cognome']
+    user_info = get_user_by_matricola(matricola_utente)
+    if user_info:
+        nome_utente_autenticato = user_info['Nome Cognome']
     else:
         st.error("Errore critico: impossibile trovare i dati dell'utente loggato.")
         st.stop()
 
-
-    # Sincronizza automaticamente i turni di reperibilità all'avvio
     today = datetime.date.today()
     start_sync_date = today.replace(day=1)
-    # Calcola una finestra di sincronizzazione di circa 2 mesi (mese corrente + prossimo)
     end_sync_date = (start_sync_date + datetime.timedelta(days=35)).replace(day=1) + datetime.timedelta(days=31)
 
-    if sync_oncall_shifts(gestionale_data, start_date=start_sync_date, end_date=end_sync_date):
-        # Se sono stati aggiunti nuovi turni, salva il file gestionale
-        salva_gestionale_async(gestionale_data)
+    if sync_oncall_shifts(start_date=start_sync_date, end_date=end_sync_date):
         st.toast("Calendario reperibilità sincronizzato.")
 
     if st.session_state.get('editing_turno_id'):
-        render_edit_shift_form(gestionale_data)
+        render_edit_shift_form()
     elif st.session_state.get('debriefing_task'):
         knowledge_core = carica_knowledge_core()
         if knowledge_core:
@@ -319,8 +309,8 @@ def main_app(matricola_utente, ruolo):
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
 
-            user_notifications = leggi_notifiche(gestionale_data, matricola_utente)
-            render_notification_center(user_notifications, gestionale_data, matricola_utente)
+            user_notifications = leggi_notifiche(matricola_utente)
+            render_notification_center(user_notifications, matricola_utente)
 
             last_login = get_last_login(matricola_utente)
             if last_login:
@@ -385,6 +375,7 @@ def main_app(matricola_utente, ruolo):
 
         oggi = datetime.date.today()
 
+        df_contatti = get_all_users()
         attivita_da_recuperare = recupera_attivita_non_rendicontate(matricola_utente, df_contatti)
 
         if 'main_tab' not in st.session_state:
@@ -403,6 +394,8 @@ def main_app(matricola_utente, ruolo):
 
         st.markdown('<div class="page-content">', unsafe_allow_html=True)
 
+        df_contatti = get_all_users()
+
         if selected_tab == "Attività Assegnate":
             sub_tab_list = ["Attività di Oggi", "Recupero Attività", "Attività Validate"]
             if ruolo in ["Tecnico", "Amministratore"]:
@@ -411,20 +404,12 @@ def main_app(matricola_utente, ruolo):
 
             with sub_tabs[0]:
                 st.subheader(f"Attività del {oggi.strftime('%d/%m/%Y')}")
-                lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, gestionale_data['contatti'])
-
-                # Applica la logica dei falsi positivi anche per le attività di oggi
-                lista_attivita_filtrata = [
-                    task for task in lista_attivita_raw
-                    if not any(
-                        pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce').date() >= oggi
-                        for interv in task.get('storico', []) if pd.notna(pd.to_datetime(interv.get('Data_Riferimento'), dayfirst=True, errors='coerce'))
-                    )
-                ]
-                disegna_sezione_attivita(lista_attivita_filtrata, "today", ruolo)
+                lista_attivita_raw = trova_attivita(matricola_utente, oggi.day, oggi.month, oggi.year, df_contatti)
+                disegna_sezione_attivita(lista_attivita_raw, "today", ruolo)
 
             with sub_tabs[1]:
                 st.subheader("Recupero Attività Non Rendicontate (Ultimi 30 Giorni)")
+                attivita_da_recuperare = recupera_attivita_non_rendicontate(matricola_utente, df_contatti)
                 disegna_sezione_attivita(attivita_da_recuperare, "yesterday", ruolo)
 
             with sub_tabs[2]:
@@ -457,7 +442,7 @@ def main_app(matricola_utente, ruolo):
                     if 'relazione_revisionata' not in st.session_state: st.session_state.relazione_revisionata = ""
                     if 'technical_suggestions' not in st.session_state: st.session_state.technical_suggestions = []
 
-                    contatti_df = gestionale_data.get('contatti', pd.DataFrame())
+                    contatti_df = get_all_users()
                     lista_partner = contatti_df[contatti_df['Matricola'] != str(matricola_utente)]['Nome Cognome'].tolist()
 
                     with st.form("form_relazione"):
@@ -569,170 +554,9 @@ def main_app(matricola_utente, ruolo):
                             st.info(suggestion)
                     st.markdown('</div>', unsafe_allow_html=True)
         elif selected_tab == "📅 Gestione Turni":
-            st.subheader("Gestione Turni")
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            turni_disponibili_tab, bacheca_tab, sostituzioni_tab = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
-            with turni_disponibili_tab:
-                assistenza_tab, straordinario_tab, reperibilita_tab = st.tabs(["Turni Assistenza", "Turni Straordinario", "Turni Reperibilità"])
-                with assistenza_tab:
-                    df_assistenza = get_shifts_by_type('Assistenza')
-                    render_turni_list(df_assistenza, gestionale_data, matricola_utente, ruolo, "assistenza")
-                with straordinario_tab:
-                    df_straordinario = get_shifts_by_type('Straordinario')
-                    render_turni_list(df_straordinario, gestionale_data, matricola_utente, ruolo, "straordinario")
-                with reperibilita_tab:
-                    render_reperibilita_tab(gestionale_data, matricola_utente, ruolo)
-            with bacheca_tab:
-                st.subheader("Turni Liberi in Bacheca")
-                df_bacheca = gestionale_data.get('bacheca', pd.DataFrame())
-                turni_disponibili_bacheca = df_bacheca[df_bacheca['Stato'] == 'Disponibile'].sort_values(by='Timestamp_Pubblicazione', ascending=False)
-                if turni_disponibili_bacheca.empty: st.info("Al momento non ci sono turni liberi in bacheca.")
-                else:
-                    df_turni = gestionale_data['turni']
-                    matricola_to_name = pd.Series(gestionale_data['contatti']['Nome Cognome'].values, index=gestionale_data['contatti']['Matricola'].astype(str)).to_dict()
-                    for _, bacheca_entry in turni_disponibili_bacheca.iterrows():
-                        try:
-                            turno_details = df_turni[df_turni['ID_Turno'] == bacheca_entry['ID_Turno']].iloc[0]
-                            matricola_originale = str(bacheca_entry['Tecnico_Originale_Matricola'])
-                            nome_originale = matricola_to_name.get(matricola_originale, f"Matricola {matricola_originale}")
-                            with st.container(border=True):
-                                st.markdown(f"**{turno_details['Descrizione']}** ({bacheca_entry['Ruolo_Originale']})")
-                                st.caption(f"Data: {pd.to_datetime(turno_details['Data']).strftime('%d/%m/%Y')} | Orario: {turno_details['OrarioInizio']} - {turno_details['OrarioFine']}")
-                                st.write(f"Pubblicato da: {nome_originale} il {pd.to_datetime(bacheca_entry['Timestamp_Pubblicazione']).strftime('%d/%m %H:%M')}")
-                                ruolo_richiesto = bacheca_entry['Ruolo_Originale']
-                                is_eligible = not (ruolo_richiesto == 'Tecnico' and ruolo == 'Aiutante')
-                                if is_eligible:
-                                    if st.button("Prendi questo turno", key=f"take_{bacheca_entry['ID_Bacheca']}"):
-                                        if prendi_turno_da_bacheca_logic(gestionale_data, matricola_utente, ruolo, bacheca_entry['ID_Bacheca']): salva_gestionale_async(gestionale_data); st.rerun()
-                                else: st.info("Non hai il ruolo richiesto per questo turno.")
-                        except IndexError: st.warning(f"Dettagli non trovati per il turno ID {bacheca_entry['ID_Turno']}. Potrebbe essere stato rimosso.")
-            with sostituzioni_tab:
-                st.subheader("Richieste di Sostituzione")
-                df_sostituzioni = gestionale_data['sostituzioni']
-                matricola_to_name = pd.Series(gestionale_data['contatti']['Nome Cognome'].values, index=gestionale_data['contatti']['Matricola'].astype(str)).to_dict()
-                st.markdown("#### 📥 Richieste Ricevute")
-                richieste_ricevute = df_sostituzioni[df_sostituzioni['Ricevente_Matricola'] == str(matricola_utente)]
-                if richieste_ricevute.empty: st.info("Nessuna richiesta di sostituzione ricevuta.")
-                for _, richiesta in richieste_ricevute.iterrows():
-                    with st.container(border=True):
-                        richiedente_nome = matricola_to_name.get(str(richiesta['Richiedente_Matricola']), "Sconosciuto")
-                        st.markdown(f"**{richiedente_nome}** ti ha chiesto un cambio per il turno **{richiesta['ID_Turno']}**.")
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            if st.button("✅ Accetta", key=f"acc_{richiesta['ID_Richiesta']}"):
-                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], matricola_utente, True): salva_gestionale_async(gestionale_data); st.rerun()
-                        with c2:
-                            if st.button("❌ Rifiuta", key=f"rif_{richiesta['ID_Richiesta']}"):
-                                if rispondi_sostituzione_logic(gestionale_data, richiesta['ID_Richiesta'], matricola_utente, False): salva_gestionale_async(gestionale_data); st.rerun()
-                st.divider()
-                st.markdown("#### 📤 Richieste Inviate")
-                richieste_inviate = df_sostituzioni[df_sostituzioni['Richiedente_Matricola'] == str(matricola_utente)]
-                if richieste_inviate.empty: st.info("Nessuna richiesta di sostituzione inviata.")
-                for _, richiesta in richieste_inviate.iterrows():
-                    ricevente_nome = matricola_to_name.get(str(richiesta['Ricevente_Matricola']), "Sconosciuto")
-                    st.markdown(f"- Richiesta inviata a **{ricevente_nome}** per il turno **{richiesta['ID_Turno']}**.")
-            st.markdown('</div>', unsafe_allow_html=True)
+            render_gestione_turni_tab(matricola_utente, ruolo)
         elif selected_tab == "Richieste":
-            st.subheader("Richieste")
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            richieste_tabs = st.tabs(["Materiali", "Assenze"])
-            with richieste_tabs[0]:
-                st.subheader("Richiesta Materiali")
-                with st.form("form_richiesta_materiali", clear_on_submit=True):
-                    dettagli_richiesta = st.text_area("Elenca qui i materiali necessari:", height=150)
-                    submitted = st.form_submit_button("Invia Richiesta Materiali", type="primary")
-                    if submitted:
-                        if dettagli_richiesta.strip():
-                            new_id = f"MAT_{int(datetime.datetime.now().timestamp())}"
-                            df_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame())
-                            nuova_richiesta_data = {'ID_Richiesta': new_id, 'Richiedente_Matricola': str(matricola_utente), 'Timestamp': datetime.datetime.now(), 'Stato': 'Inviata', 'Dettagli': dettagli_richiesta}
-                            if not df_materiali.columns.empty: nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data], columns=df_materiali.columns)
-                            else: nuova_richiesta_df = pd.DataFrame([nuova_richiesta_data])
-                            gestionale_data['richieste_materiali'] = pd.concat([df_materiali, nuova_richiesta_df], ignore_index=True)
-                            if salva_gestionale_async(gestionale_data):
-                                st.success("Richiesta materiali inviata con successo!")
-                                titolo_email = f"Nuova Richiesta Materiali da {nome_utente_autenticato}"
-                                html_body = f"""
-                                <html><head><style>body {{ font-family: Calibri, sans-serif; }}</style></head><body>
-                                <h3>Nuova Richiesta Materiali</h3>
-                                <p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p>
-                                <p><strong>Data e Ora:</strong> {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
-                                <hr>
-                                <h4>Materiali Richiesti:</h4>
-                                <p>{dettagli_richiesta.replace('\n', '<br>')}</p>
-                                <br><hr>
-                                <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
-                                <p><strong>Gianky Allegretti</strong><br>
-                                Direttore Tecnico</p>
-                                </body></html>
-                                """
-                                invia_email_con_outlook_async(titolo_email, html_body)
-                                st.rerun()
-                            else: st.error("Errore durante il salvataggio della richiesta.")
-                        else: st.warning("Il campo dei materiali non può essere vuoto.")
-                st.divider()
-                st.subheader("Storico Richieste Materiali")
-                df_richieste_materiali = gestionale_data.get('richieste_materiali', pd.DataFrame())
-                if df_richieste_materiali.empty: st.info("Nessuna richiesta di materiali inviata.")
-                else:
-                    df_contatti = gestionale_data.get('contatti', pd.DataFrame())
-                    df_richieste_con_nome = pd.merge(df_richieste_materiali, df_contatti[['Matricola', 'Nome Cognome']], left_on='Richiedente_Matricola', right_on='Matricola', how='left')
-                    df_richieste_con_nome['Nome Cognome'] = df_richieste_con_nome['Nome Cognome'].fillna('Sconosciuto')
-                    df_richieste_con_nome['Timestamp'] = pd.to_datetime(df_richieste_con_nome['Timestamp'])
-                    display_cols = ['Timestamp', 'Nome Cognome', 'Dettagli', 'Stato']
-                    final_cols = [col for col in display_cols if col in df_richieste_con_nome.columns]
-                    st.dataframe(df_richieste_con_nome[final_cols].sort_values(by="Timestamp", ascending=False), width='stretch')
-
-            with richieste_tabs[1]:
-                st.subheader("Richiesta Assenze (Ferie/Permessi)")
-                with st.form("form_richiesta_assenze", clear_on_submit=True):
-                    tipo_assenza = st.selectbox("Tipo di Assenza", ["Ferie", "Permesso (L. 104)"])
-                    col1, col2 = st.columns(2)
-                    data_inizio = col1.date_input("Data Inizio")
-                    data_fine = col2.date_input("Data Fine")
-                    note_assenza = st.text_area("Note (opzionale):", height=100)
-                    submitted_assenza = st.form_submit_button("Invia Richiesta Assenza", type="primary")
-                    if submitted_assenza:
-                        if data_inizio and data_fine:
-                            if data_inizio > data_fine: st.error("La data di inizio non può essere successiva alla data di fine.")
-                            else:
-                                new_id = f"ASS_{int(datetime.datetime.now().timestamp())}"
-                                nuova_richiesta_assenza = pd.DataFrame([{'ID_Richiesta': new_id, 'Richiedente_Matricola': str(matricola_utente), 'Timestamp': datetime.datetime.now(), 'Tipo_Assenza': tipo_assenza, 'Data_Inizio': pd.to_datetime(data_inizio), 'Data_Fine': pd.to_datetime(data_fine), 'Note': note_assenza, 'Stato': 'Inviata'}])
-                                df_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame())
-                                gestionale_data['richieste_assenze'] = pd.concat([df_assenze, nuova_richiesta_assenza], ignore_index=True)
-                                if salva_gestionale_async(gestionale_data):
-                                    st.success("Richiesta di assenza inviata con successo!")
-                                    titolo_email = f"Nuova Richiesta di Assenza da {nome_utente_autenticato}"
-                                    html_body = f"""
-                                    <html><head><style>body {{ font-family: Calibri, sans-serif; }}</style></head><body>
-                                    <h3>Nuova Richiesta di Assenza</h3>
-                                    <p><strong>Richiedente:</strong> {nome_utente_autenticato} ({matricola_utente})</p>
-                                    <p><strong>Tipo:</strong> {tipo_assenza}</p>
-                                    <p><strong>Periodo:</strong> dal {data_inizio.strftime('%d/%m/%Y')} al {data_fine.strftime('%d/%m/%Y')}</p>
-                                    <hr>
-                                    <h4>Note:</h4>
-                                    <p>{note_assenza.replace('\n', '<br>') if note_assenza else 'Nessuna nota.'}</p>
-                                    <br><hr>
-                                    <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
-                                    <p><strong>Gianky Allegretti</strong><br>
-                                    Direttore Tecnico</p>
-                                    </body></html>
-                                    """
-                                    invia_email_con_outlook_async(titolo_email, html_body)
-                                    st.rerun()
-                                else: st.error("Errore durante il salvataggio della richiesta.")
-                        else: st.warning("Le date di inizio e fine sono obbligatorie.")
-                if ruolo == "Amministratore":
-                    st.divider()
-                    st.subheader("Storico Richieste Assenze (Visibile solo agli Admin)")
-                    df_richieste_assenze = gestionale_data.get('richieste_assenze', pd.DataFrame())
-                    if df_richieste_assenze.empty: st.info("Nessuna richiesta di assenza inviata.")
-                    else:
-                        df_richieste_assenze['Timestamp'] = pd.to_datetime(df_richieste_assenze['Timestamp'])
-                        df_richieste_assenze['Data_Inizio'] = pd.to_datetime(df_richieste_assenze['Data_Inizio']).dt.strftime('%d/%m/%Y')
-                        df_richieste_assenze['Data_Fine'] = pd.to_datetime(df_richieste_assenze['Data_Fine']).dt.strftime('%d/%m/%Y')
-                        st.dataframe(df_richieste_assenze.sort_values(by="Timestamp", ascending=False), width='stretch')
-            st.markdown('</div>', unsafe_allow_html=True)
+            render_richieste_tab(matricola_utente, ruolo, nome_utente_autenticato)
         elif selected_tab == "Storico":
             from pages.storico import render_storico_tab
             render_storico_tab()
@@ -741,264 +565,7 @@ def main_app(matricola_utente, ruolo):
             render_guida_tab(ruolo)
 
         elif selected_tab == "Dashboard Admin" and ruolo == "Amministratore":
-            st.subheader("Dashboard di Controllo")
-            if st.session_state.get('detail_technician_matricola'): render_technician_detail_view()
-            else:
-                if st.session_state.main_tab == "Caposquadra":
-                    caposquadra_tabs = st.tabs(["Performance Team", "Crea Nuovo Turno", "Gestione Dati", "Validazione Report"])
-                    with caposquadra_tabs[0]:
-                        st.markdown("#### Seleziona Intervallo Temporale")
-                        if 'perf_start_date' not in st.session_state: st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30)
-                        if 'perf_end_date' not in st.session_state: st.session_state.perf_end_date = datetime.date.today()
-                        c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
-                        if c1.button("Oggi"): st.session_state.perf_start_date = st.session_state.perf_end_date = datetime.date.today()
-                        if c2.button("Ultimi 7 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=7); st.session_state.perf_end_date = datetime.date.today()
-                        if c3.button("Ultimi 30 giorni"): st.session_state.perf_start_date = datetime.date.today() - datetime.timedelta(days=30); st.session_state.perf_end_date = datetime.date.today()
-                        col1, col2 = st.columns(2)
-                        with col1: st.date_input("Data di Inizio", key="perf_start_date", format="DD/MM/YYYY")
-                        with col2: st.date_input("Data di Fine", key="perf_end_date", format="DD/MM/YYYY")
-                        st.info("La sezione di performance è in fase di Sviluppo.")
-                    with caposquadra_tabs[1]:
-                        with st.form("new_shift_form", clear_on_submit=True):
-                            st.subheader("Dettagli Nuovo Turno")
-                            tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
-                            desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
-                            data_turno = st.date_input("Data Turno")
-                            col1, col2 = st.columns(2)
-                            with col1: ora_inizio = st.time_input("Orario Inizio", datetime.time(8, 0))
-                            with col2: ora_fine = st.time_input("Orario Fine", datetime.time(17, 0))
-                            col3, col4 = st.columns(2)
-                            with col3: posti_tech = st.number_input("Numero Posti Tecnico", min_value=0, step=1)
-                            with col4: posti_aiut = st.number_input("Numero Posti Aiutante", min_value=0, step=1)
-                            if st.form_submit_button("Crea Turno"):
-                                if not desc_turno: st.error("La descrizione non può essere vuota.")
-                                else:
-                                    new_id = f"T_{int(datetime.datetime.now().timestamp())}"
-                                    nuovo_turno = pd.DataFrame([{'ID_Turno': new_id, 'Descrizione': desc_turno, 'Data': pd.to_datetime(data_turno), 'OrarioInizio': ora_inizio.strftime('%H:%M'), 'OrarioFine': ora_fine.strftime('%H:%M'), 'PostiTecnico': posti_tech, 'PostiAiutante': posti_aiut, 'Tipo': tipo_turno}])
-                                    gestionale_data['turni'] = pd.concat([gestionale_data['turni'], nuovo_turno], ignore_index=True)
-                                    df_contatti = gestionale_data.get('contatti')
-                                    if df_contatti is not None:
-                                        utenti_da_notificare = df_contatti['Matricola'].tolist()
-                                        messaggio = f"📢 Nuovo turno disponibile: '{desc_turno}' il {pd.to_datetime(data_turno).strftime('%d/%m/%Y')}."
-                                        for matricola in utenti_da_notificare: crea_notifica(gestionale_data, matricola, messaggio)
-                                    if salva_gestionale_async(gestionale_data):
-                                        st.success(f"Turno '{desc_turno}' creato con successo! Notifiche inviate.")
-                                        st.rerun()
-                                    else: st.error("Errore nel salvataggio del nuovo turno.")
-                    with caposquadra_tabs[2]:
-                        st.subheader("Gestione Dati Avanzata")
-
-                        editor_tab, report_tab, sync_tab = st.tabs(["Editor Tabelle Database", "Gestione Report", "Sincronizzazione Manuale"])
-
-                        with editor_tab:
-                            st.subheader("Modifica Diretta Tabelle")
-                            st.warning("ATTENZIONE: La modifica diretta dei dati può causare instabilità. Procedere con cautela.")
-
-                            table_names = get_table_names()
-                            if table_names:
-                                selected_table = st.selectbox(
-                                    "Seleziona una tabella da modificare",
-                                    options=[""] + sorted(table_names),
-                                    key="db_editor_table_select"
-                                )
-
-                                if selected_table:
-                                    if st.session_state.get("current_table_for_editing") != selected_table:
-                                        st.session_state.current_table_for_editing = selected_table
-                                        with st.spinner(f"Caricamento dati da '{selected_table}'..."):
-                                            df = get_table_data(selected_table)
-                                            st.session_state.edited_df = df.copy()
-
-                                    if "edited_df" in st.session_state:
-                                        st.markdown(f"### Modifica Tabella: `{selected_table}`")
-
-                                        edited_df_from_editor = st.data_editor(
-                                            st.session_state.edited_df,
-                                            num_rows="dynamic",
-                                            key=f"editor_{selected_table}",
-                                            width='stretch'
-                                        )
-
-                                        if not st.session_state.edited_df.equals(edited_df_from_editor):
-                                            st.session_state.edited_df = edited_df_from_editor
-                                            st.rerun()
-
-                                        if st.button("Salva Modifiche", key=f"save_{selected_table}", type="primary"):
-                                            with st.spinner("Salvataggio in corso..."):
-                                                if save_table_data(st.session_state.edited_df, selected_table):
-                                                    st.success(f"Tabella `{selected_table}` aggiornata con successo!")
-                                                    del st.session_state.current_table_for_editing
-                                                    del st.session_state.edited_df
-                                                    st.rerun()
-                                                else:
-                                                    st.error("Errore durante il salvataggio dei dati.")
-                            else:
-                                st.error("Impossibile recuperare l'elenco delle tabelle dal database.")
-
-                        with report_tab:
-                            st.subheader("Gestione Ciclo di Vita dei Report")
-
-                            st.text_input("Cerca Report per ID", key="report_id_search")
-
-                            if st.session_state.report_id_search:
-                                report_id = st.session_state.report_id_search.strip()
-                                report_to_validate = get_report_by_id(report_id, "report_da_validare")
-                                report_validated = get_report_by_id(report_id, "report_interventi")
-
-                                if report_to_validate:
-                                    st.markdown(f"#### Dettagli Report `{report_id}`")
-                                    st.success("Stato: In Attesa di Validazione")
-                                    st.json(report_to_validate)
-
-                                    col1, col2 = st.columns(2)
-                                    if col1.button("Forza Validazione", key=f"force_validate_{report_id}", type="primary"):
-                                        if move_report_atomically(report_to_validate, "report_da_validare", "report_interventi"):
-                                            st.success(f"Report {report_id} spostato in 'report_interventi'.")
-                                            st.session_state.report_id_search = "" # Clear search
-                                            st.rerun()
-                                        else:
-                                            st.error("Errore durante lo spostamento del report.")
-
-                                    if col2.button("Cancella Definitivamente", key=f"delete_unvalidated_{report_id}"):
-                                        if delete_report_by_id(report_id, "report_da_validare"):
-                                            st.success(f"Report {report_id} cancellato da 'report_da_validare'.")
-                                            st.session_state.report_id_search = ""
-                                            st.rerun()
-                                        else:
-                                            st.error("Errore durante la cancellazione del report.")
-
-                                elif report_validated:
-                                    st.markdown(f"#### Dettagli Report `{report_id}`")
-                                    st.info("Stato: Validato")
-                                    st.json(report_validated)
-
-                                    col1, col2 = st.columns(2)
-                                    if col1.button("Annulla Validazione", key=f"revert_validation_{report_id}"):
-                                        if move_report_atomically(report_validated, "report_interventi", "report_da_validare"):
-                                            st.success(f"Report {report_id} spostato nuovamente in 'report_da_validare'.")
-                                            st.session_state.report_id_search = ""
-                                            st.rerun()
-                                        else:
-                                            st.error("Errore durante lo spostamento del report.")
-
-                                    if col2.button("Cancella Definitivamente", key=f"delete_validated_{report_id}"):
-                                        if delete_report_by_id(report_id, "report_interventi"):
-                                            st.success(f"Report {report_id} cancellato da 'report_interventi'.")
-                                            st.session_state.report_id_search = ""
-                                            st.rerun()
-                                        else:
-                                            st.error("Errore durante la cancellazione del report.")
-
-                                else:
-                                    st.warning(f"Nessun report trovato con ID `{report_id}` in nessuna delle tabelle di destinazione.")
-
-                        with sync_tab:
-                            st.subheader("Sincronizzazione Manuale DB-Excel")
-                            st.info("Questa operazione avvia la macro `AggiornaRisposte` nel file `Database_Report_Attivita.xlsm` per sincronizzare i dati.")
-                            if st.button("Avvia Sincronizzazione", type="primary"):
-                                with st.spinner("Esecuzione della macro in corso... L'operazione potrebbe richiedere alcuni minuti."):
-                                    try:
-                                        python_executable = sys.executable
-                                        script_path = os.path.join(os.path.dirname(__file__), "run_excel_macro.py")
-                                        result = subprocess.run(
-                                            [python_executable, script_path],
-                                            capture_output=True, text=True, check=True, encoding='utf-8'
-                                        )
-                                        st.success("Operazione completata con successo!")
-                                        st.code(result.stdout)
-                                    except FileNotFoundError:
-                                        st.error("Errore: Impossibile trovare lo script `run_excel_macro.py`.")
-                                    except subprocess.CalledProcessError as e:
-                                        st.error("Errore durante l'esecuzione dello script di sincronizzazione:")
-                                        st.code(e.stderr)
-                                    except Exception as e:
-                                        st.error(f"Si è verificato un errore imprevisto: {e}")
-
-                    with caposquadra_tabs[3]:
-                        validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
-                        with validation_tabs[0]:
-                            render_report_validation_tab(matricola_utente)
-                        with validation_tabs[1]:
-                            st.subheader("Validazione Relazioni Inviate")
-                            unvalidated_relazioni_df = get_unvalidated_relazioni()
-
-                            if unvalidated_relazioni_df.empty:
-                                st.success("🎉 Nessuna nuova relazione da validare al momento.")
-                            else:
-                                st.info(f"Ci sono {len(unvalidated_relazioni_df)} relazioni da validare.")
-
-                                # Convert date columns for better display in data_editor
-                                if 'data_intervento' in unvalidated_relazioni_df.columns:
-                                    unvalidated_relazioni_df['data_intervento'] = pd.to_datetime(unvalidated_relazioni_df['data_intervento'], errors='coerce').dt.strftime('%d/%m/%Y')
-                                if 'timestamp_invio' in unvalidated_relazioni_df.columns:
-                                    unvalidated_relazioni_df['timestamp_invio'] = pd.to_datetime(unvalidated_relazioni_df['timestamp_invio'], errors='coerce').dt.strftime('%d/%m/%Y %H:%M')
-
-
-                                edited_relazioni_df = st.data_editor(
-                                    unvalidated_relazioni_df,
-                                    num_rows="dynamic",
-                                    key="relazioni_editor",
-                                    width='stretch',
-                                    column_config={
-                                        "corpo_relazione": st.column_config.TextColumn(width="large"),
-                                        "id_relazione": st.column_config.Column(disabled=True),
-                                        "timestamp_invio": st.column_config.Column(disabled=True),
-                                    }
-                                )
-
-                                if st.button("✅ Salva Relazioni Validate", type="primary"):
-                                    with st.spinner("Salvataggio delle relazioni in corso..."):
-                                        if process_and_commit_validated_relazioni(edited_relazioni_df, matricola_utente):
-                                            st.success("Relazioni validate e salvate con successo!")
-                                            st.rerun()
-                                        else:
-                                            st.error("Si è verificato un errore durante il salvataggio delle relazioni.")
-                elif st.session_state.main_tab == "Sistema":
-                    tecnica_tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione IA"])
-                    with tecnica_tabs[0]: render_gestione_account(gestionale_data)
-                    with tecnica_tabs[1]:
-                        st.subheader("Cronologia Accessi")
-                        access_logs_df = gestionale_data.get('access_logs', pd.DataFrame())
-                        if access_logs_df.empty:
-                            st.info("Nessun log di accesso registrato.")
-                        else:
-                            st.dataframe(access_logs_df.sort_values(by="timestamp", ascending=False), width='stretch')
-                    with tecnica_tabs[2]:
-                        st.subheader("Gestione Intelligenza Artificiale")
-                        ia_sub_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
-                        with ia_sub_tabs[0]:
-                            st.markdown("### 🧠 Revisione Voci del Knowledge Core")
-                            unreviewed_entries = learning_module.load_unreviewed_knowledge()
-                            pending_entries = [e for e in unreviewed_entries if e.get('stato') == 'in attesa di revisione']
-                            if not pending_entries: st.success("🎉 Nessuna nuova voce da revisionare!")
-                            else: st.info(f"Ci sono {len(pending_entries)} nuove voci suggerite dai tecnici da revisionare.")
-                            for i, entry in enumerate(pending_entries):
-                                with st.expander(f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}", expanded=i==0):
-                                    st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {datetime.datetime.fromisoformat(entry['data_suggerimento']).strftime('%d/%m/%Y %H:%M')}*")
-                                    st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
-                                    st.write("**Dettagli del report compilato:**"); st.json(entry['dettagli_report'])
-                                    st.markdown("---"); st.markdown("**Azione di Integrazione**")
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        new_equipment_key = st.text_input("Nuova Chiave Attrezzatura (es. 'motore_elettrico')", key=f"key_{entry['id']}")
-                                        new_display_name = st.text_input("Nome Visualizzato (es. 'Motore Elettrico')", key=f"disp_{entry['id']}")
-                                    with col2:
-                                        if st.button("✅ Integra nel Knowledge Core", key=f"integrate_{entry['id']}", type="primary"):
-                                            if new_equipment_key and new_display_name:
-                                                first_question = {"id": "sintomo_iniziale", "text": "Qual era il sintomo principale?", "options": {k.lower().replace(' ', '_'): v for k, v in entry['dettagli_report'].items()}}
-                                                details = {"equipment_key": new_equipment_key, "display_name": new_display_name, "new_question": first_question}
-                                                result = learning_module.integrate_knowledge(entry['id'], details)
-                                                if result.get("success"): st.success(f"Voce '{entry['id']}' integrata con successo!"); st.cache_data.clear(); st.rerun()
-                                                else: st.error(f"Errore integrazione: {result.get('error')}")
-                                            else: st.warning("Per integrare, fornisci sia la chiave che il nome visualizzato.")
-                        with ia_sub_tabs[1]:
-                            st.subheader("Gestione Modello IA")
-                            st.info("Usa questo pulsante per aggiornare la base di conoscenza dell'IA con le nuove relazioni inviate. L'operazione potrebbe richiedere alcuni minuti.")
-                            if st.button("🧠 Aggiorna Memoria IA", type="primary"):
-                                with st.spinner("Ricostruzione dell'indice in corso..."):
-                                    result = learning_module.build_knowledge_base()
-                                if result.get("success"): st.success(result.get("message")); st.cache_data.clear()
-                                else: st.error(result.get("message"))
+            render_admin_dashboard(matricola_utente)
 
         st.markdown('</div>', unsafe_allow_html=True) # Close page-content
         st.markdown('</div>', unsafe_allow_html=True) # Close main-container
@@ -1066,15 +633,6 @@ if st.session_state.login_state == 'logged_in':
 else:
     st.set_page_config(layout="centered", page_title="Login")
     st.title("Accesso Area Gestionale")
-    
-    gestionale = carica_gestionale()
-    if not gestionale or 'contatti' not in gestionale:
-        st.error("Errore critico: impossibile caricare i dati degli utenti.")
-        st.stop()
-
-    df_contatti = gestionale['contatti']
-    # Assicura che la matricola sia una stringa per tutta la logica di login/2FA
-    df_contatti['Matricola'] = df_contatti['Matricola'].astype(str)
 
     if st.session_state.login_state == 'password':
         with st.form("login_form"):
@@ -1086,149 +644,110 @@ else:
                 if not matricola_inserita or not password_inserita:
                     st.warning("Per favore, inserisci Matricola e Password.")
                 else:
-                    status, user_data = authenticate_user(matricola_inserita, password_inserita, df_contatti)
+                    status, user_data = authenticate_user(matricola_inserita, password_inserita)
 
-                    # user_data ora contiene il nome_completo, non la matricola.
-                    # Usiamo la matricola_inserita, che è stata validata, per il session_state.
                     if status == "2FA_REQUIRED":
-                        log_access_attempt(gestionale, matricola_inserita, "Password corretta, 2FA richiesta")
-                        salva_gestionale_async(gestionale)
+                        log_access_attempt(matricola_inserita, "Password corretta, 2FA richiesta")
                         st.session_state.login_state = 'verify_2fa'
-                        st.session_state.temp_user_for_2fa = matricola_inserita # Salva la matricola
+                        st.session_state.temp_user_for_2fa = matricola_inserita
                         st.rerun()
                     elif status == "2FA_SETUP_REQUIRED":
-                        log_access_attempt(gestionale, matricola_inserita, "Password corretta, setup 2FA richiesto")
-                        salva_gestionale_async(gestionale)
+                        log_access_attempt(matricola_inserita, "Password corretta, setup 2FA richiesto")
                         st.session_state.login_state = 'setup_2fa'
-                        _, st.session_state.ruolo = user_data # user_data è (nome_completo, ruolo)
-                        st.session_state.temp_user_for_2fa = matricola_inserita # Salva la matricola
+                        _, st.session_state.ruolo = user_data
+                        st.session_state.temp_user_for_2fa = matricola_inserita
                         st.rerun()
-
                     elif status == "FIRST_LOGIN_SETUP":
                         nome_completo, ruolo, password_fornita = user_data
-                        hashed_password = bcrypt.hashpw(password_fornita.encode('utf-8'), bcrypt.gensalt())
+                        hashed_password = bcrypt.hashpw(password_fornita.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-                        # Se il dataframe contatti è vuoto, questo è il primo utente in assoluto.
-                        if df_contatti.empty:
+                        user_info = get_user_by_matricola(matricola_inserita)
+                        if not user_info: # First user ever
                             new_user_data = {
-                                'Matricola': str(matricola_inserita),
-                                'Nome Cognome': nome_completo,
-                                'Ruolo': ruolo,
-                                'PasswordHash': hashed_password.decode('utf-8'),
-                                'Link Attività': '',
-                                '2FA_Secret': None
+                                'Matricola': str(matricola_inserita), 'Nome Cognome': nome_completo,
+                                'Ruolo': ruolo, 'PasswordHash': hashed_password,
+                                'Link Attività': '', '2FA_Secret': None
                             }
-                            new_user_df = pd.DataFrame([new_user_data])
-                            gestionale['contatti'] = pd.concat([df_contatti, new_user_df], ignore_index=True)
-                        else:
-                            # Altrimenti, è un utente esistente che sta impostando la password per la prima volta.
-                            user_idx = df_contatti.index[df_contatti['Matricola'] == str(matricola_inserita)][0]
-                            df_contatti.loc[user_idx, 'PasswordHash'] = hashed_password.decode('utf-8')
+                            create_user(new_user_data)
+                        else: # Existing user, first login
+                            update_user(matricola_inserita, {'PasswordHash': hashed_password})
 
-                        # Salvataggio nel database
-                        if salva_gestionale_async(gestionale):
-                            st.success("Password creata con successo! Ora configura la sicurezza.")
-                            log_access_attempt(gestionale, matricola_inserita, "Primo login: Password creata")
-                            salva_gestionale_async(gestionale) # Salva anche il log
-
-                            # Procedi al setup della 2FA
-                            st.session_state.login_state = 'setup_2fa'
-                            st.session_state.temp_user_for_2fa = matricola_inserita
-                            st.session_state.ruolo = ruolo
-                            st.rerun()
-                        else:
-                            st.error("Errore critico: impossibile salvare la nuova password.")
-
+                        st.success("Password creata con successo! Ora configura la sicurezza.")
+                        log_access_attempt(matricola_inserita, "Primo login: Password creata")
+                        st.session_state.login_state = 'setup_2fa'
+                        st.session_state.temp_user_for_2fa = matricola_inserita
+                        st.session_state.ruolo = ruolo
+                        st.rerun()
                     else: # FAILED
-                        log_access_attempt(gestionale, matricola_inserita, "Credenziali non valide")
-                        salva_gestionale_async(gestionale)
+                        log_access_attempt(matricola_inserita, "Credenziali non valide")
                         st.error("Credenziali non valide.")
 
     elif st.session_state.login_state == 'setup_2fa':
         st.subheader("Configurazione Sicurezza Account (2FA)")
-        st.info("Per una maggiore sicurezza, è necessario configurare la verifica in due passaggi.")
+        # ... (il resto della logica 2FA rimane quasi invariata, ma usa le nuove funzioni)
+        matricola_to_setup = st.session_state.temp_user_for_2fa
+        user_info = get_user_by_matricola(matricola_to_setup)
+        user_name_for_display = user_info['Nome Cognome'] if user_info else "Utente"
 
         if not st.session_state.get('2fa_secret'):
             st.session_state['2fa_secret'] = generate_2fa_secret()
-
         secret = st.session_state['2fa_secret']
-        matricola_to_setup = st.session_state['temp_user_for_2fa']
-
-        # Recupera il nome utente per la visualizzazione
-        user_name_for_display = df_contatti[df_contatti['Matricola'] == str(matricola_to_setup)].iloc[0]['Nome Cognome']
 
         uri = get_provisioning_uri(user_name_for_display, secret)
         img = qrcode.make(uri)
         buf = io.BytesIO()
         img.save(buf, format='PNG')
         qr_bytes = buf.getvalue()
-
         st.image(qr_bytes)
-        st.markdown("1. Installa un'app di autenticazione (es. Google Authenticator, Microsoft Authenticator).")
-        st.markdown("2. Scansiona questo QR Code con l'app.")
-        st.markdown("3. Se non puoi scansionare, inserisci manualmente la seguente chiave:")
         st.code(secret)
 
         with st.form("verify_2fa_setup"):
-            code = st.text_input("Inserisci il codice a 6 cifre mostrato dall'app per verificare")
+            code = st.text_input("Inserisci il codice a 6 cifre per verificare")
             submitted = st.form_submit_button("Verifica e Attiva")
-
             if submitted:
                 if verify_2fa_code(secret, code):
-                    # Salva il segreto nel file gestionale
-                    user_idx = df_contatti[df_contatti['Matricola'] == str(matricola_to_setup)].index[0]
-                    if '2FA_Secret' not in df_contatti.columns:
-                        df_contatti['2FA_Secret'] = None
-                    df_contatti.loc[user_idx, '2FA_Secret'] = secret
-
-                    if salva_gestionale_async(gestionale):
-                        log_access_attempt(gestionale, matricola_to_setup, "Setup 2FA completato e login riuscito")
-                        salva_gestionale_async(gestionale) # Salva anche il log
-                        st.success("Configurazione 2FA completata con successo! Accesso in corso...")
+                    if update_user(matricola_to_setup, {'2FA_Secret': secret}):
+                        log_access_attempt(matricola_to_setup, "Setup 2FA completato e login riuscito")
+                        st.success("Configurazione 2FA completata! Accesso in corso...")
                         token = save_session(matricola_to_setup, st.session_state.ruolo)
-                        if token:
-                            st.session_state.login_state = 'logged_in'
-                            st.session_state.authenticated_user = matricola_to_setup
-                            st.session_state.session_token = token
-                            st.query_params['session_token'] = token
-                            st.rerun()
-                        else:
-                            st.error("Impossibile creare una sessione dopo la configurazione 2FA.")
+                        st.session_state.login_state = 'logged_in'
+                        st.session_state.authenticated_user = matricola_to_setup
+                        st.session_state.session_token = token
+                        st.query_params['session_token'] = token
+                        st.rerun()
                     else:
-                        st.error("Errore durante il salvataggio della configurazione. Riprova.")
+                        st.error("Errore durante il salvataggio della configurazione.")
                 else:
-                    log_access_attempt(gestionale, matricola_to_setup, "Setup 2FA fallito (codice non valido)")
-                    salva_gestionale_async(gestionale)
-                    st.error("Codice non valido. Riprova.")
+                    log_access_attempt(matricola_to_setup, "Setup 2FA fallito (codice non valido)")
+                    st.error("Codice non valido.")
 
     elif st.session_state.login_state == 'verify_2fa':
         st.subheader("Verifica in Due Passaggi")
         matricola_to_verify = st.session_state.temp_user_for_2fa
-        user_row = df_contatti[df_contatti['Matricola'] == str(matricola_to_verify)].iloc[0]
+        user_row = get_user_by_matricola(matricola_to_verify)
+
+        if not user_row or not user_row.get('2FA_Secret'):
+            st.error("Errore di configurazione 2FA. Contatta un amministratore.")
+            st.stop()
+
         secret = user_row['2FA_Secret']
         ruolo = user_row['Ruolo']
         nome_utente = user_row['Nome Cognome']
 
         with st.form("verify_2fa_login"):
-            code = st.text_input(f"Ciao {nome_utente.split()[0]}, inserisci il codice dalla tua app di autenticazione")
+            code = st.text_input(f"Ciao {nome_utente.split()[0]}, inserisci il codice di autenticazione")
             submitted = st.form_submit_button("Verifica")
-
             if submitted:
                 if verify_2fa_code(secret, code):
-                    log_access_attempt(gestionale, matricola_to_verify, "Login 2FA riuscito")
-                    salva_gestionale_async(gestionale)
+                    log_access_attempt(matricola_to_verify, "Login 2FA riuscito")
                     st.success("Codice corretto! Accesso in corso...")
                     token = save_session(matricola_to_verify, ruolo)
-                    if token:
-                        st.session_state.login_state = 'logged_in'
-                        st.session_state.authenticated_user = matricola_to_verify
-                        st.session_state.ruolo = ruolo
-                        st.session_state.session_token = token
-                        st.query_params['session_token'] = token
-                        st.rerun()
-                    else:
-                        st.error("Impossibile creare una sessione dopo la verifica 2FA.")
+                    st.session_state.login_state = 'logged_in'
+                    st.session_state.authenticated_user = matricola_to_verify
+                    st.session_state.ruolo = ruolo
+                    st.session_state.session_token = token
+                    st.query_params['session_token'] = token
+                    st.rerun()
                 else:
-                    log_access_attempt(gestionale, matricola_to_verify, "Login 2FA fallito (codice non valido)")
-                    salva_gestionale_async(gestionale)
-                    st.error("Codice non valido. Riprova.")
+                    log_access_attempt(matricola_to_verify, "Login 2FA fallito (codice non valido)")
+                    st.error("Codice non valido.")
