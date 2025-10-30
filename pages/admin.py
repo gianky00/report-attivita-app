@@ -414,17 +414,3 @@ def render_sistema_view():
                 else:
                     st.error(result.get("message"))
     st.markdown('</div>', unsafe_allow_html=True)
-# --- Funzione principale della dashboard Admin ---
-
-def render_admin_dashboard(matricola_utente):
-    st.subheader("Dashboard di Controllo")
-    if st.session_state.get('detail_technician_matricola'):
-        render_technician_detail_view()
-    else:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        main_admin_tabs = st.tabs(["Dashboard Caposquadra", "Dashboard Tecnica"])
-        with main_admin_tabs[0]:
-            render_caposquadra_view(matricola_utente)
-        with main_admin_tabs[1]:
-            render_sistema_view()
-        st.markdown('</div>', unsafe_allow_html=True)
