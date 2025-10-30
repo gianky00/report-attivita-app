@@ -281,8 +281,9 @@ def main_app(matricola_utente, ruolo):
         st.stop()
 
     today = datetime.date.today()
-    start_sync_date = today.replace(day=1)
-    end_sync_date = (start_sync_date + datetime.timedelta(days=35)).replace(day=1) + datetime.timedelta(days=31)
+    # Estende il periodo di sincronizzazione a 1 anno per coprire un orizzonte più ampio
+    start_sync_date = today - datetime.timedelta(days=180)
+    end_sync_date = today + datetime.timedelta(days=180)
 
     if sync_oncall_shifts(start_date=start_sync_date, end_date=end_sync_date):
         st.toast("Calendario reperibilità sincronizzato.")

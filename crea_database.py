@@ -27,6 +27,16 @@ warnings.filterwarnings(
 # --- CONFIGURAZIONE ---
 DB_NAME = "schedario.db"
 
+TECNICI = [
+    {'Matricola': '1', 'Nome Cognome': 'Mario Riciputo', 'Ruolo': 'Tecnico'},
+    {'Matricola': '2', 'Nome Cognome': 'Luca Guarino', 'Ruolo': 'Aiutante'},
+    {'Matricola': '3', 'Nome Cognome': 'Marco Spinali', 'Ruolo': 'Tecnico'},
+    {'Matricola': '4', 'Nome Cognome': 'Gianky Allegretti', 'Ruolo': 'Aiutante'},
+    {'Matricola': '5', 'Nome Cognome': 'Paolo Millo', 'Ruolo': 'Tecnico'},
+    {'Matricola': '6', 'Nome Cognome': 'Andrea Tarascio', 'Ruolo': 'Tecnico'},
+    {'Matricola': '7', 'Nome Cognome': 'Simone Partesano', 'Ruolo': 'Aiutante'},
+]
+
 def crea_tabelle_se_non_esistono():
     """
     Crea tutte le tabelle necessarie nel database se non esistono già.
@@ -204,6 +214,16 @@ def crea_tabelle_se_non_esistono():
                 print(f"Tabella '{nome_tabella}' non trovata. Creazione in corso...")
                 cursor.execute(f"CREATE TABLE {nome_tabella} {schema}")
                 print(f"Tabella '{nome_tabella}' creata.")
+
+        # Popola la tabella 'contatti' con i dati dei tecnici, se non sono già presenti
+        for tecnico in TECNICI:
+            cursor.execute("SELECT Matricola FROM contatti WHERE Matricola = ?", (tecnico['Matricola'],))
+            if cursor.fetchone() is None:
+                cursor.execute(
+                    "INSERT INTO contatti (Matricola, \"Nome Cognome\", Ruolo) VALUES (?, ?, ?)",
+                    (tecnico['Matricola'], tecnico['Nome Cognome'], tecnico['Ruolo'])
+                )
+                print(f"Aggiunto tecnico: {tecnico['Nome Cognome']}")
 
         conn.commit()
         print("Verifica e creazione tabelle completata.")
