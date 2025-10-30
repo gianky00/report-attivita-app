@@ -86,7 +86,7 @@ def sync_oncall_shifts(start_date, end_date):
 
     # Convert 'Data' column to date objects for comparison
     if not df_turni.empty:
-        df_turni['date_only'] = pd.to_datetime(df_turni['Data']).dt.date
+        df_turni['date_only'] = pd.to_datetime(df_turni['Data'], format='mixed', errors='coerce').dt.date
     else:
         df_turni['date_only'] = pd.Series(dtype='object')
 
