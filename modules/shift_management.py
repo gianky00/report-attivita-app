@@ -128,6 +128,35 @@ def sync_oncall_shifts(start_date, end_date):
 
     return changes_made
 
+def manual_override_logic(shift_id, new_tech1_matricola, new_tech2_matricola, admin_matricola):
+    """
+    Sovrascrive manualmente le prenotazioni per un turno di reperibilità.
+    """
+    conn = get_db_connection()
+    try:
+        with conn:
+            # 1. Rimuove le prenotazioni esistenti per questo turno
+            conn.execute("DELETE FROM prenotazioni WHERE ID_Turno = ?", (shift_id,))
+
+            # 2. Aggiunge le nuove prenotazioni
+            for i, tech_matricola in enumerate([new_tech1_matricola, new_tech2_matricola]):
+                user_info = get_user_by_matricola(tech_matricola)
+                role = user_info.get('Ruolo', 'Tecnico') if user_info else 'Tecnico'
+
+                new_booking = {
+                    'ID_Prenotazione': f"P_{shift_id}_{tech_matricola}_{i}",
+                    'ID_Turno': shift_id,
+                    'Matricola': tech_matricola,
+                    'RuoloOccupato': role,
+                    'Timestamp': datetime.datetime.now().isoformat()
+                }
+                add_booking(new_booking)
+
+        log_shift_change(shift_id, "Sovrascrittura Manuale", matricola_eseguito_da=admin_matricola)
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Errore durante la sovrascrittura manuale: {e}")
+        return False
 
 # --- LOGICA DI BUSINESS PER I TURNI STANDARD ---
 def prenota_turno_logic(matricola_utente, turno_id, ruolo_scelto):

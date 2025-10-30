@@ -9,7 +9,8 @@ from modules.shift_management import (
     richiedi_sostituzione_logic,
     rispondi_sostituzione_logic,
     pubblica_turno_in_bacheca_logic,
-    prendi_turno_da_bacheca_logic
+    prendi_turno_da_bacheca_logic,
+    manual_override_logic
 )
 from modules.db_manager import (
     get_shifts_by_type,
@@ -118,6 +119,34 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
     today = datetime.date.today()
 
     df_turni_reperibilita = get_shifts_by_type('Reperibilità')
+
+    if 'editing_oncall_shift_id' in st.session_state and st.session_state.editing_oncall_shift_id:
+        shift_id_to_edit = st.session_state.editing_oncall_shift_id
+        turno_info = get_shift_by_id(shift_id_to_edit)
+        with st.container(border=True):
+            st.subheader(f"Modifica Assegnazione per il {pd.to_datetime(turno_info['Data']).strftime('%d/%m/%Y')}")
+
+            all_users = get_all_users()
+            user_list = all_users['Matricola'].tolist()
+            user_dict = pd.Series(all_users['Nome Cognome'].values, index=all_users['Matricola']).to_dict()
+
+            new_tech1 = st.selectbox("Seleziona Tecnico 1:", options=user_list, format_func=lambda x: user_dict.get(x, x))
+            new_tech2 = st.selectbox("Seleziona Tecnico 2:", options=user_list, format_func=lambda x: user_dict.get(x, x), index=1 if len(user_list) > 1 else 0)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Salva Modifiche", type="primary"):
+                    if manual_override_logic(shift_id_to_edit, new_tech1, new_tech2, matricola_utente):
+                        st.success("Assegnazione modificata con successo!")
+                        del st.session_state.editing_oncall_shift_id
+                        st.rerun()
+                    else:
+                        st.error("Errore durante il salvataggio delle modifiche.")
+            with col2:
+                if st.button("Annulla"):
+                    del st.session_state.editing_oncall_shift_id
+                    st.rerun()
+        st.stop()
 
     if 'managing_oncall_shift_id' in st.session_state and st.session_state.managing_oncall_shift_id:
         shift_id_to_manage = st.session_state.managing_oncall_shift_id
@@ -242,9 +271,7 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
                         technician_matricola = str(booking['Matricola'])
                         technician_name = matricola_to_name.get(technician_matricola, f"Matricola {technician_matricola}")
                         surname = technician_name.split()[-1].upper()
-                        role = booking.get('RuoloOccupato', 'N/D')
-                        display_text = f"{surname} ({role})"
-                        tech_display_list.append(display_text)
+                        tech_display_list.append(surname)
                         if technician_matricola == str(matricola_utente):
                             user_is_on_call = True
                     if tech_display_list:
@@ -273,10 +300,17 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
 
             can_manage = (user_is_on_call or ruolo_utente == "Amministratore") and shift_id_today
             if can_manage:
-                if st.button("Gestisci", key=f"manage_{day}", width='stretch'):
-                    st.session_state.managing_oncall_shift_id = shift_id_today
-                    st.session_state.managing_oncall_user_matricola = managed_user_matricola
-                    st.rerun()
+                cols = st.columns(2)
+                with cols[0]:
+                    if st.button("Gestisci", key=f"manage_{day}"):
+                        st.session_state.managing_oncall_shift_id = shift_id_today
+                        st.session_state.managing_oncall_user_matricola = managed_user_matricola
+                        st.rerun()
+                with cols[1]:
+                    if ruolo_utente == "Amministratore":
+                        if st.button("Modifica", key=f"edit_{day}"):
+                            st.session_state.editing_oncall_shift_id = shift_id_today
+                            st.rerun()
 
 def render_gestione_turni_tab(matricola_utente, ruolo):
     st.subheader("Gestione Turni")
