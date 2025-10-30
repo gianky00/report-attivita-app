@@ -393,13 +393,13 @@ def main_app(matricola_utente, ruolo):
 
         st.markdown('<div class="page-content">', unsafe_allow_html=True)
 
+        df_contatti = get_all_users()
+
         if selected_tab == "Attività Assegnate":
             sub_tab_list = ["Attività di Oggi", "Recupero Attività", "Attività Validate"]
             if ruolo in ["Tecnico", "Amministratore"]:
                 sub_tab_list.append("Compila Relazione")
             sub_tabs = st.tabs(sub_tab_list)
-
-            df_contatti = get_all_users()
 
             with sub_tabs[0]:
                 st.subheader(f"Attività del {oggi.strftime('%d/%m/%Y')}")
