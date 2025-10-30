@@ -36,7 +36,8 @@ from modules.auth import (
 from modules.data_manager import (
     carica_knowledge_core,
     scrivi_o_aggiorna_risposta,
-    trova_attivita
+    trova_attivita,
+    _carica_giornaliera_mese
 )
 from modules.db_manager import (
     get_shifts_by_type, get_reports_to_validate, delete_reports_by_ids,
@@ -326,6 +327,7 @@ def main_app(matricola_utente, ruolo):
             if st.button("📝 Attività Assegnate", use_container_width=True):
                 st.session_state.main_tab = "Attività Assegnate"
                 st.session_state.navigated = True
+                _carica_giornaliera_mese.clear()
                 st.rerun()
 
             if st.button("🗂️ Storico", use_container_width=True):
