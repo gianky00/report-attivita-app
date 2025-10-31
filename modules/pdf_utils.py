@@ -43,17 +43,15 @@ def generate_on_call_pdf(data, month_name, year):
         df_data = pd.DataFrame(data)
         df_data['Data'] = pd.to_datetime(df_data['Data'])
 
-        # Pivot dei dati per avere Persona 1 e Persona 2 sulla stessa riga
-        df_pivot = df_data.pivot_table(index='Data', values='Nome Cognome', aggfunc=lambda x: list(x)).reset_index()
+        # Pivot dei dati per avere Persona 1 (Tecnico) e Persona 2 (Aiutante) sulla stessa riga
+        df_pivot = df_data.pivot_table(index='Data', columns='RuoloOccupato', values='Nome Cognome', aggfunc='first').reset_index()
 
-        def assign_persons(row):
-            persons = row['Nome Cognome']
-            p1 = persons[0] if len(persons) > 0 else ''
-            p2 = persons[1] if len(persons) > 1 else ''
-            return pd.Series([p1, p2])
-
-        df_pivot[['Persona 1', 'Persona 2']] = df_pivot.apply(assign_persons, axis=1)
-        df_pivot = df_pivot.drop(columns=['Nome Cognome'])
+        # Rinomina le colonne se esistono, altrimenti creale vuote
+        df_pivot = df_pivot.rename(columns={'Tecnico': 'Persona 1', 'Aiutante': 'Persona 2'})
+        if 'Persona 1' not in df_pivot:
+            df_pivot['Persona 1'] = ''
+        if 'Persona 2' not in df_pivot:
+            df_pivot['Persona 2'] = ''
 
         # Unisci i dati di reperibilità con il calendario completo del mese
         df_final = pd.merge(df_month, df_pivot, on='Data', how='left').fillna('')
