@@ -70,7 +70,7 @@ def generate_on_call_pdf(data, month_name, year):
     pdf.ln(5)
 
     # Definisci l'altezza della cella più piccola per compattare la tabella
-    cell_height = 8
+    cell_height = 7
 
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(30, cell_height, 'Data', 1, 0, 'C')
