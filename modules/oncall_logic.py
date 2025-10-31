@@ -44,3 +44,40 @@ def get_on_call_pair(current_date):
     rotation_index = week_difference % len(ON_CALL_ROTATION)
 
     return ON_CALL_ROTATION[rotation_index]
+
+def get_next_on_call_week(user_surname, start_date=None):
+    """
+    Trova la prossima settimana in cui un utente è di reperibilità.
+
+    Args:
+        user_surname (str): Il cognome dell'utente da cercare.
+        start_date (datetime.date, optional): La data da cui iniziare la ricerca.
+                                             Default a oggi.
+
+    Returns:
+        datetime.date or None: La data di inizio della settimana di reperibilità (lunedì),
+                               o None se non trovata entro un anno.
+    """
+    if not user_surname:
+        return None
+
+    if start_date is None:
+        start_date = datetime.date.today()
+
+    # Cerca per un massimo di 365 giorni per evitare cicli infiniti
+    for i in range(365):
+        current_date = start_date + datetime.timedelta(days=i)
+
+        # Il cambio turno è di venerdì, cerchiamo solo una volta a settimana
+        if current_date.weekday() != 4: # 4 = Venerdì
+            continue
+
+        pair = get_on_call_pair(current_date)
+        surnames_in_pair = [p[0].upper() for p in pair]
+
+        if user_surname.upper() in surnames_in_pair:
+            # Restituisce l'inizio della settimana (lunedì) per coerenza di visualizzazione
+            start_of_week = current_date - datetime.timedelta(days=current_date.weekday())
+            return start_of_week
+
+    return None
