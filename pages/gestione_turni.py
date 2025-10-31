@@ -1,8 +1,11 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import subprocess
+import os
 
 # Importa le funzioni logiche necessarie dai moduli
+from modules.pdf_utils import generate_on_call_pdf
 from modules.shift_management import (
     prenota_turno_logic,
     cancella_prenotazione_logic,
@@ -223,6 +226,51 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
             st.rerun()
 
     st.divider()
+
+    # Pulsante per esportare il PDF
+    if st.button("Esporta PDF", use_container_width=True):
+        month_name = selected_month
+        month_number = MESI_ITALIANI.index(month_name) + 1
+
+        # Filtra i turni per il mese e anno selezionati
+        oncall_shifts_df = df_turni_reperibilita.copy()
+        oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'])
+
+        monthly_shifts = oncall_shifts_df[
+            (oncall_shifts_df['Data'].dt.month == month_number) &
+            (oncall_shifts_df['Data'].dt.year == selected_year)
+        ]
+
+        # Prepara i dati per il PDF
+        bookings_for_month = df_prenotazioni[df_prenotazioni['ID_Turno'].isin(monthly_shifts['ID_Turno'])]
+
+        if not bookings_for_month.empty:
+            merged_data = pd.merge(bookings_for_month, df_contatti, on='Matricola')
+            merged_data = pd.merge(merged_data, monthly_shifts, on='ID_Turno')
+
+            pdf_data = merged_data[['Data', 'Nome Cognome', 'RuoloOccupato']].to_dict('records')
+
+            # Genera il PDF
+            pdf_path = generate_on_call_pdf(pdf_data, month_name, selected_year)
+
+            if pdf_path:
+                # Invia l'email con il PDF in allegato
+                subject = f"Report Reperibilità {month_name} {selected_year}"
+                body = f"In allegato il report della reperibilità per il mese di {month_name} {selected_year}."
+
+                try:
+                    subprocess.run(["python", "send_email_subprocess.py", subject, body, pdf_path], check=True)
+                    st.success("Email con il report PDF inviata con successo!")
+
+                    # Rimuovi il file PDF dopo l'invio
+                    os.remove(pdf_path)
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    st.error(f"Errore durante l'invio dell'email: {e}")
+
+            else:
+                st.warning("Nessun dato di reperibilità da esportare per il mese selezionato.")
+        else:
+            st.warning("Nessuna prenotazione trovata per il mese selezionato.")
 
     # Interfaccia di navigazione settimanale compatta
     nav_cols = st.columns([1, 10, 1])
