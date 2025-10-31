@@ -55,7 +55,7 @@ def get_next_on_call_week(user_surname, start_date=None):
                                              Default a oggi.
 
     Returns:
-        datetime.date or None: La data di inizio della settimana di reperibilità (lunedì),
+        datetime.date or None: La data di inizio del blocco di reperibilità (Venerdì),
                                o None se non trovata entro un anno.
     """
     if not user_surname:
@@ -68,7 +68,7 @@ def get_next_on_call_week(user_surname, start_date=None):
     for i in range(365):
         current_date = start_date + datetime.timedelta(days=i)
 
-        # Il cambio turno è di venerdì, cerchiamo solo una volta a settimana
+        # Il cambio turno è di venerdì, quindi la nostra data di inizio del blocco è sempre un venerdì
         if current_date.weekday() != 4: # 4 = Venerdì
             continue
 
@@ -76,8 +76,7 @@ def get_next_on_call_week(user_surname, start_date=None):
         surnames_in_pair = [p[0].upper() for p in pair]
 
         if user_surname.upper() in surnames_in_pair:
-            # Restituisce l'inizio della settimana (lunedì) per coerenza di visualizzazione
-            start_of_week = current_date - datetime.timedelta(days=current_date.weekday())
-            return start_of_week
+            # La data corrente è già il venerdì che stavamo cercando.
+            return current_date
 
     return None
