@@ -256,12 +256,12 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
 
                 if pdf_path:
                     # Invia l'email con il PDF in allegato
-                    subject = f"Report Reperibilità {month_name} {selected_year}"
-                    body = f"In allegato il report della reperibilità per il mese di {month_name} {selected_year}."
+                    subject = f"reperibilità strumentale ISAB SUD {month_name.lower()} {selected_year}"
+                    body = f"In allegato si trasmette la reperibilità strumentale ISAB SUD per il mese di {month_name.lower()} {selected_year}."
 
                     try:
                         subprocess.run(["python", "send_email_subprocess.py", subject, body, pdf_path], check=True)
-                        st.success("Email con il report PDF inviata con successo!")
+                        st.success("Bozza dell'email creata con successo in Outlook!")
 
                         # Rimuovi il file PDF dopo l'invio
                         os.remove(pdf_path)

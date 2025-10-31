@@ -12,7 +12,7 @@ class PDF(FPDF):
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
+        self.cell(0, 10, 'Pagina 1 di 1', 0, 0, 'R')
 
 def generate_on_call_pdf(data, month_name, year):
     # Mappa i mesi dall'italiano all'inglese per la compatibilità con il modulo calendar
