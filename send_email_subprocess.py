@@ -3,8 +3,9 @@ import sys
 import toml
 import pythoncom
 import win32com.client as win32
+import os
 
-def send_email(subject, html_body):
+def send_email(subject, html_body, attachment_path=None):
     """
     This function runs in a separate process to send an email via Outlook,
     avoiding COM threading issues with the main Streamlit application.
@@ -29,12 +30,16 @@ def send_email(subject, html_body):
         mail.CC = ";".join(email_cc)  # Outlook expects a semicolon-separated string for CC
         mail.Subject = subject
         mail.HTMLBody = html_body
+
+        if attachment_path and os.path.exists(attachment_path):
+            mail.Attachments.Add(os.path.abspath(attachment_path))
+
         mail.Send()
         print(f"Subprocess: Email '{subject}' sent successfully.")
     except Exception as e:
         # Log the error to a file for better debugging
         with open("email_error.log", "a") as f:
-            f.write(f"Error sending email: {e}\n")
+            f.write(f"Error sending email: {e}\\n")
         print(f"Subprocess Error: Could not send email. Details logged to email_error.log.")
     finally:
         if mail:
@@ -44,10 +49,12 @@ def send_email(subject, html_body):
         pythoncom.CoUninitialize()
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python send_email_subprocess.py <subject> <body>")
+    if len(sys.argv) < 3:
+        print("Usage: python send_email_subprocess.py <subject> <body> [attachment_path]")
         sys.exit(1)
 
     subject_arg = sys.argv[1]
     body_arg = sys.argv[2]
-    send_email(subject_arg, body_arg)
+    attachment_arg = sys.argv[3] if len(sys.argv) > 3 else None
+
+    send_email(subject_arg, body_arg, attachment_arg)
