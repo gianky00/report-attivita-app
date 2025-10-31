@@ -234,7 +234,7 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
 
         # Filtra i turni per il mese e anno selezionati
         oncall_shifts_df = df_turni_reperibilita.copy()
-        oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'])
+        oncall_shifts_df['Data'] = pd.to_datetime(oncall_shifts_df['Data'], format='mixed', errors='coerce')
 
         monthly_shifts = oncall_shifts_df[
             (oncall_shifts_df['Data'].dt.month == month_number) &

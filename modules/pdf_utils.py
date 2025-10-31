@@ -34,8 +34,12 @@ def generate_on_call_pdf(data, month, year):
 
     # Create a DataFrame from the data
     df = pd.DataFrame(data)
-    df['Data'] = pd.to_datetime(df['Data']).dt.strftime('%d/%m/%Y')
+    # Ensure 'Data' is in datetime format and sort chronologically
+    df['Data'] = pd.to_datetime(df['Data'])
     df = df.sort_values(by='Data')
+
+    # Now format the date to string for display in the PDF
+    df['Data'] = df['Data'].dt.strftime('%d/%m/%Y')
 
     for index, row in df.iterrows():
         pdf.cell(40, 10, str(row['Data']), 1)
