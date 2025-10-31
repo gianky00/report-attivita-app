@@ -112,7 +112,8 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
         datetime.date(2025, 1, 1), datetime.date(2025, 1, 6), datetime.date(2025, 4, 20),
         datetime.date(2025, 4, 21), datetime.date(2025, 4, 25), datetime.date(2025, 5, 1),
         datetime.date(2025, 6, 2), datetime.date(2025, 8, 15), datetime.date(2025, 11, 1),
-        datetime.date(2025, 12, 8), datetime.date(2025, 12, 25), datetime.date(2025, 12, 26),
+        datetime.date(2025, 12, 8), datetime.date(2025, 12, 13), # Santa Lucia
+        datetime.date(2025, 12, 25), datetime.date(2025, 12, 26),
     ]
     WEEKDAY_NAMES_IT = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"]
     MESI_ITALIANI = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
@@ -205,40 +206,54 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
     if 'week_start_date' not in st.session_state:
         st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
 
-    # Filtri per mese e anno
-    filter_cols = st.columns(2)
+    # Filtri per mese e anno e pulsanti di azione
+    filter_cols = st.columns([2, 2, 3, 3])
     with filter_cols[0]:
-        selected_year = st.selectbox("Anno", list(range(today.year - 2, today.year + 3)), index=2)
+        selected_year = st.selectbox("Anno", list(range(today.year - 2, today.year + 3)), index=2, label_visibility="collapsed")
     with filter_cols[1]:
-        selected_month = st.selectbox("Mese", MESI_ITALIANI, index=today.month - 1)
-
-    if st.button("Vai al mese selezionato"):
-        first_day_of_month = datetime.date(selected_year, MESI_ITALIANI.index(selected_month) + 1, 1)
-        st.session_state.week_start_date = first_day_of_month - datetime.timedelta(days=first_day_of_month.weekday())
-        st.rerun()
+        selected_month = st.selectbox("Mese", MESI_ITALIANI, index=today.month - 1, label_visibility="collapsed")
+    with filter_cols[2]:
+        if st.button("Vai al mese", use_container_width=True):
+            first_day_of_month = datetime.date(selected_year, MESI_ITALIANI.index(selected_month) + 1, 1)
+            st.session_state.week_start_date = first_day_of_month - datetime.timedelta(days=first_day_of_month.weekday())
+            st.rerun()
+    with filter_cols[3]:
+        if st.button("Sett. Corrente", use_container_width=True):
+            st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
+            st.rerun()
 
     st.divider()
 
-    # Interfaccia di navigazione settimanale
-    nav_cols = st.columns([1, 4, 1, 2])
+    # Interfaccia di navigazione settimanale compatta
+    nav_cols = st.columns([1, 10, 1])
     with nav_cols[0]:
-        if st.button("⬅️"):
+        if st.button("⬅️", use_container_width=True):
             st.session_state.week_start_date -= datetime.timedelta(days=7)
             st.rerun()
 
     with nav_cols[1]:
-        start_date_str = st.session_state.week_start_date.strftime("%d %b")
-        end_date_str = (st.session_state.week_start_date + datetime.timedelta(days=6)).strftime("%d %b %Y")
+        start_date = st.session_state.week_start_date
+        end_date = start_date + datetime.timedelta(days=6)
+
+        # Formattazione con mese in italiano
+        start_month_it = MESI_ITALIANI[start_date.month - 1][:3]
+        end_month_it = MESI_ITALIANI[end_date.month - 1][:3]
+
+        if start_date.year != end_date.year:
+             start_date_str = f"{start_date.day} {start_month_it} {start_date.year}"
+             end_date_str = f"{end_date.day} {end_month_it} {end_date.year}"
+        elif start_date.month != end_date.month:
+            start_date_str = f"{start_date.day} {start_month_it}"
+            end_date_str = f"{end_date.day} {end_month_it} {end_date.year}"
+        else:
+            start_date_str = f"{start_date.day}"
+            end_date_str = f"{end_date.day} {end_month_it} {end_date.year}"
+
         st.markdown(f"<h5 style='text-align: center; white-space: nowrap;'>{start_date_str} - {end_date_str}</h5>", unsafe_allow_html=True)
 
     with nav_cols[2]:
-        if st.button("➡️"):
+        if st.button("➡️", use_container_width=True):
             st.session_state.week_start_date += datetime.timedelta(days=7)
-            st.rerun()
-
-    with nav_cols[3]:
-        if st.button("Sett. Corrente"):
-            st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
             st.rerun()
 
     st.divider()
@@ -253,11 +268,13 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
     for i, day in enumerate(week_dates):
         with cols[i]:
             is_today = (day == today)
-            is_weekend = day.weekday() in [5, 6]
+            is_sunday = day.weekday() == 6
             is_holiday = day in HOLIDAYS_2025
+            is_special_day = is_sunday or is_holiday
+
             border_style = "2px solid #007bff" if is_today else "1px solid #d3d3d3"
-            day_color = "red" if is_holiday else "inherit"
-            background_color = "#e0f7fa" if is_today else ("#fff0f0" if is_weekend else "white")
+            day_color = "red" if is_special_day else "inherit"
+            background_color = "#e0f7fa" if is_today else ("#fff0f0" if is_special_day else "white")
 
             technicians_html = ""
             shift_today = oncall_shifts_df[oncall_shifts_df['date_only'] == day]
@@ -305,15 +322,15 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
 
             can_manage = (user_is_on_call or ruolo_utente == "Amministratore") and shift_id_today
             if can_manage:
-                btn_cols = st.columns(2)
-                with btn_cols[0]:
-                    if st.button("Gestisci", key=f"manage_{day}"):
+                action_cols = st.columns(2)
+                with action_cols[0]:
+                    if st.button("Gestisci", key=f"manage_{day}", use_container_width=True):
                         st.session_state.managing_oncall_shift_id = shift_id_today
                         st.session_state.managing_oncall_user_matricola = managed_user_matricola
                         st.rerun()
-                with btn_cols[1]:
+                with action_cols[1]:
                     if ruolo_utente == "Amministratore":
-                        if st.button("Modifica", key=f"edit_{day}"):
+                        if st.button("Modifica", key=f"edit_{day}", use_container_width=True):
                             st.session_state.editing_oncall_shift_id = shift_id_today
                             st.rerun()
 
