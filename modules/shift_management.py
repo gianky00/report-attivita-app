@@ -64,18 +64,12 @@ def find_matricola_by_surname(df_contatti, surname_to_find):
 
     surname_upper = surname_to_find.upper()
 
-    # 1. Cerca una corrispondenza esatta del cognome
+    # Cerca una corrispondenza esatta del cognome
     for _, row in df_contatti.iterrows():
         full_name = row.get("Nome Cognome")
         if isinstance(full_name, str) and full_name.strip():
+            # Assumiamo che il cognome sia l'ultima parola nel nome completo
             if full_name.strip().upper().split()[-1] == surname_upper:
-                return str(row.get("Matricola"))
-
-    # 2. Fallback a 'contains'
-    for _, row in df_contatti.iterrows():
-        full_name = row.get("Nome Cognome")
-        if isinstance(full_name, str) and full_name.strip():
-            if surname_upper in full_name.strip().upper():
                 return str(row.get("Matricola"))
     return None
 
