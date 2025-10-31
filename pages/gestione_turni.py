@@ -220,9 +220,9 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
     st.divider()
 
     # Interfaccia di navigazione settimanale
-    nav_cols = st.columns([1, 2, 1])
+    nav_cols = st.columns([1, 4, 1, 2])
     with nav_cols[0]:
-        if st.button("<"):
+        if st.button("⬅️"):
             st.session_state.week_start_date -= datetime.timedelta(days=7)
             st.rerun()
 
@@ -232,8 +232,13 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
         st.markdown(f"<h5 style='text-align: center; white-space: nowrap;'>{start_date_str} - {end_date_str}</h5>", unsafe_allow_html=True)
 
     with nav_cols[2]:
-        if st.button(">"):
+        if st.button("➡️"):
             st.session_state.week_start_date += datetime.timedelta(days=7)
+            st.rerun()
+
+    with nav_cols[3]:
+        if st.button("Sett. Corrente"):
+            st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
             st.rerun()
 
     st.divider()

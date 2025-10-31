@@ -48,6 +48,7 @@ from modules.db_manager import (
     get_last_login, count_unread_notifications
 )
 from learning_module import load_report_knowledge_base, get_report_knowledge_base_count
+from modules.oncall_logic import get_next_on_call_week
 from modules.shift_management import (
     sync_oncall_shifts,
     log_shift_change,
@@ -317,6 +318,13 @@ def main_app(matricola_utente, ruolo):
 
             user_notifications = leggi_notifiche(matricola_utente)
             render_notification_center(user_notifications, matricola_utente)
+
+            # Mostra la prossima settimana di reperibilità
+            user_surname = nome_utente_autenticato.split()[-1]
+            next_oncall_week_start = get_next_on_call_week(user_surname)
+            if next_oncall_week_start:
+                week_end = next_oncall_week_start + datetime.timedelta(days=6)
+                st.info(f"Prossima Reperibilità:\n{next_oncall_week_start.strftime('%d/%m')} - {week_end.strftime('%d/%m/%Y')}")
 
             last_login = get_last_login(matricola_utente)
             if last_login:
