@@ -67,7 +67,6 @@ def generate_on_call_pdf(data, month_name, year):
 
     pdf.set_font('Arial', 'B', 14)
     pdf.cell(0, 10, f'REP.STRUM. ISAB SUD {month_name.upper()} {year}', 0, 1, 'C')
-    pdf.ln(5)
 
     # Definisci l'altezza della cella più piccola per compattare la tabella
     cell_height = 7
