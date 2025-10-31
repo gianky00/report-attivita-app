@@ -321,10 +321,11 @@ def main_app(matricola_utente, ruolo):
 
             # Mostra la prossima settimana di reperibilità
             user_surname = nome_utente_autenticato.split()[-1]
-            next_oncall_week_start = get_next_on_call_week(user_surname)
-            if next_oncall_week_start:
-                week_end = next_oncall_week_start + datetime.timedelta(days=6)
-                st.info(f"Prossima Reperibilità:\n{next_oncall_week_start.strftime('%d/%m')} - {week_end.strftime('%d/%m/%Y')}")
+            next_oncall_start = get_next_on_call_week(user_surname)
+            if next_oncall_start:
+                # Il turno dura 7 giorni, quindi finisce 6 giorni dopo l'inizio.
+                next_oncall_end = next_oncall_start + datetime.timedelta(days=6)
+                st.info(f"Prossima Reperibilità:\n{next_oncall_start.strftime('%d/%m')} - {next_oncall_end.strftime('%d/%m/%Y')}")
 
             last_login = get_last_login(matricola_utente)
             if last_login:
