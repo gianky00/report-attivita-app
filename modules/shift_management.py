@@ -82,7 +82,9 @@ def sync_oncall_shifts(start_date, end_date):
 
     # Convert 'Data' column to date objects for comparison
     if not df_turni.empty:
-        df_turni['date_only'] = pd.to_datetime(df_turni['Data'], format='mixed', errors='coerce').dt.date
+        # Using dayfirst=True ensures that ambiguous dates like '01/10/2025' are parsed as DD/MM (1st Oct)
+        # and not MM/DD (10th Jan). ISO dates ('YYYY-MM-DD') are parsed correctly regardless.
+        df_turni['date_only'] = pd.to_datetime(df_turni['Data'], errors='coerce', dayfirst=True).dt.date
     else:
         df_turni['date_only'] = pd.Series(dtype='object')
 
