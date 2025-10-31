@@ -6,10 +6,10 @@ ANCHOR_DATE = datetime.date(2025, 11, 28)
 # Sequenza ciclica di 4 coppie di reperibilità.
 # Ogni coppia è una tupla che contiene due tuple: (COGNOME, RUOLO)
 ON_CALL_ROTATION = [
-    (("RICIPUTO", "Tecnico"), ("GUARINO", "Aiutante")),    # Coppia 1
-    (("SPINALI", "Tecnico"), ("ALLEGRETTI", "Aiutante")),  # Coppia 2
-    (("MILLO", "Tecnico"), ("GUARINO", "Aiutante")),      # Coppia 3
-    (("TARASCIO", "Tecnico"), ("PARTESANO", "Aiutante")),  # Coppia 4
+    (("RICIPUTO", "Tecnico"), ("GUARINO", "Aiutante")),    # Andrea Riciputo, Riccardo Guarino
+    (("SPINALI", "Tecnico"), ("ALLEGRETTI", "Aiutante")),  # Domenico Spinali, Giancarlo Allegretti
+    (("MILLO", "Tecnico"), ("GUARINO", "Aiutante")),      # Francesco Millo, Riccardo Guarino
+    (("TARASCIO", "Tecnico"), ("PARTESANO", "Aiutante")),  # Benito Tarascio, Vincenzo Partesano
 ]
 
 def get_on_call_pair(current_date):
