@@ -34,8 +34,9 @@ def send_email(subject, html_body, attachment_path=None):
         if attachment_path and os.path.exists(attachment_path):
             mail.Attachments.Add(os.path.abspath(attachment_path))
 
-        mail.Send()
-        print(f"Subprocess: Email '{subject}' sent successfully.")
+        mail.Save()
+        mail.Display()
+        print(f"Subprocess: Email draft '{subject}' created successfully.")
     except Exception as e:
         # Log the error to a file for better debugging
         with open("email_error.log", "a") as f:

@@ -12,7 +12,7 @@ class PDF(FPDF):
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
+        self.cell(0, 10, 'Pagina 1 di 1', 0, 0, 'R')
 
 def generate_on_call_pdf(data, month_name, year):
     # Mappa i mesi dall'italiano all'inglese per la compatibilità con il modulo calendar
@@ -67,10 +67,9 @@ def generate_on_call_pdf(data, month_name, year):
 
     pdf.set_font('Arial', 'B', 14)
     pdf.cell(0, 10, f'REP.STRUM. ISAB SUD {month_name.upper()} {year}', 0, 1, 'C')
-    pdf.ln(5)
 
     # Definisci l'altezza della cella più piccola per compattare la tabella
-    cell_height = 8
+    cell_height = 7
 
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(30, cell_height, 'Data', 1, 0, 'C')
