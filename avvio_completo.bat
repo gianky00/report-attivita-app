@@ -32,8 +32,8 @@ START "Ngrok" cmd /c "ngrok http --domain opencircuit-grimily-mirta.ngrok-free.a
 
 REM --- Attende qualche secondo per dare a ngrok il tempo di avviarsi e creare l'API ---
 echo.
-echo Attendo 10 secondi per la stabilizzazione di ngrok...
-timeout /t 10 /nobreak >nul
+echo Attendo 1 secondo per la stabilizzazione di ngrok...
+timeout /t 1 /nobreak >nul
 
 REM --- Step 6 (genera_link.py) rimosso in quanto non più necessario. Il link ngrok è ora statico. ---
 
