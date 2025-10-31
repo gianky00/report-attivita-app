@@ -15,8 +15,21 @@ class PDF(FPDF):
         self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
 
 def generate_on_call_pdf(data, month_name, year):
+    # Mappa i mesi dall'italiano all'inglese per la compatibilità con il modulo calendar
+    italian_to_english_month = {
+        "gennaio": "January", "febbraio": "February", "marzo": "March",
+        "aprile": "April", "maggio": "May", "giugno": "June",
+        "luglio": "July", "agosto": "August", "settembre": "September",
+        "ottobre": "October", "novembre": "November", "dicembre": "December"
+    }
+
+    english_month_name = italian_to_english_month.get(month_name.lower())
+    if not english_month_name:
+        # Fallback nel caso in cui il nome del mese non sia valido
+        return None
+
     # Ottieni il numero del mese dal nome
-    month_number = list(calendar.month_name).index(month_name.capitalize())
+    month_number = list(calendar.month_name).index(english_month_name)
 
     # Crea un range di date per l'intero mese
     num_days = calendar.monthrange(year, month_number)[1]
