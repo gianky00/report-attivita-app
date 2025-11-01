@@ -323,9 +323,16 @@ def main_app(matricola_utente, ruolo):
             user_surname = nome_utente_autenticato.split()[-1]
             next_oncall_start = get_next_on_call_week(user_surname)
             if next_oncall_start:
-                # Il turno dura 7 giorni, quindi finisce 6 giorni dopo l'inizio.
                 next_oncall_end = next_oncall_start + datetime.timedelta(days=6)
-                st.info(f"Prossima Reperibilità:\n{next_oncall_start.strftime('%d/%m')} - {next_oncall_end.strftime('%d/%m/%Y')}")
+                today = datetime.date.today()
+
+                # Controlla se oggi rientra nella settimana di reperibilità
+                if next_oncall_start <= today <= next_oncall_end:
+                    message = f"Sei reperibile dal:\n{next_oncall_start.strftime('%d/%m')} - {next_oncall_end.strftime('%d/%m/%Y')}"
+                else:
+                    message = f"Prossima Reperibilità:\n{next_oncall_start.strftime('%d/%m')} - {next_oncall_end.strftime('%d/%m/%Y')}"
+
+                st.info(message)
 
             last_login = get_last_login(matricola_utente)
             if last_login:
