@@ -81,8 +81,9 @@ def disegna_sezione_attivita(lista_attivita, section_key, ruolo_utente):
                         st.markdown(f"**PdL `{report['pdl']}`** - Inviato il {pd.to_datetime(report['data_compilazione']).strftime('%d/%m/%Y %H:%M')}")
                         st.caption("Report Inviato:")
                         st.info(report['testo_report'])
-                        if st.button("Modifica Report", key=f"edit_report_{report['id_report']}"):
+                        if st.button("Modifica Report", key=f"edit_report_{section_key}_{report['id_report']}"):
                             task_data = report.to_dict()
+                            task_data['section_key'] = section_key
                             st.session_state.debriefing_task = task_data
                             st.session_state.report_mode = 'manual'
                             st.rerun()

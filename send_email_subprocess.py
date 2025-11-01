@@ -4,11 +4,24 @@ import toml
 import pythoncom
 import win32com.client as win32
 import os
+import re
 
-def send_email(subject, html_body, attachment_path=None):
+def remove_signature(html_body):
+    """Rimuove una firma specifica dal corpo di un'email HTML."""
+    # Definisci la firma da rimuovere, sia come testo semplice che come HTML
+    signature_patterns = [
+        re.compile(r'<p><strong>Gianky Allegretti</strong><br>Direttore Tecnico</p>', re.IGNORECASE),
+        re.compile(r'Gianky Allegretti\s*<br>\s*Direttore Tecnico', re.IGNORECASE)
+    ]
+
+    for pattern in signature_patterns:
+        html_body = pattern.sub('', html_body)
+
+    return html_body
+
+def send_email(subject, html_body, attachment_path=None, is_pdf_export=False):
     """
-    This function runs in a separate process to send an email via Outlook,
-    avoiding COM threading issues with the main Streamlit application.
+    Gestisce l'invio o la creazione di bozze di email tramite Outlook.
     """
     pythoncom.CoInitialize()
     outlook = None
@@ -17,58 +30,57 @@ def send_email(subject, html_body, attachment_path=None):
         outlook = win32.Dispatch('outlook.application')
         mail = outlook.CreateItem(0)
 
-        # Imposta i destinatari
-        mail.To = "ciro.scaravelli@coemi.it"
-        mail.CC = "francesco.millo@coemi.it"
+        # 1. Modifica Corpo Email: Rimuovi la firma
+        html_body = remove_signature(html_body)
+
+        # 2. Logica di Invio
+        if is_pdf_export:
+            # Scenario A: Creazione Bozza (Esportazione PDF)
+            mail.To = "ciro.scaravelli@coemi.it"
+            mail.CC = "francesco.millo@coemi.it"
+        else:
+            # Scenario B: Invio Diretto (Tutti gli altri casi)
+            mail.To = "francesco.millo@coemi.it; gianky.allegretti@gmail.com"
 
         mail.Subject = subject
-
-        # Per includere la firma, prima visualizziamo l'email e poi impostiamo il corpo
-        # In questo modo Outlook aggiunge la firma predefinita
-        mail.Display()
-
-        # Ora che la firma è (presumibilmente) inserita, aggiungiamo il nostro corpo HTML prima della firma
-        # Troviamo il tag <body> e inseriamo il nostro contenuto dopo di esso
-        # Questo è un approccio comune per preservare la firma
-        if mail.HTMLBody:
-            signature_starts_at = mail.HTMLBody.find('<body')
-            if signature_starts_at != -1:
-                # Inserisci il corpo del testo dopo il tag body
-                body_tag_end = mail.HTMLBody.find('>', signature_starts_at) + 1
-                original_body_content = mail.HTMLBody[body_tag_end:]
-                mail.HTMLBody = mail.HTMLBody[:body_tag_end] + html_body + original_body_content
-            else:
-                mail.HTMLBody = html_body + mail.HTMLBody
-        else:
-            mail.HTMLBody = html_body
+        mail.HTMLBody = html_body
 
         if attachment_path and os.path.exists(attachment_path):
             mail.Attachments.Add(os.path.abspath(attachment_path))
 
-        mail.Save()
-        # Non è necessario chiamare di nuovo Display() perché lo abbiamo già fatto
-
-        print(f"Subprocess: Email draft '{subject}' created successfully.")
+        if is_pdf_export:
+            mail.Save()
+            mail.Display() # Mostra la bozza
+            print(f"Subprocess: Email draft '{subject}' created successfully.")
+        else:
+            mail.Send()
+            print(f"Subprocess: Email '{subject}' sent successfully.")
 
     except Exception as e:
-        # Log the error to a file for better debugging
         with open("email_error.log", "a") as f:
-            f.write(f"Error creating email draft: {e}\\n")
-        print(f"Subprocess Error: Could not create email draft. Details logged to email_error.log.")
+            f.write(f"Error processing email: {e}\\n")
+        print(f"Subprocess Error: Could not process email. Details logged to email_error.log.")
 
     finally:
-        # Non rilasciare `mail` e `outlook` immediatamente
-        # Lascia che Python li gestisca alla fine dello script
-        # per evitare che la finestra di Outlook si chiuda
         pythoncom.CoUninitialize()
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python send_email_subprocess.py <subject> <body> [attachment_path]")
+        print("Usage: python send_email_subprocess.py <subject> <body> [attachment_path] [--pdf-export]")
         sys.exit(1)
 
     subject_arg = sys.argv[1]
     body_arg = sys.argv[2]
-    attachment_arg = sys.argv[3] if len(sys.argv) > 3 else None
+    attachment_arg = None
+    is_pdf_export_arg = False
 
-    send_email(subject_arg, body_arg, attachment_arg)
+    # Parsing degli argomenti opzionali
+    if len(sys.argv) > 3:
+        if sys.argv[3] == '--pdf-export':
+            is_pdf_export_arg = True
+        else:
+            attachment_arg = sys.argv[3]
+            if len(sys.argv) > 4 and sys.argv[4] == '--pdf-export':
+                is_pdf_export_arg = True
+
+    send_email(subject_arg, body_arg, attachment_arg, is_pdf_export_arg)
