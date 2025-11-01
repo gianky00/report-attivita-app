@@ -316,16 +316,24 @@ def main_app(matricola_utente, ruolo):
             st.header(f"Ciao, {nome_utente_autenticato}!")
             st.caption(f"Ruolo: {ruolo}")
 
-            user_notifications = leggi_notifiche(matricola_utente)
-            render_notification_center(user_notifications, matricola_utente)
-
             # Mostra la prossima settimana di reperibilità
             user_surname = nome_utente_autenticato.split()[-1]
             next_oncall_start = get_next_on_call_week(user_surname)
             if next_oncall_start:
-                # Il turno dura 7 giorni, quindi finisce 6 giorni dopo l'inizio.
                 next_oncall_end = next_oncall_start + datetime.timedelta(days=6)
-                st.info(f"Prossima Reperibilità:\n{next_oncall_start.strftime('%d/%m')} - {next_oncall_end.strftime('%d/%m/%Y')}")
+                today = datetime.date.today()
+
+                # Controlla se oggi rientra nella settimana di reperibilità
+                if next_oncall_start <= today <= next_oncall_end:
+                    st.markdown("**Sei reperibile**")
+                    message = f"Dal: {next_oncall_start.strftime('%d/%m')} al {next_oncall_end.strftime('%d/%m/%Y')}"
+                else:
+                    message = f"Prossima Reperibilità:\n{next_oncall_start.strftime('%d/%m')} - {next_oncall_end.strftime('%d/%m/%Y')}"
+
+                st.info(message)
+
+            user_notifications = leggi_notifiche(matricola_utente)
+            render_notification_center(user_notifications, matricola_utente)
 
             last_login = get_last_login(matricola_utente)
             if last_login:

@@ -14,39 +14,52 @@ def send_email(subject, html_body, attachment_path=None):
     outlook = None
     mail = None
     try:
-        # Load email configuration
-        secrets = toml.load(".streamlit/secrets.toml")
-        email_to = secrets.get("email_destinatario", "")
-        email_cc_string = secrets.get("email_cc", "")
-        email_cc = [email.strip() for email in email_cc_string.split(',') if email.strip()]
-
-        if not email_to:
-            print("Error: Email recipient is not configured in secrets.toml.")
-            return
-
         outlook = win32.Dispatch('outlook.application')
         mail = outlook.CreateItem(0)
-        mail.To = email_to
-        mail.CC = ";".join(email_cc)  # Outlook expects a semicolon-separated string for CC
+
+        # Imposta i destinatari
+        mail.To = "ciro.scaravelli@coemi.it"
+        mail.CC = "francesco.millo@coemi.it"
+
         mail.Subject = subject
-        mail.HTMLBody = html_body
+
+        # Per includere la firma, prima visualizziamo l'email e poi impostiamo il corpo
+        # In questo modo Outlook aggiunge la firma predefinita
+        mail.Display()
+
+        # Ora che la firma è (presumibilmente) inserita, aggiungiamo il nostro corpo HTML prima della firma
+        # Troviamo il tag <body> e inseriamo il nostro contenuto dopo di esso
+        # Questo è un approccio comune per preservare la firma
+        if mail.HTMLBody:
+            signature_starts_at = mail.HTMLBody.find('<body')
+            if signature_starts_at != -1:
+                # Inserisci il corpo del testo dopo il tag body
+                body_tag_end = mail.HTMLBody.find('>', signature_starts_at) + 1
+                original_body_content = mail.HTMLBody[body_tag_end:]
+                mail.HTMLBody = mail.HTMLBody[:body_tag_end] + html_body + original_body_content
+            else:
+                mail.HTMLBody = html_body + mail.HTMLBody
+        else:
+            mail.HTMLBody = html_body
 
         if attachment_path and os.path.exists(attachment_path):
             mail.Attachments.Add(os.path.abspath(attachment_path))
 
         mail.Save()
-        mail.Display()
+        # Non è necessario chiamare di nuovo Display() perché lo abbiamo già fatto
+
         print(f"Subprocess: Email draft '{subject}' created successfully.")
+
     except Exception as e:
         # Log the error to a file for better debugging
         with open("email_error.log", "a") as f:
-            f.write(f"Error sending email: {e}\\n")
-        print(f"Subprocess Error: Could not send email. Details logged to email_error.log.")
+            f.write(f"Error creating email draft: {e}\\n")
+        print(f"Subprocess Error: Could not create email draft. Details logged to email_error.log.")
+
     finally:
-        if mail:
-            del mail
-        if outlook:
-            del outlook
+        # Non rilasciare `mail` e `outlook` immediatamente
+        # Lascia che Python li gestisca alla fine dello script
+        # per evitare che la finestra di Outlook si chiuda
         pythoncom.CoUninitialize()
 
 if __name__ == "__main__":
