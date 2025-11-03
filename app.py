@@ -188,11 +188,7 @@ from pages.admin import (
     render_access_logs_tab
 )
 from pages.guida import render_guida_tab
-from modules.session_manager import (
-    load_session,
-    save_session,
-    delete_session,
-)
+from modules.session_manager import load_session, save_session, delete_session
 
 
 # --- APPLICAZIONE STREAMLIT PRINCIPALE ---

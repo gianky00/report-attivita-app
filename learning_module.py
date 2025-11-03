@@ -73,28 +73,21 @@ def load_report_knowledge_base():
 
     knowledge_base_text = ""
 
-    # Percorso 1: Rete
-    network_base_path = os.environ.get('NETWORK_BASE_PATH', r"\\192.168.11.251\Database_Tecnico_SMI\Contabilita' strumentale\Relazioni di reperibilita'")
-
-    if os.path.exists(network_base_path) and os.path.isdir(network_base_path):
-        # Itera attraverso le cartelle degli anni (es. '2024', '2025')
-        for year_folder in os.listdir(network_base_path):
-            year_path = os.path.join(network_base_path, year_folder)
-            if os.path.isdir(year_path):
-                # Cerca la sottocartella 'WORD'
-                word_path = os.path.join(year_path, "WORD")
-                if os.path.exists(word_path) and os.path.isdir(word_path):
-                    for filename in os.listdir(word_path):
-                        if filename.endswith(".docx"):
-                            filepath = os.path.join(word_path, filename)
-                            try:
-                                doc = docx.Document(filepath)
-                                for para in doc.paragraphs:
-                                    knowledge_base_text += para.text + "\n"
-                            except Exception:
-                                continue # Ignora file corrotti
+    # Percorso 1: Locale
+    local_base_path = "knowledge_base_docs"
+    if os.path.exists(local_base_path) and os.path.isdir(local_base_path):
+        for root, _, files in os.walk(local_base_path):
+            for filename in files:
+                if filename.endswith(".docx"):
+                    filepath = os.path.join(root, filename)
+                    try:
+                        doc = docx.Document(filepath)
+                        for para in doc.paragraphs:
+                            knowledge_base_text += para.text + "\n"
+                    except Exception:
+                        continue # Ignora file corrotti
     else:
-        print(f"Attenzione: Il percorso di rete '{network_base_path}' non è accessibile. La base di conoscenza potrebbe essere incompleta.")
+        print(f"Attenzione: La cartella '{local_base_path}' non è stata trovata. La base di conoscenza potrebbe essere vuota.")
 
     # Percorso 2: Locale per i nuovi report
     local_path = "relazioni_inviate"
@@ -116,19 +109,15 @@ def get_report_knowledge_base_count():
     """
     file_count = 0
 
-    # Conteggio 1: Rete
-    network_base_path = os.environ.get('NETWORK_BASE_PATH', r"\\192.168.11.251\Database_Tecnico_SMI\Contabilita' strumentale\Relazioni di reperibilita'")
-    if os.path.exists(network_base_path) and os.path.isdir(network_base_path):
-        for year_folder in os.listdir(network_base_path):
-            year_path = os.path.join(network_base_path, year_folder)
-            if os.path.isdir(year_path):
-                word_path = os.path.join(year_path, "WORD")
-                if os.path.exists(word_path) and os.path.isdir(word_path):
-                    for filename in os.listdir(word_path):
-                        if filename.endswith(".docx"):
-                            file_count += 1
+    # Conteggio 1: Locale
+    local_base_path = "knowledge_base_docs"
+    if os.path.exists(local_base_path) and os.path.isdir(local_base_path):
+        for root, _, files in os.walk(local_base_path):
+            for filename in files:
+                if filename.endswith(".docx"):
+                    file_count += 1
     else:
-        print(f"Attenzione: Il percorso di rete '{network_base_path}' non è accessibile. Il conteggio dei file potrebbe essere incompleto.")
+        print(f"Attenzione: La cartella '{local_base_path}' non è stata trovata. Il conteggio dei file potrebbe essere incompleto.")
 
     # Conteggio 2: Locale
     local_path = "relazioni_inviate"
