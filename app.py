@@ -549,20 +549,31 @@ def main_app(matricola_utente, ruolo):
                                 st.success("Relazione salvata e inviata con successo!")
                                 partner_text = f" in coppia con {partner_selezionato}" if partner_selezionato != "Nessuno" else ""
                                 titolo_email = f"Relazione di Reperibilità del {data_intervento.strftime('%d/%m/%Y')} - {nome_utente_autenticato}"
-                                html_body = f"""
+
+                                # Definisci il corpo dell'email separatamente per evitare problemi con f-string complesse
+                                html_template = """
                                 <html><head><style>body {{ font-family: Calibri, sans-serif; }}</style></head><body>
                                 <h3>Relazione di Reperibilità</h3>
-                                <p><strong>Data:</strong> {data_intervento.strftime('%d/%m/%Y')}</p>
+                                <p><strong>Data:</strong> {data_intervento}</p>
                                 <p><strong>Tecnico:</strong> {nome_utente_autenticato}{partner_text}</p>
-                                <p><strong>Orario:</strong> Da {ora_inizio or 'N/D'} a {ora_fine or 'N/D'}</p>
+                                <p><strong>Orario:</strong> Da {ora_inizio} a {ora_fine}</p>
                                 <hr>
                                 <h4>Testo della Relazione:</h4>
-                                <p>{testo_da_inviare.replace('\n', '<br>')}</p>
+                                <p>{testo_relazione}</p>
                                 <br><hr>
                                 <p><em>Email generata automaticamente dal sistema Gestionale.</em></p>
                                 <p><strong>Gianky Allegretti</strong><br>Direttore Tecnico</p>
                                 </body></html>
                                 """
+                                html_body = html_template.format(
+                                    data_intervento=data_intervento.strftime('%d/%m/%Y'),
+                                    nome_utente_autenticato=nome_utente_autenticato,
+                                    partner_text=partner_text,
+                                    ora_inizio=ora_inizio or 'N/D',
+                                    ora_fine=ora_fine or 'N/D',
+                                    testo_relazione=testo_da_inviare.replace('\n', '<br>')
+                                )
+
                                 invia_email_con_outlook_async(titolo_email, html_body)
                                 st.balloons()
                                 # Svuota i campi dopo l'invio
