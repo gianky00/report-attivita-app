@@ -1,0 +1,197 @@
+/* styles/style.css */
+
+/* Stile di base per il corpo dell'applicazione */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f0f2f6;
+    color: #333;
+    transition: background-color 0.3s ease;
+}
+
+/* Contenitore principale per centrare e dare margini */
+.main-container {
+    padding: 1rem;
+    transition: all 0.3s ease-in-out;
+}
+
+/* Stili per i contenuti della pagina e le transizioni */
+.page-content {
+    opacity: 1;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.page-content.fade-out {
+    opacity: 0;
+}
+
+/* Stili per le card delle attività */
+.task-card {
+    padding: 1.5rem;
+    background-color: #ffffff;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+/* Miglioramento degli st.expander */
+.st-expander {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    background-color: #fafafa;
+}
+
+/* Nasconde la navigazione delle pagine di default di Streamlit nella sidebar */
+[data-testid="stSidebarNav"] {
+    display: none;
+}
+
+/* Stile unificato per le card */
+.card {
+    background-color: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+/* Stile per i contenitori di Streamlit con bordo */
+[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > div {
+    border: none !important;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+    border-radius: 8px !important;
+}
+
+/* --- TYPOGRAPHY & SECTION TITLES --- */
+
+/* Base font styles for readability */
+h1, h2, h3, h4, h5, h6 {
+    color: #2c3e50; /* A darker, softer black */
+    font-weight: 600;
+}
+
+/* Style for st.title */
+h1 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+/* Style for st.header */
+h2 {
+    font-size: 1.6rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    color: #34495e;
+}
+
+/* Elegant style for st.subheader */
+h3 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: #34495e;
+    padding-bottom: 10px;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #e0e6ed; /* Light grey thin border */
+    width: 100%;
+}
+
+
+/* --- RESPONSIVE TYPOGRAPHY --- */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 1.7rem;
+    }
+
+    h2 {
+        font-size: 1.4rem;
+    }
+
+    h3 {
+        font-size: 1.1rem;
+    }
+
+    .card {
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+}
+
+/* --- INTERACTIVE ELEMENTS (BUTTONS, TABS) --- */
+
+/* Unified style for all buttons */
+button {
+    border-radius: 8px !important;
+    padding: 10px 16px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease-in-out !important;
+    border: 1px solid #dcdcdc !important; /* Default border */
+}
+
+/* Primary Button Style */
+button[kind="primary"] {
+    background-color: #3366ff !important;
+    color: white !important;
+    border-color: #3366ff !important;
+}
+
+button[kind="primary"]:hover {
+    background-color: #254eda !important;
+    border-color: #254eda !important;
+}
+
+/* Secondary Button Style */
+button[kind="secondary"] {
+    background-color: #f0f2f6 !important;
+    color: #333 !important;
+}
+
+button[kind="secondary"]:hover {
+    background-color: #e0e6ed !important;
+    border-color: #c0c6cf !important;
+}
+
+
+/* Minimalist style for st.tabs */
+[data-baseweb="tab-list"] {
+    border-bottom: 2px solid #e0e6ed !important;
+    padding-bottom: 2px !important;
+}
+
+[data-baseweb="tab"] {
+    background-color: transparent !important;
+    font-weight: 500 !important;
+    color: #555 !important;
+}
+
+[data-baseweb="tab--selected"] {
+    color: #3366ff !important;
+    border-bottom: 2px solid #3366ff !important;
+}
+
+/* Improved st.expander header style */
+.st-expander > summary {
+    font-weight: 500;
+    font-size: 1.05rem;
+    color: #2c3e50;
+}
+
+/* --- NOTIFICATION BADGE --- */
+.notification-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: red;
+    color: white;
+    border-radius: 50%;
+    padding: 2px 6px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    border: 2px solid white;
+}
