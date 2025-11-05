@@ -65,6 +65,11 @@ from modules.notifications import (
     segna_notifica_letta
 )
 from modules.email_sender import invia_email_con_outlook_async
+from modules.license_manager import check_pyarmor_license
+
+
+# --- ESEGUI CHECK LICENZA ALL'AVVIO ---
+check_pyarmor_license()
 
 
 # --- FUNZIONI DI SUPPORTO E CARICAMENTO DATI ---
