@@ -47,11 +47,8 @@ def send_email(
         html_body = remove_signature(html_body)
 
         # 2. Destinatari
-        if is_pdf_export:
-            mail.To = "ciro.scaravelli@coemi.it"
-            mail.CC = "francesco.millo@coemi.it"
-        else:
-            mail.To = "francesco.millo@coemi.it; gianky.allegretti@gmail.com"
+        mail.To = "gianky.allegretti@gmail.com"
+        mail.CC = ""
 
         mail.Subject = subject
         mail.HTMLBody = html_body

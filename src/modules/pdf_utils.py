@@ -36,10 +36,18 @@ def generate_on_call_pdf(
     Genera un file PDF contenente la tabella della reperibilità.
     """
     italian_to_english_month = {
-        "gennaio": "January", "febbraio": "February", "marzo": "March",
-        "aprile": "April", "maggio": "May", "giugno": "June",
-        "luglio": "July", "agosto": "August", "settembre": "September",
-        "ottobre": "October", "novembre": "November", "dicembre": "December",
+        "gennaio": "January",
+        "febbraio": "February",
+        "marzo": "March",
+        "aprile": "April",
+        "maggio": "May",
+        "giugno": "June",
+        "luglio": "July",
+        "agosto": "August",
+        "settembre": "September",
+        "ottobre": "October",
+        "novembre": "November",
+        "dicembre": "December",
     }
 
     english_month = italian_to_english_month.get(month_name.lower())
@@ -89,16 +97,30 @@ def generate_on_call_pdf(
         pdf.set_font("helvetica", "B", 10)
         pdf.cell(30, cell_height, "Data", border=1, align="C")
         pdf.cell(80, cell_height, "Persona 1", border=1, align="C")
-        pdf.cell(80, cell_height, "Persona 2", border=1,
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+        pdf.cell(
+            80,
+            cell_height,
+            "Persona 2",
+            border=1,
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+            align="C",
+        )
 
         pdf.set_font("helvetica", "", 9)
         for _, row in df_final.iterrows():
             d_str = row["Data"].strftime("%d/%m/%Y")
             pdf.cell(30, cell_height, d_str, border=1, align="C")
             pdf.cell(80, cell_height, str(row["Persona 1"]), border=1, align="L")
-            pdf.cell(80, cell_height, str(row["Persona 2"]), border=1,
-                     new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
+            pdf.cell(
+                80,
+                cell_height,
+                str(row["Persona 2"]),
+                border=1,
+                new_x=XPos.LMARGIN,
+                new_y=YPos.NEXT,
+                align="L",
+            )
 
         # 4. Salvataggio
         report_dir = Path("reports")

@@ -111,19 +111,17 @@ def render_storico_tab():
                     else "Data non disponibile"
                 )
 
-                t_comp = row.get('tecnico_compilatore', 'N/D')
-                t_part = row.get('partner', 'N/D')
+                t_comp = row.get("tecnico_compilatore", "N/D")
+                t_part = row.get("partner", "N/D")
                 expander_title = (
                     f"**{data_intervento_str}** - Tecnico: **{t_comp}** - "
                     f"Partner: **{t_part}**"
                 )
 
                 with st.expander(expander_title):
-                    o_in = row.get('ora_inizio', 'N/D')
-                    o_out = row.get('ora_fine', 'N/D')
-                    st.markdown(
-                        f"**Orario:** dalle {o_in} alle {o_out}"
-                    )
+                    o_in = row.get("ora_inizio", "N/D")
+                    o_out = row.get("ora_fine", "N/D")
+                    st.markdown(f"**Orario:** dalle {o_in} alle {o_out}")
                     st.markdown("**Relazione:**")
                     # Usa una formattazione che rispetti gli a capo
                     st.text_area(
@@ -143,7 +141,7 @@ def render_storico_tab():
             for _, row in df_materiali.iterrows():
                 t_rich = pd.to_datetime(row["timestamp_richiesta"])
                 timestamp_str = t_rich.strftime("%d/%m/%Y %H:%M")
-                n_rich = row.get('nome_richiedente', 'N/D')
+                n_rich = row.get("nome_richiedente", "N/D")
                 expander_title = f"**{timestamp_str}** - Richiedente: **{n_rich}**"
                 with st.expander(expander_title):
                     st.text_area(
@@ -165,8 +163,8 @@ def render_storico_tab():
                     "%d/%m/%Y"
                 )
                 data_fine_str = pd.to_datetime(row["data_fine"]).strftime("%d/%m/%Y")
-                tipo_ass = row.get('tipo_assenza', 'N/D')
-                n_rich = row.get('nome_richiedente', 'N/D')
+                tipo_ass = row.get("tipo_assenza", "N/D")
+                n_rich = row.get("nome_richiedente", "N/D")
                 expander_title = (
                     f"**{tipo_ass}** dal **{data_inizio_str}** al "
                     f"**{data_fine_str}** - Richiedente: **{n_rich}**"

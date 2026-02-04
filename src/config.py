@@ -102,7 +102,7 @@ NOME_FOGLIO_RISPOSTE = secrets.get(
 EMAIL_DESTINATARIO = secrets.get("email_destinatario", "gianky.allegretti@gmail.com")
 
 # Gestione liste CC
-email_cc_string = secrets.get("email_cc", "francesco.millo@coemi.it")
+email_cc_string = secrets.get("email_cc", "")
 EMAIL_CC = [e.strip() for e in email_cc_string.split(",") if e.strip()]
 
 # --- THREADING LOCKS ---
@@ -114,33 +114,18 @@ OUTLOOK_LOCK = threading.Lock()
 
 
 def get_attivita_programmate_path() -> str:
-
-
     """Restituisce il percorso al file delle attività programmate."""
-
 
     return str(PATH_ATTIVITA_PROGRAMMATE)
 
 
-
-
-
 def get_storico_db_path() -> str:
-
-
     """Restituisce il percorso allo storico DB."""
-
 
     return str(PATH_STORICO_DB)
 
 
-
-
-
 def get_gestionale_path() -> str:
-
-
     """Restituisce il percorso al file gestionale."""
-
 
     return str(PATH_GESTIONALE)

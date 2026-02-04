@@ -64,3 +64,23 @@ def segna_notifica_letta(id_notifica: str) -> bool:
     finally:
         if conn:
             conn.close()
+
+
+def segna_tutte_lette(matricola: str) -> bool:
+    """Segna tutte le notifiche di un utente come lette."""
+    conn = get_db_connection()
+    try:
+        with conn:
+            # Nota: nel database la colonna è Destinatario_Matricola per le notifiche
+            # ma add_notification usa 'Destinatario' nel dizionario. 
+            # Verifichiamo lo schema nel file crea_database.py se necessario.
+            # Dallo schema in crea_database.py: Destinatario_Matricola
+            sql = "UPDATE notifiche SET Stato = 'letta' WHERE Destinatario_Matricola = ?"
+            cursor = conn.execute(sql, (matricola,))
+            return True
+    except sqlite3.Error as e:
+        logger.error(f"Errore aggiornamento notifiche per {matricola}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()

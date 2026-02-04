@@ -37,9 +37,7 @@ def add_admin_user(matricola: str = "admin", nome: str = "Admin User"):
         )
 
         conn.commit()
-        logger.info(
-            f"Utente Amministratore '{nome}' (Matricola: {matricola}) creato."
-        )
+        logger.info(f"Utente Amministratore '{nome}' (Matricola: {matricola}) creato.")
 
     except sqlite3.IntegrityError:
         logger.error(f"Errore: L'utente con matricola '{matricola}' esiste già.")

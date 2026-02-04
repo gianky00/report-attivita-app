@@ -20,10 +20,12 @@ def mock_db_notifications(mocker):
     mocker.patch("src.modules.db_manager.get_db_connection", return_value=mock_conn)
     return mock_conn
 
+
 def test_crea_notifica_mock(mocker, mock_db_notifications):
     """Verifica la logica di creazione notifica."""
     mocker.patch("src.modules.notifications.add_notification", return_value=True)
     assert crea_notifica("123", "Messaggio Test") is True
+
 
 def test_segna_notifica_letta_mock(mock_db_notifications):
     """Verifica l'aggiornamento dello stato della notifica tramite execute."""
@@ -34,9 +36,13 @@ def test_segna_notifica_letta_mock(mock_db_notifications):
     assert segna_notifica_letta("N1") is True
     assert mock_db_notifications.execute.called
 
+
 def test_leggi_notifiche_mock(mocker, mock_db_notifications):
     """Verifica il recupero delle notifiche."""
-    mocker.patch("src.modules.notifications.get_notifications_for_user", return_value=[{"Messaggio": "M1"}])
+    mocker.patch(
+        "src.modules.notifications.get_notifications_for_user",
+        return_value=[{"Messaggio": "M1"}],
+    )
     res = leggi_notifiche("123")
     assert len(res) == 1
     assert res[0]["Messaggio"] == "M1"

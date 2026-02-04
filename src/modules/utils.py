@@ -2,7 +2,24 @@
 Funzioni di utilità generale per la manipolazione di dati e orari.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
+
+
+def calculate_shift_duration(start_iso: str, end_iso: str, tz_name: str = "Europe/Rome") -> float:
+    """
+    Calcola la durata effettiva di un turno in ore, gestendo il passaggio DST.
+    """
+    tz = pytz.timezone(tz_name)
+    start_dt = tz.localize(datetime.fromisoformat(start_iso))
+    end_dt = tz.localize(datetime.fromisoformat(end_iso))
+    
+    # Se la fine è precedente all'inizio (mezzanotte), aggiungi un giorno
+    if end_dt < start_dt:
+        end_dt += timedelta(days=1)
+        
+    duration = (end_dt - start_dt).total_seconds() / 3600
+    return round(duration, 2)
 
 
 def merge_time_slots(time_slots: list[str]) -> list[str]:

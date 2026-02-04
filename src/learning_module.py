@@ -5,9 +5,9 @@ Gestisce l'integrazione di nuove conoscenze e la creazione di indici vettoriali 
 
 import json
 import pickle
-from pathlib import Path
-from typing import Any, List, Dict, Optional
 from contextlib import suppress
+from pathlib import Path
+from typing import Any
 
 import nltk
 from docx import Document
@@ -20,7 +20,7 @@ UNREVIEWED_KNOWLEDGE_PATH = Path("unreviewed_knowledge.json")
 KNOWLEDGE_CORE_PATH = Path("knowledge_core.json")
 
 
-def load_unreviewed_knowledge() -> List[Dict[str, Any]]:
+def load_unreviewed_knowledge() -> list[dict[str, Any]]:
     """Carica le conoscenze non revisionate dal file JSON."""
     if not UNREVIEWED_KNOWLEDGE_PATH.exists():
         return []
@@ -29,14 +29,16 @@ def load_unreviewed_knowledge() -> List[Dict[str, Any]]:
     return []
 
 
-def save_unreviewed_knowledge(data: List[Dict[str, Any]]):
+def save_unreviewed_knowledge(data: list[dict[str, Any]]):
     """Salva le conoscenze non revisionate nel file JSON."""
     UNREVIEWED_KNOWLEDGE_PATH.write_text(
         json.dumps(data, indent=4, ensure_ascii=False), encoding="utf-8"
     )
 
 
-def integrate_knowledge(entry_id: str, integration_details: Dict[str, Any]) -> Dict[str, Any]:
+def integrate_knowledge(
+    entry_id: str, integration_details: dict[str, Any]
+) -> dict[str, Any]:
     """Integra una voce revisionata nel knowledge_core.json principale."""
     unreviewed = load_unreviewed_knowledge()
     entry_to_integrate = next(
@@ -121,13 +123,15 @@ def get_report_knowledge_base_count() -> int:
 
 
 @measure_time
-def build_knowledge_base() -> Dict[str, Any]:
+def build_knowledge_base() -> dict[str, Any]:
     """Crea e salva un indice TF-IDF dalla base di conoscenza."""
     try:
         # 1. Download risorse NLTK
         for res in ["punkt", "stopwords"]:
             with suppress(LookupError):
-                nltk.data.find(f"tokenizers/{res}" if res == "punkt" else f"corpora/{res}")
+                nltk.data.find(
+                    f"tokenizers/{res}" if res == "punkt" else f"corpora/{res}"
+                )
                 continue
             nltk.download(res, quiet=True)
 
@@ -143,7 +147,12 @@ def build_knowledge_base() -> Dict[str, Any]:
             return {"success": False, "message": "Nessun contenuto valido."}
 
         # 4. Vettorizzazione
-        stop_words = nltk.corpus.stopwords.words("italian")
+        stop_words = []
+        try:
+            stop_words = nltk.corpus.stopwords.words("italian")
+        except Exception:
+            logger.warning("Impossibile caricare stop words NLTK, uso lista vuota.")
+
         vectorizer = TfidfVectorizer(stop_words=stop_words, ngram_range=(1, 2))
         tfidf_matrix = vectorizer.fit_transform(sentences)
 

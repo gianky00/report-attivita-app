@@ -26,7 +26,21 @@ _context = threading.local()
 
 
 class JsonFormatter(logging.Formatter):
-    """Formatter personalizzato per produrre log in formato JSON."""
+    """Formatter personalizzato per produrre log in formato JSON con sanitizzazione PII."""
+
+    SENSITIVE_KEYS = {"password", "secret", "2fa_secret", "passwordhash", "token"}
+
+    def _sanitize(self, data: dict) -> dict:
+        """Maschera i valori sensibili in un dizionario."""
+        sanitized = {}
+        for k, v in data.items():
+            if any(s in k.lower() for s in self.SENSITIVE_KEYS):
+                sanitized[k] = "********"
+            elif isinstance(v, dict):
+                sanitized[k] = self._sanitize(v)
+            else:
+                sanitized[k] = v
+        return sanitized
 
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
@@ -39,17 +53,22 @@ class JsonFormatter(logging.Formatter):
             "line": record.lineno,
         }
 
+        # Sanitizza il messaggio principale se contiene parole chiave
+        msg_lower = log_data["message"].lower()
+        if "password" in msg_lower or "secret" in msg_lower:
+            log_data["message"] = "[REDACTED] Messaggio contenente dati potenzialmente sensibili"
+
         # Aggiungi trace_id se presente nel contesto
         if hasattr(_context, "trace_id"):
             log_data["trace_id"] = _context.trace_id
 
-        # Aggiungi metadati extra dal contesto
+        # Aggiungi metadati extra dal contesto (sanitizzati)
         if hasattr(_context, "extra"):
-            log_data.update(_context.extra)
+            log_data.update(self._sanitize(_context.extra))
 
-        # Aggiungi attributi extra passati direttamente nella chiamata log
+        # Aggiungi attributi extra passati direttamente nella chiamata log (sanitizzati)
         if hasattr(record, "extra_data"):
-            log_data.update(record.extra_data)
+            log_data.update(self._sanitize(record.extra_data))
 
         # Gestione eccezioni
         if record.exc_info:

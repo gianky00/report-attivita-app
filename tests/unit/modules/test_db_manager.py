@@ -1,5 +1,5 @@
 """
-Test approfonditi per il modulo DB Manager utilizzando il mocking completo.
+Test approfonditi per il modulo DB Manager utilizzando il mocking di DatabaseEngine.
 """
 
 import pytest
@@ -15,55 +15,65 @@ from src.modules.db_manager import (
 )
 
 
-@pytest.fixture
-def mock_db(mocker):
-    mock_conn = mocker.MagicMock()
-    mock_conn.__enter__.return_value = mock_conn
-    mocker.patch("src.modules.db_manager.get_db_connection", return_value=mock_conn)
-    return mock_conn
+@pytest.fixture(autouse=True)
+def mock_db_engine(mocker):
+    """Patch dei metodi statici/classmethod di DatabaseEngine."""
+    mocker.patch("src.core.database.DatabaseEngine.execute", return_value=True)
+    mocker.patch("src.core.database.DatabaseEngine.fetch_one", return_value=None)
+    mocker.patch("src.core.database.DatabaseEngine.fetch_all", return_value=[])
+    mocker.patch("src.core.database.DatabaseEngine.insert_returning_id", return_value=1)
 
 
-def test_add_shift_log_mock(mock_db):
+def test_add_shift_log_mock(mocker):
+    mock_exec = mocker.patch("src.core.database.DatabaseEngine.execute", return_value=True)
     assert add_shift_log({"ID": "L1"}) is True
+    assert mock_exec.called
 
 
-def test_get_last_login_mock(mocker, mock_db):
-    mock_cursor = mock_db.cursor.return_value
-    mock_row = {"timestamp": "2025-01-01"}
-    mock_cursor.fetchone.return_value = mock_row
+def test_get_last_login_mock(mocker):
+    mocker.patch(
+        "src.core.database.DatabaseEngine.fetch_one", 
+        return_value={"timestamp": "2025-01-01"}
+    )
     assert get_last_login("admin") == "2025-01-01"
 
 
-def test_delete_booking(mock_db):
-    # La firma corretta è delete_booking(booking_id, shift_id)
-    mock_db.execute.return_value.rowcount = 1
+def test_delete_booking(mocker):
+    mock_exec = mocker.patch("src.core.database.DatabaseEngine.execute", return_value=True)
     assert delete_booking("B1", "T1") is True
+    assert mock_exec.called
 
 
-def test_get_report_by_id(mock_db):
-    # La firma corretta è get_report_by_id(report_id, table_name)
-    mock_cursor = mock_db.cursor.return_value
-    mock_cursor.fetchone.return_value = {"id_report": "R1"}
+def test_get_report_by_id(mocker):
+    mocker.patch(
+        "src.core.database.DatabaseEngine.fetch_one", 
+        return_value={"id_report": "R1"}
+    )
     res = get_report_by_id("R1", "report_interventi")
     assert res["id_report"] == "R1"
 
 
-def test_insert_report(mock_db):
-    # La firma corretta è insert_report(report_data, table_name)
-    assert insert_report({"col": "val"}, "table_name") is True
+def test_insert_report(mocker):
+    mock_exec = mocker.patch("src.core.database.DatabaseEngine.execute", return_value=True)
+    assert insert_report({"col": "val"}, "report_interventi") is True
+    assert mock_exec.called
 
 
-def test_add_assignment_exclusion(mock_db):
+def test_add_assignment_exclusion(mocker):
+    mock_exec = mocker.patch("src.core.database.DatabaseEngine.execute", return_value=True)
     assert add_assignment_exclusion("admin", "pdl-task") is True
+    assert mock_exec.called
 
 
-def test_get_globally_excluded_activities(mock_db):
-    mock_cursor = mock_db.cursor.return_value
-    mock_cursor.fetchall.return_value = [{"id_attivita": "id1"}]
+def test_get_globally_excluded_activities(mocker):
+    mocker.patch(
+        "src.core.database.DatabaseEngine.fetch_all", 
+        return_value=[{"id_attivita": "id1"}]
+    )
     assert "id1" in get_globally_excluded_activities()
 
 
-def test_update_shift_success(mock_db):
-    mock_cursor = mock_db.execute.return_value
-    mock_cursor.rowcount = 1
+def test_update_shift_success(mocker):
+    mock_exec = mocker.patch("src.core.database.DatabaseEngine.execute", return_value=True)
     assert update_shift("T1", {"Descrizione": "Nuova"}) is True
+    assert mock_exec.called
