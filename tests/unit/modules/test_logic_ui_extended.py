@@ -40,7 +40,10 @@ def test_disegna_sezione_attivita_role_check(mocker):
     attivita = [{
         "pdl": "123456", 
         "attivita": "Test Team", 
-        "team": [{"nome": "T1", "orari": ["08:00-12:00"]}, {"nome": "T2", "orari": ["08:00-12:00"]}]
+        "team": [
+            {"nome": "T1", "ruolo": "Tecnico", "orari": ["08:00-12:00"]}, 
+            {"nome": "T2", "ruolo": "Tecnico", "orari": ["08:00-12:00"]}
+        ]
     }]
     
     mocker.patch("streamlit.expander")
