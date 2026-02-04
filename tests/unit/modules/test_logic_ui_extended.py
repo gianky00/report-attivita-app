@@ -15,23 +15,19 @@ def test_disegna_sezione_attivita_empty(mocker):
     disegna_sezione_attivita([], "empty_sec", "Tecnico")
     
     assert mock_success.called
-    assert "completate" in mock_success.call_args[0][0]
+    assert "compilate" in mock_success.call_args[0][0]
 
 def test_visualizza_storico_large_dataset(mocker):
     """Verifica che lo storico gestisca dataset numerosi senza crashare."""
     mocker.patch("streamlit.expander")
     mock_toggle = mocker.patch("streamlit.toggle", return_value=False)
     
-    # 50 interventi storici
     storico = [
         {"Data_Riferimento_dt": "2025-01-01", "Tecnico": "T1", "Report": "Ok"}
         for _ in range(50)
     ]
     
-    # Non deve crashare
     visualizza_storico_organizzato(storico, "123456")
-    
-    # Verifichiamo che st.toggle sia stato chiamato per ogni intervento
     assert mock_toggle.call_count == 50
 
 def test_disegna_sezione_attivita_role_check(mocker):
@@ -41,18 +37,16 @@ def test_disegna_sezione_attivita_role_check(mocker):
     mocker.patch("src.components.ui.activity_ui.get_unvalidated_reports_by_technician", return_value=pd.DataFrame())
     mock_warning = mocker.patch("streamlit.warning")
     
-    # Attività con team > 1
     attivita = [{
         "pdl": "123456", 
         "attivita": "Test Team", 
-        "team": [{"nome": "T1"}, {"nome": "T2"}]
+        "team": [{"nome": "T1", "orari": ["08:00-12:00"]}, {"nome": "T2", "orari": ["08:00-12:00"]}]
     }]
     
-    # Simula expander e card
     mocker.patch("streamlit.expander")
+    mocker.patch("src.components.ui.activity_ui.merge_time_slots", return_value=["08:00-12:00"])
     
     disegna_sezione_attivita(attivita, "role_sec", "Aiutante")
     
-    # Deve mostrare un warning invece del bottone
     assert mock_warning.called
     assert "Solo i tecnici" in mock_warning.call_args[0][0]

@@ -4,13 +4,13 @@ Form per la compilazione delle relazioni di reperibilità.
 import datetime
 import streamlit as st
 from learning_module import get_report_knowledge_base_count
-from modules.ai_engine import revisiona_con_ia
-from modules.db_manager import (
+from src.modules.ai_engine import revisiona_con_ia
+from src.modules.db_manager import (
     get_all_users,
     salva_relazione,
 )
-from modules.email_sender import invia_email_con_outlook_async
-from modules.instrumentation_logic import get_technical_suggestions
+from src.modules.email_sender import invia_email_con_outlook_async
+from src.modules.instrumentation_logic import get_technical_suggestions
 
 def render_relazione_reperibilita_ui(matricola_utente, nome_utente_autenticato):
     """Renderizza l'interfaccia per la compilazione della relazione di reperibilità settimanale."""

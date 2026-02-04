@@ -7,8 +7,8 @@ import datetime
 
 import streamlit as st
 
-from modules.db_manager import create_shift, get_all_users
-from modules.notifications import crea_notifica
+from src.modules.db_manager import create_shift, get_all_users
+from src.modules.notifications import crea_notifica
 
 
 def render_new_shift_form():
