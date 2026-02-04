@@ -1,93 +1,115 @@
-from fpdf import FPDF
-import pandas as pd
-from datetime import datetime
-import os
+"""
+Utility per la generazione di documenti PDF.
+Include la logica per creare il report mensile della reperibilità in formato tabella.
+"""
+
 import calendar
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+from fpdf import FPDF
+from fpdf.enums import XPos, YPos
+from src.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class PDF(FPDF):
-    # Rimuoviamo l'header per eliminare il titolo "Report Reperibilità Mensile"
+    """Classe personalizzata per la generazione di report PDF."""
+
     def header(self):
+        """Metodo per l'intestazione della pagina (attualmente vuota)."""
         pass
 
     def footer(self):
+        """Metodo per il piè di pagina con numerazione."""
         self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, 'Pagina 1 di 1', 0, 0, 'R')
+        self.set_font("helvetica", "I", 8)
+        self.cell(0, 10, f"Pagina {self.page_no()} di {{nb}}", align="R")
 
-def generate_on_call_pdf(data, month_name, year):
-    # Mappa i mesi dall'italiano all'inglese per la compatibilità con il modulo calendar
+
+def generate_on_call_pdf(
+    data: list[dict[str, Any]], month_name: str, year: int
+) -> str | None:
+    """
+    Genera un file PDF contenente la tabella della reperibilità.
+    """
     italian_to_english_month = {
         "gennaio": "January", "febbraio": "February", "marzo": "March",
         "aprile": "April", "maggio": "May", "giugno": "June",
         "luglio": "July", "agosto": "August", "settembre": "September",
-        "ottobre": "October", "novembre": "November", "dicembre": "December"
+        "ottobre": "October", "novembre": "November", "dicembre": "December",
     }
 
-    english_month_name = italian_to_english_month.get(month_name.lower())
-    if not english_month_name:
-        # Fallback nel caso in cui il nome del mese non sia valido
+    english_month = italian_to_english_month.get(month_name.lower())
+    if not english_month:
+        logger.error(f"Nome mese non valido: {month_name}")
         return None
 
-    # Ottieni il numero del mese dal nome
-    month_number = list(calendar.month_name).index(english_month_name)
+    try:
+        # 1. Preparazione calendario mensile
+        month_number = list(calendar.month_name).index(english_month)
+        num_days = calendar.monthrange(year, month_number)[1]
+        dates = pd.date_range(start=f"{year}-{month_number:02d}-01", periods=num_days)
+        df_final = pd.DataFrame(dates, columns=["Data"])
 
-    # Crea un range di date per l'intero mese
-    num_days = calendar.monthrange(year, month_number)[1]
-    full_month_dates = pd.date_range(start=f"{year}-{month_number}-01", periods=num_days)
+        # 2. Elaborazione dati reperibilità
+        if data:
+            df_data = pd.DataFrame(data)
+            df_data["Data"] = pd.to_datetime(df_data["Data"])
+            df_pivot = df_data.pivot_table(
+                index="Data",
+                columns="RuoloOccupato",
+                values="Nome Cognome",
+                aggfunc="first",
+            ).reset_index()
 
-    # Crea un DataFrame completo per il mese
-    df_month = pd.DataFrame(full_month_dates, columns=['Data'])
+            df_pivot = df_pivot.rename(
+                columns={"Tecnico": "Persona 1", "Aiutante": "Persona 2"}
+            )
+            for col in ["Persona 1", "Persona 2"]:
+                if col not in df_pivot:
+                    df_pivot[col] = ""
 
-    # Prepara il DataFrame con i dati di reperibilità
-    if data:
-        df_data = pd.DataFrame(data)
-        df_data['Data'] = pd.to_datetime(df_data['Data'])
+            df_final = pd.merge(df_final, df_pivot, on="Data", how="left").fillna("")
+        else:
+            df_final["Persona 1"] = ""
+            df_final["Persona 2"] = ""
 
-        # Pivot dei dati per avere Persona 1 (Tecnico) e Persona 2 (Aiutante) sulla stessa riga
-        df_pivot = df_data.pivot_table(index='Data', columns='RuoloOccupato', values='Nome Cognome', aggfunc='first').reset_index()
+        # 3. Creazione PDF
+        pdf = PDF()
+        pdf.alias_nb_pages()
+        pdf.add_page()
+        pdf.set_font("helvetica", "B", 14)
+        title = f"REP.STRUM. ISAB SUD {month_name.upper()} {year}"
+        pdf.cell(0, 10, title, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
 
-        # Rinomina le colonne se esistono, altrimenti creale vuote
-        df_pivot = df_pivot.rename(columns={'Tecnico': 'Persona 1', 'Aiutante': 'Persona 2'})
-        if 'Persona 1' not in df_pivot:
-            df_pivot['Persona 1'] = ''
-        if 'Persona 2' not in df_pivot:
-            df_pivot['Persona 2'] = ''
+        cell_height = 7
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(30, cell_height, "Data", border=1, align="C")
+        pdf.cell(80, cell_height, "Persona 1", border=1, align="C")
+        pdf.cell(80, cell_height, "Persona 2", border=1,
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
 
-        # Unisci i dati di reperibilità con il calendario completo del mese
-        df_final = pd.merge(df_month, df_pivot, on='Data', how='left').fillna('')
-    else:
-        # Se non ci sono dati, crea comunque il calendario vuoto
-        df_final = df_month
-        df_final['Persona 1'] = ''
-        df_final['Persona 2'] = ''
+        pdf.set_font("helvetica", "", 9)
+        for _, row in df_final.iterrows():
+            d_str = row["Data"].strftime("%d/%m/%Y")
+            pdf.cell(30, cell_height, d_str, border=1, align="C")
+            pdf.cell(80, cell_height, str(row["Persona 1"]), border=1, align="L")
+            pdf.cell(80, cell_height, str(row["Persona 2"]), border=1,
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
 
-    # Inizia la creazione del PDF
-    pdf = PDF()
-    pdf.add_page()
+        # 4. Salvataggio
+        report_dir = Path("reports")
+        report_dir.mkdir(exist_ok=True)
+        f_name = f"reperibilita_strumentale_{month_name.lower()}_{year}_ISAB_SUD.pdf"
+        file_path = report_dir / f_name
 
-    pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, f'REP.STRUM. ISAB SUD {month_name.upper()} {year}', 0, 1, 'C')
+        pdf.output(str(file_path))
+        logger.info(f"PDF generato con successo: {file_path}")
+        return str(file_path)
 
-    # Definisci l'altezza della cella più piccola per compattare la tabella
-    cell_height = 7
-
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(30, cell_height, 'Data', 1, 0, 'C')
-    pdf.cell(80, cell_height, 'Persona 1', 1, 0, 'C')
-    pdf.cell(80, cell_height, 'Persona 2', 1, 1, 'C')
-
-    pdf.set_font('Arial', '', 9)
-
-    for _, row in df_final.iterrows():
-        pdf.cell(30, cell_height, row['Data'].strftime('%d/%m/%Y'), 1, 0, 'C')
-        pdf.cell(80, cell_height, str(row['Persona 1']), 1, 0, 'L')
-        pdf.cell(80, cell_height, str(row['Persona 2']), 1, 1, 'L')
-
-    # Assicura che la directory 'reports' esista
-    if not os.path.exists('reports'):
-        os.makedirs('reports')
-
-    # Aggiorna il formato del nome del file
-    file_path = f"reports/reperibilita_strumentale_{month_name.lower()}_{year}_ISAB_SUD.pdf"
-    pdf.output(file_path)
-    return file_path
+    except Exception as e:
+        logger.error(f"Errore durante la generazione del PDF: {e}", exc_info=True)
+        return None

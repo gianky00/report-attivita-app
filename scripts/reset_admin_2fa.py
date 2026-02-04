@@ -1,37 +1,52 @@
+"""
+Script di emergenza per resettare il segreto 2FA di un utente.
+"""
+
 import sqlite3
 import sys
+from pathlib import Path
 
-DB_NAME = "schedario.db"
+# Aggiunge la cartella src al path per importare il core logging
+sys.path.append(str(Path(__file__).parent.parent))
+from src.core.logging import get_logger
 
-def reset_user_2fa(matricola):
-    """
-    Resets the 2FA secret for a given user Matricola in the database.
-    """
+logger = get_logger(__name__)
+
+DB_NAME = Path(__file__).parent.parent / "schedario.db"
+
+
+def reset_user_2fa(matricola: str):
+    """Rimuove il segreto 2FA per l'utente specificato nel database."""
     conn = None
     try:
+        if not DB_NAME.exists():
+            logger.error(f"Database non trovato: {DB_NAME}")
+            return
+
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
 
-        # Set the 2FA_Secret to NULL for the specified user
-        cursor.execute("UPDATE contatti SET \"2FA_Secret\" = NULL WHERE Matricola = ?", (matricola,))
+        cursor.execute(
+            'UPDATE contatti SET "2FA_Secret" = NULL WHERE Matricola = ?', (matricola,)
+        )
 
         if cursor.rowcount > 0:
             conn.commit()
-            print(f"2FA for user with Matricola '{matricola}' has been reset successfully.")
-            print("The user will be prompted to set up 2FA on their next login.")
+            logger.info(f"2FA per '{matricola}' resettata con successo.")
+            logger.info("L'utente dovrà riconfigurare la sicurezza.")
         else:
-            print(f"User with Matricola '{matricola}' not found in the database. No changes were made.")
+            logger.warning(f"Matricola '{matricola}' non trovata.")
 
     except sqlite3.Error as e:
-        print(f"Database error: {e}")
+        logger.error(f"Errore database: {e}")
     finally:
         if conn:
             conn.close()
 
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python reset_admin_2fa.py <Matricola>")
+        print("Uso: python scripts/reset_admin_2fa.py <Matricola>")
         sys.exit(1)
 
-    user_matricola = sys.argv[1]
-    reset_user_2fa(user_matricola)
+    reset_user_2fa(sys.argv[1])

@@ -1,6 +1,21 @@
+"""
+Funzioni di utilità generale per la manipolazione di dati e orari.
+"""
+
 from datetime import datetime
 
-def merge_time_slots(time_slots):
+
+def merge_time_slots(time_slots: list[str]) -> list[str]:
+    """
+    Unisce intervalli di tempo sovrapposti o contigui.
+    Esempio: ["08:00-10:00", "10:00-12:00"] -> ["08:00 - 12:00"]
+
+    Args:
+        time_slots: Lista di stringhe nel formato "HH:MM-HH:MM".
+
+    Returns:
+        Lista di stringhe formattate con gli intervalli uniti.
+    """
     if not time_slots:
         return []
 
@@ -8,8 +23,8 @@ def merge_time_slots(time_slots):
     slots = []
     for slot in time_slots:
         try:
-            start_time = datetime.strptime(slot.split('-')[0].strip(), '%H:%M')
-            end_time = datetime.strptime(slot.split('-')[1].strip(), '%H:%M')
+            start_time = datetime.strptime(slot.split("-")[0].strip(), "%H:%M")
+            end_time = datetime.strptime(slot.split("-")[1].strip(), "%H:%M")
             slots.append((start_time, end_time))
         except (ValueError, IndexError):
             # Handle cases with invalid format or single time values gracefully
@@ -35,4 +50,6 @@ def merge_time_slots(time_slots):
     merged.append((current_start, current_end))
 
     # Convert back to string format
-    return [f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}" for start, end in merged]
+    return [
+        f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}" for start, end in merged
+    ]

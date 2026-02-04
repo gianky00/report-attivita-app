@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:\\\\Users\\\\gianc\\\\Desktop\\\\SCRIPT\\\\report-attivita-app\\\\src\\\\pages\"\" 2>/dev/null || ls /c/Users/gianc/Desktop/SCRIPT/report-attivita-app/src/pages/ 2>/dev/null || find / -path \"*/report-attivita-app/src/pages/gestione_turni.py \")",
+      "Bash(python3:*)",
+      "Bash(/c/Program\\\\ Files/Python312/python:*)",
+      "Bash(printf:*)"
+    ]
+  }
+}

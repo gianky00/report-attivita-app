@@ -1,53 +1,64 @@
+"""
+Modulo per l'invio asincrono di email tramite Outlook.
+Utilizza un subprocess per interfacciarsi con le API COM di Windows senza bloccare Streamlit.
+"""
 
-import threading
 import subprocess
 import sys
+import threading
+from pathlib import Path
 
-def _send_email_subprocess(subject, html_body):
+from src.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def _send_email_subprocess(subject: str, html_body: str):
     """
-    Executes the email sending script in a separate process.
+    Esegue lo script di invio email in un processo separato.
     """
     try:
-        # We need to use the same Python executable that's running the Streamlit app.
-        python_executable = sys.executable
+        python_exe = sys.executable
+        # Percorso assoluto allo script nella cartella scripts/
+        script_path = (
+            Path(__file__).parent.parent.parent / "scripts" / "send_email_subprocess.py"
+        )
 
-        # Pass the subject and body as command-line arguments.
-        # Using a list of arguments is safer than a single string.
-        command = [python_executable, "send_email_subprocess.py", subject, html_body]
+        if not script_path.exists():
+            logger.error(f"Script di invio email non trovato: {script_path}")
+            return
 
-        # Execute the command. We capture the output for debugging.
+        command = [python_exe, str(script_path), subject, html_body]
+
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            check=False  # We check the return code manually
+            check=False,
         )
 
         if result.returncode == 0:
-            print(f"Email sending process for '{subject}' completed successfully.")
-            if result.stdout:
-                print("Subprocess output:", result.stdout)
+            logger.info(f"Processo email completato per: {subject}")
         else:
-            # Log the error from the subprocess
-            print(f"Error in email sending subprocess for '{subject}'.")
-            if result.stderr:
-                print("Subprocess error output:", result.stderr)
-            with open("email_error.log", "a") as f:
-                f.write(f"Subprocess failed with return code {result.returncode}.\n")
-                f.write(f"Stderr: {result.stderr}\n")
+            logger.error(
+                f"Fallimento subprocess email ({result.returncode}): {result.stderr}"
+            )
 
-    except FileNotFoundError:
-        print("Error: 'send_email_subprocess.py' not found. Make sure the script is in the root directory.")
     except Exception as e:
-        # Catch any other exceptions during the subprocess call
-        print(f"An unexpected error occurred while trying to send email: {e}")
-        with open("email_error.log", "a") as f:
-            f.write(f"Python script exception: {e}\n")
+        logger.error(
+            f"Errore imprevisto durante il lancio del subprocess email: {e}",
+            exc_info=True,
+        )
 
 
-def invia_email_con_outlook_async(subject, html_body):
+def invia_email_con_outlook_async(subject: str, html_body: str):
     """
-    Starts the email sending subprocess in a separate thread to avoid blocking the UI.
+    Avvia l'invio dell'email in un thread separato per garantire la reattività della UI.
     """
-    thread = threading.Thread(target=_send_email_subprocess, args=(subject, html_body))
+    thread = threading.Thread(
+        target=_send_email_subprocess,
+        args=(subject, html_body),
+        daemon=True,  # Il thread non blocca la chiusura dell'app
+    )
     thread.start()
+    logger.debug(f"Thread di invio email avviato per: {subject}")

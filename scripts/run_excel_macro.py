@@ -1,50 +1,64 @@
-import os
+"""
+Script subprocess per l'esecuzione di macro VBA in Excel.
+Utilizzato per la sincronizzazione dei report attività nel database Excel centralizzato.
+"""
+
 import sys
-import win32com.client as win32
+from pathlib import Path
+
 import pythoncom
+import win32com.client as win32
+
+# Aggiunge la cartella src al path per importare il core logging
+sys.path.append(str(Path(__file__).parent.parent))
+from src.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def run_macro():
-    """
-    Opens the 'Database_Report_Attivita.xlsm' workbook and runs the 'AggiornaRisposte' macro.
-    """
+    """Apre il workbook dei report ed esegue la macro di aggiornamento."""
     excel = None
     workbook = None
     try:
-        # Build the absolute path to the Excel file relative to the script's location
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        excel_file_path = os.path.join(script_dir, "Database_Report_Attivita.xlsm")
+        # Percorso del file Excel (situato nella root, un livello sopra scripts/)
+        excel_file_path = Path(__file__).parent.parent / "Database_Report_Attivita.xlsm"
 
-        if not os.path.exists(excel_file_path):
-            print(f"ERRORE: File non trovato: {excel_file_path}", file=sys.stderr)
+        if not excel_file_path.exists():
+            logger.error(f"File Excel non trovato: {excel_file_path}")
             sys.exit(1)
 
-        # Initialize COM for this thread
         pythoncom.CoInitialize()
-        excel = win32.Dispatch('Excel.Application')
-        excel.Visible = False  # Run in the background
+        excel = win32.Dispatch("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False  # Evita popup bloccanti
 
-        workbook = excel.Workbooks.Open(excel_file_path)
+        logger.info(f"Apertura workbook: {excel_file_path.name}...")
+        workbook = excel.Workbooks.Open(str(excel_file_path.resolve()))
 
-        # Run the macro. The macro name is sufficient if it's in a standard module.
+        logger.info("Esecuzione macro 'AggiornaRisposte'...")
         excel.Application.Run("AggiornaRisposte")
 
         workbook.Save()
         workbook.Close(SaveChanges=True)
-        print("SUCCESSO: Macro eseguita e file salvato correttamente.")
+        logger.info("Macro completata e file salvato con successo.")
 
     except Exception as e:
-        print(f"ERRORE: Si è verificato un'eccezione: {e}", file=sys.stderr)
+        logger.error(
+            f"Eccezione durante l'esecuzione della macro Excel: {e}", exc_info=True
+        )
         if excel:
-            excel.Quit() # Attempt to close Excel on error
+            excel.Quit()
         sys.exit(1)
 
     finally:
-        # Ensure Excel is closed and COM objects are released
         if excel:
             excel.Quit()
+        # Rilascio risorse COM
         del workbook
         del excel
         pythoncom.CoUninitialize()
+
 
 if __name__ == "__main__":
     run_macro()

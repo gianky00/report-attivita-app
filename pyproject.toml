@@ -1,0 +1,54 @@
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "UP"]
+ignore = ["E402"] # Ignora import non al top per compatibilità con Streamlit in alcuni file
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+mypy_path = "."
+explicit_package_bases = true
+namespace_packages = true
+ignore_missing_imports = true
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = false
+ignore-magic = false
+ignore-semiprivate = false
+ignore-private = false
+ignore-property-decorators = false
+ignore-module = false
+ignore-nested-functions = false
+fail-under = 80
+exclude = ["setup.py", "tests", "scripts"]
+ignore-regex = ["^get$", "^mock_.*", ".*Base$"]
+verbose = 2
+quiet = false
+whitelist-regex = []
+color = true
+generate-link = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = [
+    "ignore:Type google._upb._message.*:DeprecationWarning",
+    "ignore:.*uses PyType_Spec with a metaclass.*:DeprecationWarning",
+    "ignore:Substituting font arial by core font helvetica:DeprecationWarning",
+    "ignore:The parameter \"ln\" is deprecated:DeprecationWarning",
+    "ignore:Exception ignored in atexit callback.*cleanup_numbered_dir:pytest.PytestWarning",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "scripts"]
+skips = ["B101"]

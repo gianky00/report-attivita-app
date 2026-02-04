@@ -1,96 +1,68 @@
-import os
+"""
+Script di sincronizzazione documenti per la Knowledge Base dell'IA.
+Copia i file .docx dalle cartelle di rete alla directory locale del progetto.
+"""
+
 import shutil
-import pathlib
-import stat
+import sys
+from pathlib import Path
 
-# --- Configurazione ---
-# PERCORSO DI ORIGINE (cartella di rete da cui leggere)
-# Usiamo una stringa raw (r"...") per gestire correttamente i backslash e gli spazi
-source_dir = r"\\192.168.11.251\Database_Tecnico_SMI\Contabilita' strumentale\Relazioni di reperibilita'"
+# Aggiunge la cartella src al path per importare il core logging
+sys.path.append(str(Path(__file__).parent.parent))
+from src.core.logging import get_logger
 
-# PERCORSO DI DESTINAZIONE (cartella locale dove salvare i file)
-dest_dir = r"C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app\knowledge_base_docs"
+logger = get_logger(__name__)
 
-# Tipi di file da copiare
-file_extensions = ('.docx', '.doc')
-# --------------------
+# --- CONFIGURAZIONE ---
+# Percorso di rete per le relazioni di reperibilità
+BASE_NET_PATH = r"\\192.168.11.251\Database_Tecnico_SMI"
+REL_PATH = r"Contabilita' strumentale\Relazioni di reperibilita'"
+SOURCE_DIR = Path(BASE_NET_PATH) / REL_PATH
+DEST_DIR = Path(__file__).parent.parent / "knowledge_base_docs"
+FILE_EXTENSIONS = (".docx", ".doc")
 
-def sync_files(src_path, dest_path):
+
+def sync_files(src_path: Path, dest_path: Path):
     """
-    Copia in modo ricorsivo i file da src_path a dest_path,
-    aggiornando solo i file nuovi o modificati.
+    Sincronizza i file tra sorgente e destinazione, aggiornando solo i modificati.
     """
-    
-    # 1. Converti le stringhe in oggetti Path
-    src_path = pathlib.Path(src_path)
-    dest_path = pathlib.Path(dest_path)
-
-    # 2. Crea la cartella di destinazione se non esiste
     try:
         dest_path.mkdir(parents=True, exist_ok=True)
-        print(f"Cartella di destinazione assicurata: {dest_path}")
     except OSError as e:
-        print(f"ERRORE: Impossibile creare la cartella di destinazione {dest_path}. {e}")
+        logger.error(f"Impossibile creare cartella destinazione {dest_path}: {e}")
         return
 
-    # 3. Verifica se la cartella di origine è accessibile
-    if not src_path.exists() or not src_path.is_dir():
-        print(f"ERRORE: Il percorso di origine non esiste o non è una cartella: {src_path}")
+    if not src_path.exists():
+        logger.error(f"Percorso di rete non accessibile o inesistente: {src_path}")
         return
 
-    print(f"Avvio scansione da: {src_path}")
-    print(f"Sincronizzazione in: {dest_path}")
-    
-    files_copied = 0
-    files_skipped = 0
+    logger.info(f"Sincronizzazione KB avviata da {src_path}")
 
-    # 4. Scansiona ricorsivamente la cartella di origine
-    #    usando rglob('*') per cercare in tutte le sottocartelle
-    for src_file_path in src_path.rglob('*'):
-        
-        # 5. Controlla se è un file e ha l'estensione corretta
-        if src_file_path.is_file() and src_file_path.suffix.lower() in file_extensions:
-            
-            # 6. Calcola il percorso di destinazione mantenendo la struttura
-            #    delle sottocartelle
-            relative_path = src_file_path.relative_to(src_path)
-            dest_file_path = dest_path / relative_path
-            
-            # 7. Crea la sottocartella di destinazione se non esiste
-            dest_file_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # 8. Logica di aggiornamento (controllo data/ora)
+    copied, skipped, errors = 0, 0, 0
+
+    for src_file in src_path.rglob("*"):
+        if src_file.is_file() and src_file.suffix.lower() in FILE_EXTENSIONS:
+            relative = src_file.relative_to(src_path)
+            dest_file = dest_path / relative
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+
             try:
-                # Se il file non esiste a destinazione...
-                if not dest_file_path.exists():
-                    print(f"COPIO NUOVO: {relative_path}")
-                    shutil.copy2(src_file_path, dest_file_path)
-                    files_copied += 1
+                if (
+                    not dest_file.exists()
+                    or src_file.stat().st_mtime > dest_file.stat().st_mtime
+                ):
+                    shutil.copy2(src_file, dest_file)
+                    copied += 1
+                    logger.debug(f"Copiato: {relative}")
                 else:
-                    # Se esiste, confronta le date di modifica
-                    src_stat = src_file_path.stat()
-                    dest_stat = dest_file_path.stat()
-                    
-                    # Se il file sorgente è più recente (st_mtime >)
-                    if src_stat.st_mtime > dest_stat.st_mtime:
-                        print(f"AGGIORNO: {relative_path}")
-                        shutil.copy2(src_file_path, dest_file_path)
-                        files_copied += 1
-                    else:
-                        # Il file a destinazione è già aggiornato
-                        files_skipped += 1
-            
-            except (IOError, OSError, shutil.Error) as e:
-                print(f"ERRORE durante la copia di {src_file_path}: {e}")
+                    skipped += 1
             except Exception as e:
-                print(f"ERRORE SCONOSCIUTO su file {src_file_path}: {e}")
+                logger.error(f"Errore copia {relative}: {e}")
+                errors += 1
+
+    logger.info("--- Riepilogo Sincronizzazione ---")
+    logger.info(f"Aggiornati: {copied} | Saltati: {skipped} | Errori: {errors}")
 
 
-    print("\n--- Riepilogo Sincronizzazione ---")
-    print(f"File copiati/aggiornati: {files_copied}")
-    print(f"File saltati (già aggiornati): {files_skipped}")
-    print("Operazione completata.")
-
-# Esegui la funzione di sincronizzazione
 if __name__ == "__main__":
-    sync_files(source_dir, dest_dir)
+    sync_files(SOURCE_DIR, DEST_DIR)

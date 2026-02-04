@@ -1,20 +1,32 @@
-/* styles/style.css */
+/* src/styles/style.css */
 
-/* Stile di base per il corpo dell'applicazione */
+:root {
+    --primary-color: #3366ff;
+    --primary-hover: #254eda;
+    --bg-color: #f0f2f6;
+    --card-bg: #ffffff;
+    --text-color: #333333;
+    --text-muted: #555555;
+    --border-color: #e0e6ed;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.03);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 6px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Stile di base */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f0f2f6;
-    color: #333;
+    background-color: var(--bg-color);
+    color: var(--text-color);
     transition: background-color 0.3s ease;
 }
 
-/* Contenitore principale per centrare e dare margini */
+/* Layout */
 .main-container {
     padding: 1rem;
     transition: all 0.3s ease-in-out;
 }
 
-/* Stili per i contenuti della pagina e le transizioni */
 .page-content {
     opacity: 1;
     transition: opacity 0.2s ease-in-out;
@@ -24,174 +36,100 @@ body {
     opacity: 0;
 }
 
-/* Stili per le card delle attività */
-.task-card {
-    padding: 1.5rem;
-    background-color: #ffffff;
+/* Componenti: Card */
+.card, .task-card {
+    background-color: var(--card-bg);
     border-radius: 8px;
-    margin-bottom: 1rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s ease-in-out;
+    border: 1px solid var(--border-color);
 }
 
-/* Miglioramento degli st.expander */
-.st-expander {
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    background-color: #fafafa;
+.card:hover, .task-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
 }
 
-/* Nasconde la navigazione delle pagine di default di Streamlit nella sidebar */
+/* Streamlit Override */
 [data-testid="stSidebarNav"] {
     display: none;
 }
 
-/* Stile unificato per le card */
-.card {
-    background-color: white;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease-in-out;
-}
-
-.card:hover {
-    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
-    transform: translateY(-2px);
-}
-
-/* Stile per i contenitori di Streamlit con bordo */
 [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"] > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] > div {
     border: none !important;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+    box-shadow: var(--shadow-md) !important;
     border-radius: 8px !important;
 }
 
-/* --- TYPOGRAPHY & SECTION TITLES --- */
-
-/* Base font styles for readability */
+/* Tipografia */
 h1, h2, h3, h4, h5, h6 {
-    color: #2c3e50; /* A darker, softer black */
+    color: #2c3e50;
     font-weight: 600;
 }
 
-/* Style for st.title */
-h1 {
-    font-size: 2rem;
-    margin-bottom: 1rem;
-}
+h1 { font-size: 2rem; margin-bottom: 1rem; }
+h2 { font-size: 1.6rem; margin-top: 1.5rem; color: #34495e; }
 
-/* Style for st.header */
-h2 {
-    font-size: 1.6rem;
-    margin-top: 1.5rem;
-    margin-bottom: 1rem;
-    color: #34495e;
-}
-
-/* Elegant style for st.subheader */
 h3 {
     font-size: 1.25rem;
     font-weight: 500;
     color: #34495e;
     padding-bottom: 10px;
-    margin-top: 1.5rem;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid #e0e6ed; /* Light grey thin border */
+    border-bottom: 1px solid var(--border-color);
     width: 100%;
 }
 
-
-/* --- RESPONSIVE TYPOGRAPHY --- */
-@media (max-width: 768px) {
-    h1 {
-        font-size: 1.7rem;
-    }
-
-    h2 {
-        font-size: 1.4rem;
-    }
-
-    h3 {
-        font-size: 1.1rem;
-    }
-
-    .card {
-        padding: 15px;
-        margin-bottom: 15px;
-    }
-}
-
-/* --- INTERACTIVE ELEMENTS (BUTTONS, TABS) --- */
-
-/* Unified style for all buttons */
+/* Elementi Interattivi */
 button {
     border-radius: 8px !important;
     padding: 10px 16px !important;
     font-weight: 500 !important;
     transition: all 0.2s ease-in-out !important;
-    border: 1px solid #dcdcdc !important; /* Default border */
 }
 
-/* Primary Button Style */
 button[kind="primary"] {
-    background-color: #3366ff !important;
+    background-color: var(--primary-color) !important;
     color: white !important;
-    border-color: #3366ff !important;
 }
 
 button[kind="primary"]:hover {
-    background-color: #254eda !important;
-    border-color: #254eda !important;
+    background-color: var(--primary-hover) !important;
 }
 
-/* Secondary Button Style */
-button[kind="secondary"] {
-    background-color: #f0f2f6 !important;
-    color: #333 !important;
-}
-
-button[kind="secondary"]:hover {
-    background-color: #e0e6ed !important;
-    border-color: #c0c6cf !important;
-}
-
-
-/* Minimalist style for st.tabs */
+/* Tabs */
 [data-baseweb="tab-list"] {
-    border-bottom: 2px solid #e0e6ed !important;
-    padding-bottom: 2px !important;
+    border-bottom: 2px solid var(--border-color) !important;
 }
 
 [data-baseweb="tab"] {
-    background-color: transparent !important;
-    font-weight: 500 !important;
-    color: #555 !important;
+    color: var(--text-muted) !important;
 }
 
 [data-baseweb="tab--selected"] {
-    color: #3366ff !important;
-    border-bottom: 2px solid #3366ff !important;
+    color: var(--primary-color) !important;
+    border-bottom: 2px solid var(--primary-color) !important;
 }
 
-/* Improved st.expander header style */
-.st-expander > summary {
-    font-weight: 500;
-    font-size: 1.05rem;
-    color: #2c3e50;
-}
-
-/* --- NOTIFICATION BADGE --- */
+/* Badge Notifiche */
 .notification-badge {
     position: absolute;
     top: 10px;
     right: 10px;
-    background-color: red;
+    background-color: #ff4b4b;
     color: white;
     border-radius: 50%;
     padding: 2px 6px;
     font-size: 0.75rem;
     font-weight: bold;
     border: 2px solid white;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    h1 { font-size: 1.7rem; }
+    h2 { font-size: 1.4rem; }
+    h3 { font-size: 1.1rem; }
+    .card { padding: 15px; }
 }

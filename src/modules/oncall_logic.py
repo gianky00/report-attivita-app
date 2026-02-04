@@ -1,3 +1,8 @@
+"""
+Logica per il calcolo della rotazione della reperibilità settimanale.
+Basato su un ciclo di 4 settimane con cambio turno ogni venerdì.
+"""
+
 import datetime
 
 # Data di riferimento (Anchor Date): Venerdì 28 Novembre 2025, inizio del turno della Coppia 1
@@ -6,13 +11,26 @@ ANCHOR_DATE = datetime.date(2025, 11, 28)
 # Sequenza ciclica di 4 coppie di reperibilità.
 # Ogni coppia è una tupla che contiene due tuple: (COGNOME, RUOLO)
 ON_CALL_ROTATION = [
-    (("RICIPUTO", "Tecnico"), ("GUARINO", "Aiutante")),    # Andrea Riciputo, Riccardo Guarino
-    (("SPINALI", "Tecnico"), ("ALLEGRETTI", "Aiutante")),  # Domenico Spinali, Giancarlo Allegretti
-    (("MILLO", "Tecnico"), ("GUARINO", "Aiutante")),      # Francesco Millo, Riccardo Guarino
-    (("TARASCIO", "Tecnico"), ("PARTESANO", "Aiutante")),  # Benito Tarascio, Vincenzo Partesano
+    (
+        ("RICIPUTO", "Tecnico"),
+        ("GUARINO", "Aiutante"),
+    ),  # Andrea Riciputo, Riccardo Guarino
+    (
+        ("SPINALI", "Tecnico"),
+        ("ALLEGRETTI", "Aiutante"),
+    ),  # Domenico Spinali, Giancarlo Allegretti
+    (
+        ("MILLO", "Tecnico"),
+        ("GUARINO", "Aiutante"),
+    ),  # Francesco Millo, Riccardo Guarino
+    (
+        ("TARASCIO", "Tecnico"),
+        ("PARTESANO", "Aiutante"),
+    ),  # Benito Tarascio, Vincenzo Partesano
 ]
 
-def get_on_call_pair(current_date):
+
+def get_on_call_pair(current_date: datetime.date) -> tuple:
     """
     Calcola la coppia di reperibilità per una data specifica basandosi su un ciclo di 4 settimane.
 
@@ -45,7 +63,10 @@ def get_on_call_pair(current_date):
 
     return ON_CALL_ROTATION[rotation_index]
 
-def get_next_on_call_week(user_surname, start_date=None):
+
+def get_next_on_call_week(
+    user_surname: str, start_date: datetime.date | None = None
+) -> datetime.date | None:
     """
     Trova la prossima settimana in cui un utente è di reperibilità.
 
@@ -69,7 +90,7 @@ def get_next_on_call_week(user_surname, start_date=None):
         current_date = start_date + datetime.timedelta(days=i)
 
         # Il cambio turno è di venerdì, quindi la nostra data di inizio del blocco è sempre un venerdì
-        if current_date.weekday() != 4: # 4 = Venerdì
+        if current_date.weekday() != 4:  # 4 = Venerdì
             continue
 
         pair = get_on_call_pair(current_date)
