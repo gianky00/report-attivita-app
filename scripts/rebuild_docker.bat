@@ -1,6 +1,7 @@
 @echo off
-REM Questo script ferma i container Docker, forza la ricostruzione dell'immagine e li riavvia.
+REM Questo script ferma i container Docker, forza la ricostruzione dell'immagine e li riavvia dal livello root del progetto.
 
+cd ..
 echo.
 echo ===================================================
 echo     ARRESTO DEI CONTAINER DOCKER IN CORSO...

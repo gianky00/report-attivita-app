@@ -218,7 +218,7 @@ def main_app(matricola_utente, ruolo):
         with open(file_name) as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-    load_css('styles/style.css')
+    load_css('src/styles/style.css')
 
     user_info = get_user_by_matricola(matricola_utente)
     if user_info:

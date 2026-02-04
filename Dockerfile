@@ -25,4 +25,4 @@ EXPOSE 8501
 # Comando per avviare l'applicazione
 # 1. Esegue lo script per creare il database
 # 2. Avvia l'applicazione Streamlit
-CMD ["sh", "-c", "python crea_database.py && streamlit run app.py --server.port=8501 --server.address=0.0.0.0"]
+CMD ["sh", "-c", "python scripts/crea_database.py && streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0"]

@@ -25,7 +25,10 @@ warnings.filterwarnings(
 )
 
 # --- CONFIGURAZIONE ---
-DB_NAME = "schedario.db"
+# Il database deve trovarsi nella root del progetto.
+# Usiamo il percorso assoluto basato sulla posizione dello script per sicurezza.
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_NAME = os.path.join(BASE_DIR, "schedario.db")
 
 def crea_tabelle_se_non_esistono():
     """

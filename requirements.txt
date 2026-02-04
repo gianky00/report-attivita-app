@@ -16,3 +16,16 @@ python-docx==1.1.2
 scikit-learn==1.6.0
 nltk==3.8.1
 fpdf2
+
+# Dev Tools
+mypy
+ruff
+refurb
+black
+bandit
+vulture
+xenon
+deptry
+codespell
+interrogate
+pip-audit

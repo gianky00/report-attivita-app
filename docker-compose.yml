@@ -5,7 +5,7 @@ services:
       - "8501:8501"
     volumes:
       - .:/app
-    command: sh -c "python crea_database.py && streamlit run app.py --server.port=8501 --server.address=0.0.0.0"
+    command: sh -c "python scripts/crea_database.py && streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0"
 
   ngrok:
     image: ngrok/ngrok:latest
