@@ -5,7 +5,7 @@ Test estesi per la logica di rendering dei componenti UI.
 import pytest
 import streamlit as st
 import pandas as pd
-from src.components.ui.activity_ui import disegna_sezione_attivita, visualizza_storico_organizzato
+from components.ui.activity_ui import disegna_sezione_attivita, visualizza_storico_organizzato
 
 def test_disegna_sezione_attivita_empty(mocker):
     """Verifica il rendering con lista attività vuota."""

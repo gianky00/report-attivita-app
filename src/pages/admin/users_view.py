@@ -6,14 +6,14 @@ Include funzionalità di creazione, modifica, eliminazione e reset credenziali/2
 import pandas as pd
 import streamlit as st
 
-from src.modules.auth import (
+from modules.auth import (
     create_user,
     delete_user,
     reset_user_2fa,
     reset_user_password,
     update_user,
 )
-from src.modules.db_manager import get_all_users
+from modules.db_manager import get_all_users
 
 
 def _render_user_edit_form(user_to_edit):

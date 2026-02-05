@@ -4,7 +4,7 @@ Focalizzato sulla prevenzione della Privilege Escalation e bootstrapping sicuro.
 """
 
 import pytest
-from src.modules.auth import authenticate_user
+from modules.auth import authenticate_user
 
 def test_first_user_is_always_admin(mocker):
     """Verifica che se il DB è vuoto, il primo utente riceva il ruolo Amministratore."""

@@ -4,8 +4,8 @@ Test di integrità per il database dei turni e bacheca.
 
 import sqlite3
 import pytest
-from src.core.database import DatabaseEngine
-from src.modules.database.db_shifts import create_shift, add_booking, get_bookings_for_shift
+from core.database import DatabaseEngine
+from modules.database.db_shifts import create_shift, add_booking, get_bookings_for_shift
 
 @pytest.fixture
 def setup_db_cascade(mocker, tmp_path):

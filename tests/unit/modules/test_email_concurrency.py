@@ -5,7 +5,7 @@ Test di concorrenza per l'invio asincrono di email.
 import threading
 import time
 import pytest
-from src.modules.email_sender import invia_email_con_outlook_async
+from modules.email_sender import invia_email_con_outlook_async
 
 def test_email_rapid_fire_threading(mocker):
     """Verifica che l'invio di molteplici email in parallelo non causi crash."""

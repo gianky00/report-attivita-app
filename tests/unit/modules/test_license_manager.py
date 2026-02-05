@@ -2,7 +2,7 @@
 Test unitari per il License Manager.
 """
 
-from src.modules.license_manager import check_pyarmor_license
+from modules.license_manager import check_pyarmor_license
 
 
 def test_check_pyarmor_license_missing(mocker):

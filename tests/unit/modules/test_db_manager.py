@@ -3,7 +3,7 @@ Test approfonditi per il modulo DB Manager utilizzando il mocking di DatabaseEng
 """
 
 import pytest
-from src.modules.db_manager import (
+from modules.db_manager import (
     add_assignment_exclusion,
     add_shift_log,
     delete_booking,

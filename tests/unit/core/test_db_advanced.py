@@ -5,7 +5,7 @@ Test per la sicurezza dei thread nel Database Engine.
 import threading
 import sqlite3
 import pytest
-from src.core.database import DatabaseEngine
+from core.database import DatabaseEngine
 
 def test_database_thread_safety(mocker):
     """Verifica che chiamate concorrenti non mandino in crash l'engine."""
@@ -34,7 +34,7 @@ def test_move_report_atomically_failure_middle(mocker):
     mock_conn.__enter__.return_value = mock_conn
     mock_conn.execute.side_effect = [None, sqlite3.Error("Rollback trigger")]
     
-    from src.modules.database.db_reports import move_report_atomically
+    from modules.database.db_reports import move_report_atomically
     
     success = move_report_atomically("R1", "s", "d")
     assert success is False

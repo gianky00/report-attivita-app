@@ -9,13 +9,22 @@ from typing import Any
 
 import bcrypt
 import pyotp
-from src.core.logging import get_logger
+from core.logging import get_logger
 
 from modules.db_manager import get_db_connection
 
 logger = get_logger(__name__)
 
-# --- Database-backed User Management Functions ---
+# Colonne valide per la tabella contatti per prevenire SQL Injection via chiavi dict
+VALID_USER_COLUMNS = {
+    "Matricola",
+    "Nome Cognome",
+    "Ruolo",
+    "PasswordHash",
+    "2FA_Secret",
+    "Email",
+    "Telefono",
+}
 
 
 def get_user_by_matricola(matricola: str) -> dict[str, Any] | None:
@@ -35,38 +44,48 @@ def get_user_by_matricola(matricola: str) -> dict[str, Any] | None:
             conn.close()
 
 
-def create_user(user_data: dict) -> bool:
+def create_user(user_data: dict[str, Any]) -> bool:
     """Crea un nuovo utente nel database."""
+    # Filtra solo le chiavi valide
+    filtered_data = {k: v for k, v in user_data.items() if k in VALID_USER_COLUMNS}
+    if not filtered_data:
+        return False
+
     conn = get_db_connection()
     try:
         with conn:
-            cols = ", ".join(f'"{k}"' for k in user_data.keys())
-            placeholders = ", ".join("?" for _ in user_data)
-            sql = f"INSERT INTO contatti ({cols}) VALUES ({placeholders})"
-            conn.execute(sql, list(user_data.values()))
+            cols = ", ".join(f'"{k}"' for k in filtered_data.keys())
+            placeholders = ", ".join("?" for _ in filtered_data)
+            sql = f"INSERT INTO contatti ({cols}) VALUES ({placeholders})"  # nosec B608
+            conn.execute(sql, list(filtered_data.values()))
         return True
-    except sqlite3.IntegrityError:  # Specific error for duplicate matricola
+    except sqlite3.IntegrityError:
         return False
     except sqlite3.Error as e:
-        print(f"Errore durante la creazione dell'utente: {e}")
+        logger.error(f"Errore durante la creazione dell'utente: {e}")
         return False
     finally:
         if conn:
             conn.close()
 
 
-def update_user(matricola: str, update_data: dict) -> bool:
+def update_user(matricola: str, update_data: dict[str, Any]) -> bool:
     """Aggiorna i dati di un utente esistente."""
+    # Filtra solo le chiavi valide
+    filtered_data = {k: v for k, v in update_data.items() if k in VALID_USER_COLUMNS}
+    if not filtered_data:
+        return False
+
     conn = get_db_connection()
     try:
         with conn:
-            set_clause = ", ".join(f'"{k}" = ?' for k in update_data.keys())
-            sql = f"UPDATE contatti SET {set_clause} WHERE Matricola = ?"
-            params = list(update_data.values()) + [matricola]
+            set_clause = ", ".join(f'"{k}" = ?' for k in filtered_data.keys())
+            sql = f"UPDATE contatti SET {set_clause} WHERE Matricola = ?"  # nosec B608
+            params = list(filtered_data.values()) + [matricola]
             conn.execute(sql, params)
         return True
     except sqlite3.Error as e:
-        print(f"Errore durante l'aggiornamento dell'utente {matricola}: {e}")
+        logger.error(f"Errore durante l'aggiornamento dell'utente {matricola}: {e}")
         return False
     finally:
         if conn:
@@ -82,7 +101,7 @@ def delete_user(matricola: str) -> bool:
             conn.execute(sql, (matricola,))
         return True
     except sqlite3.Error as e:
-        print(f"Errore durante l'eliminazione dell'utente {matricola}: {e}")
+        logger.error(f"Errore durante l'eliminazione dell'utente {matricola}: {e}")
         return False
     finally:
         if conn:
@@ -99,19 +118,13 @@ def reset_user_2fa(matricola: str) -> bool:
     return update_user(matricola, {"2FA_Secret": None})
 
 
-# --- Funzioni 2FA ---
-
-
 def generate_2fa_secret() -> str:
     """Genera una nuova chiave segreta per la 2FA."""
     return pyotp.random_base32()
 
 
 def get_provisioning_uri(username: str, secret: str) -> str:
-    """
-    Genera l'URI di provisioning per il QR code.
-    """
-    # Rimuovi spazi e caratteri speciali dal nome utente per l'URI
+    """Genera l'URI di provisioning per il QR code."""
     safe_username = "".join(c for c in username if c.isalnum())
     return pyotp.totp.TOTP(secret).provisioning_uri(
         name=safe_username, issuer_name="AppManutenzioneSMI"
@@ -129,13 +142,8 @@ def verify_2fa_code(secret: str, code: str) -> bool:
         return False
 
 
-# --- Funzione di Autenticazione Principale ---
-
-
 def authenticate_user(matricola: str, password: str) -> tuple[str, Any]:
-    """
-    Autentica un utente tramite Matricola e gestisce il flusso 2FA.
-    """
+    """Autentica un utente tramite Matricola e gestisce il flusso 2FA."""
     if not matricola or not password:
         return "FAILED", None
 
@@ -151,9 +159,8 @@ def authenticate_user(matricola: str, password: str) -> tuple[str, Any]:
             return "FIRST_LOGIN_SETUP", (nome_completo, "Amministratore", password)
 
         user_row = get_user_by_matricola(matricola)
-
         if not user_row:
-            return "FAILED", None  # Utente non trovato
+            return "FAILED", None
 
         nome_completo = str(user_row["Nome Cognome"]).strip()
         ruolo = user_row.get("Ruolo", "Tecnico")
@@ -168,13 +175,10 @@ def authenticate_user(matricola: str, password: str) -> tuple[str, Any]:
             if bcrypt.checkpw(password_bytes, hashed_password_bytes):
                 if user_row.get("2FA_Secret"):
                     return "2FA_REQUIRED", nome_completo
-                else:
-                    return "2FA_SETUP_REQUIRED", (nome_completo, ruolo)
-            else:
-                return "FAILED", None
+                return "2FA_SETUP_REQUIRED", (nome_completo, ruolo)
+            return "FAILED", None
         except (ValueError, TypeError):
             return "FIRST_LOGIN_SETUP", (nome_completo, ruolo, password)
-
     finally:
         if conn:
             conn.close()
@@ -192,7 +196,7 @@ def log_access_attempt(username: str, status: str) -> bool:
             conn.execute(sql, (now_iso, username, status))
         return True
     except sqlite3.Error as e:
-        print(f"Errore durante la registrazione del tentativo di accesso: {e}")
+        logger.error(f"Errore registrazione tentativo accesso: {e}")
         return False
     finally:
         if conn:

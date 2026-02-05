@@ -4,7 +4,7 @@ Test unitari per il calcolo della rotazione reperibilità.
 
 import datetime
 
-from src.modules.oncall_logic import get_next_on_call_week, get_on_call_pair
+from modules.oncall_logic import get_next_on_call_week, get_on_call_pair
 
 
 def test_get_on_call_pair_anchor():

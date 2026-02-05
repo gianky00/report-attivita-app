@@ -6,8 +6,8 @@ import datetime
 import pytest
 import pandas as pd
 import streamlit as st
-from src.modules.importers.excel_giornaliera import _match_partial_name
-from src.modules.reports_manager import scrivi_o_aggiorna_risposta
+from modules.importers.excel_giornaliera import _match_partial_name
+from modules.reports_manager import scrivi_o_aggiorna_risposta
 
 def test_match_partial_name_complex():
     """Test matching nomi con iniziali e cognomi composti."""

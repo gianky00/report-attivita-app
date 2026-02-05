@@ -7,12 +7,14 @@ import functools
 import json
 import logging
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any, ParamSpec, TypeVar
 
 # --- CONFIGURAZIONE ---
 LOG_DIR = Path("logs")
@@ -20,9 +22,10 @@ LOG_FILE = LOG_DIR / "app.json"
 LOG_DIR.mkdir(exist_ok=True)
 
 # Contesto globale thread-local per trace_id e metadati aggiuntivi
-import threading
-
 _context = threading.local()
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class JsonFormatter(logging.Formatter):
@@ -30,20 +33,26 @@ class JsonFormatter(logging.Formatter):
 
     SENSITIVE_KEYS = {"password", "secret", "2fa_secret", "passwordhash", "token"}
 
-    def _sanitize(self, data: dict) -> dict:
-        """Maschera i valori sensibili in un dizionario."""
-        sanitized = {}
-        for k, v in data.items():
-            if any(s in k.lower() for s in self.SENSITIVE_KEYS):
-                sanitized[k] = "********"
-            elif isinstance(v, dict):
-                sanitized[k] = self._sanitize(v)
-            else:
-                sanitized[k] = v
-        return sanitized
+    def _sanitize(self, data: Any) -> Any:
+        """Maschera i valori sensibili in un dizionario o lista."""
+        if isinstance(data, dict):
+            sanitized = {}
+            for k, v in data.items():
+                if isinstance(k, str) and any(
+                    s in k.lower() for s in self.SENSITIVE_KEYS
+                ):
+                    sanitized[k] = "********"
+                elif isinstance(v, (dict, list)):
+                    sanitized[k] = self._sanitize(v)
+                else:
+                    sanitized[k] = v
+            return sanitized
+        if isinstance(data, list):
+            return [self._sanitize(item) for item in data]
+        return data
 
     def format(self, record: logging.LogRecord) -> str:
-        log_data = {
+        log_data: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created).isoformat(),
             "level": record.levelname,
             "logger": record.name,
@@ -54,20 +63,22 @@ class JsonFormatter(logging.Formatter):
         }
 
         # Sanitizza il messaggio principale se contiene parole chiave
-        msg_lower = log_data["message"].lower()
-        if "password" in msg_lower or "secret" in msg_lower:
-            log_data["message"] = "[REDACTED] Messaggio contenente dati potenzialmente sensibili"
+        msg_str = str(log_data["message"]).lower()
+        if "password" in msg_str or "secret" in msg_str:
+            log_data["message"] = (
+                "[REDACTED] Messaggio contenente dati potenzialmente sensibili"
+            )
 
         # Aggiungi trace_id se presente nel contesto
         if hasattr(_context, "trace_id"):
             log_data["trace_id"] = _context.trace_id
 
         # Aggiungi metadati extra dal contesto (sanitizzati)
-        if hasattr(_context, "extra"):
+        if hasattr(_context, "extra") and isinstance(_context.extra, dict):
             log_data.update(self._sanitize(_context.extra))
 
         # Aggiungi attributi extra passati direttamente nella chiamata log (sanitizzati)
-        if hasattr(record, "extra_data"):
+        if hasattr(record, "extra_data") and isinstance(record.extra_data, dict):
             log_data.update(self._sanitize(record.extra_data))
 
         # Gestione eccezioni
@@ -118,14 +129,14 @@ def with_context(trace_id: str | None = None, **kwargs):
         _context.extra = old_extra
 
 
-def measure_time(func: Callable) -> Callable:
+def measure_time(func: Callable[P, R]) -> Callable[P, R]:
     """
     Decoratore per misurare il tempo di esecuzione di una funzione e loggarlo.
     """
     logger = get_logger(func.__module__)
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         start_time = time.perf_counter()
         try:
             result = func(*args, **kwargs)

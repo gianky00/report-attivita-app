@@ -6,7 +6,7 @@ import sqlite3
 import pytest
 import time
 from unittest.mock import MagicMock, patch
-from src.core.database import retry_on_lock
+from core.database import retry_on_lock
 
 def test_retry_on_lock_success_after_failure():
     """Verifica che il retry funzioni se il lock viene rilasciato al secondo tentativo."""

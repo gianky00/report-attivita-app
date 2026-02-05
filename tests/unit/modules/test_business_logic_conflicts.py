@@ -4,7 +4,7 @@ Test per logica di business complessa e conflitti di disponibilità.
 
 import pandas as pd
 import pytest
-from src.modules.shifts.logic_bookings import prenota_turno_logic
+from modules.shifts.logic_bookings import prenota_turno_logic
 
 def test_booking_conflict_with_oncall(mocker):
     """Verifica che un utente non possa prenotare un turno se è già in reperibilità in quel giorno."""

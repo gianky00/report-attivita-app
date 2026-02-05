@@ -3,7 +3,7 @@ Test avanzati per casi limite temporali: DST e mezzanotte.
 """
 
 import pytest
-from src.modules.utils import calculate_shift_duration, merge_time_slots
+from modules.utils import calculate_shift_duration, merge_time_slots
 
 def test_dst_transition_duration():
     """Verifica il calcolo della durata reale durante il passaggio ora legale."""

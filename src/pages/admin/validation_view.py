@@ -6,7 +6,7 @@ Gestisce il flusso di approvazione e il trasferimento dei dati nello storico def
 import pandas as pd
 import streamlit as st
 
-from src.modules.db_manager import (
+from modules.db_manager import (
     delete_reports_by_ids,
     get_reports_to_validate,
     get_unvalidated_relazioni,

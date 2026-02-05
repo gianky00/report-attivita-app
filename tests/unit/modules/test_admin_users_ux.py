@@ -5,7 +5,7 @@ Test per i flussi UX di amministrazione utenti.
 import pytest
 import streamlit as st
 import pandas as pd
-from src.pages.admin.users_view import _render_new_user_expander, _render_user_card
+from pages.admin.users_view import _render_new_user_expander, _render_user_card
 
 def test_user_creation_duplicate_error(mocker):
     """Verifica che la creazione di un utente con matricola duplicata mostri un errore."""

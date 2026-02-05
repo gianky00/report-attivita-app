@@ -4,7 +4,7 @@ Verifica la generazione dei prompt e l'integrazione con la logica strumentale.
 """
 
 import pytest
-import src.modules.ai_engine as ai
+import modules.ai_engine as ai
 
 def test_prompt_selection_logic(mocker):
     """Verifica che venga scelto il prompt tecnico se vengono rilevati tag ISA."""

@@ -4,7 +4,7 @@ Test per la logica dei turni di reperibilità settimanale.
 
 import datetime
 import pandas as pd
-from src.modules.shifts.logic_oncall import sync_oncall_shifts
+from modules.shifts.logic_oncall import sync_oncall_shifts
 
 def test_sync_oncall_shifts_no_changes(mocker):
     """Verifica che non vengano creati turni se già presenti."""

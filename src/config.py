@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 
 import toml
-from src.core.logging import get_logger
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

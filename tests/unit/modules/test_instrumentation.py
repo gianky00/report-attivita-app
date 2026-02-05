@@ -2,7 +2,7 @@
 Test unitari per la logica di analisi strumentazione ISA S5.1.
 """
 
-from src.modules.instrumentation_logic import (
+from modules.instrumentation_logic import (
     find_and_analyze_tags,
     parse_instrument_tag,
 )

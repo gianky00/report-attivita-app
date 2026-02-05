@@ -5,9 +5,9 @@ Riesporta i componenti dai moduli specializzati.
 
 import streamlit as st
 
-from src.components.forms.debriefing_form import render_debriefing_ui
-from src.components.forms.shift_edit_form import render_edit_shift_form
-from src.components.forms.relazione_oncall_form import (
+from components.forms.debriefing_form import render_debriefing_ui
+from components.forms.shift_edit_form import render_edit_shift_form
+from components.forms.relazione_oncall_form import (
     render_relazione_reperibilita_ui,
 )
 

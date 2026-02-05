@@ -3,12 +3,12 @@ Modulo per la gestione e il caricamento dei dati delle attività (Facade).
 Riesporta le funzioni dai moduli specializzati per mantenere la compatibilità.
 """
 
-from src.modules.importers.excel_giornaliera import (
+from modules.importers.excel_giornaliera import (
     get_all_assigned_activities,
     trova_attivita,
 )
-from src.modules.knowledge_base import carica_knowledge_core
-from src.modules.reports_manager import scrivi_o_aggiorna_risposta
+from modules.knowledge_base import carica_knowledge_core
+from modules.reports_manager import scrivi_o_aggiorna_risposta
 
 __all__ = [
     "carica_knowledge_core",

@@ -5,7 +5,7 @@ Focalizzato sulla risposta alle sostituzioni e transazioni bacheca.
 
 import pytest
 import sqlite3
-from src.modules.shifts.logic_market import (
+from modules.shifts.logic_market import (
     rispondi_sostituzione_logic,
     pubblica_turno_in_bacheca_logic,
     prendi_turno_da_bacheca_logic

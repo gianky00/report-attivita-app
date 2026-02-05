@@ -3,8 +3,8 @@ Test unitari per la gestione dei turni e sottomoduli logici.
 """
 
 import pandas as pd
-from src.modules.shifts.logic_utils import find_matricola_by_surname, log_shift_change
-from src.modules.shifts.logic_bookings import prenota_turno_logic
+from modules.shifts.logic_utils import find_matricola_by_surname, log_shift_change
+from modules.shifts.logic_bookings import prenota_turno_logic
 
 
 def test_prenota_turno_logic_success(mocker):

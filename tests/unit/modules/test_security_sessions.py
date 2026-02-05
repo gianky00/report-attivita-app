@@ -3,7 +3,7 @@ Test per la sicurezza e resilienza delle sessioni.
 """
 
 import json
-from src.modules.session_manager import load_session
+from modules.session_manager import load_session
 
 def test_load_session_with_missing_keys(tmp_path, mocker, monkeypatch):
     """Verifica che una sessione con JSON incompleto venga invalidata."""

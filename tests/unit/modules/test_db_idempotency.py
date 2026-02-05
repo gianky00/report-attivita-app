@@ -4,7 +4,7 @@ Test di integrità e idempotenza per importazione dati storici.
 
 import pytest
 import sqlite3
-from src.modules.database.db_reports import salva_report_intervento
+from modules.database.db_reports import salva_report_intervento
 
 def test_excel_import_idempotency(mocker):
     """Verifica che l'inserimento dello stesso report più volte non crei duplicati."""

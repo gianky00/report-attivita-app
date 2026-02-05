@@ -6,7 +6,7 @@ Fornisce strumenti per il parsing dei TAG e suggerimenti tecnici basati sul cont
 import re
 from typing import Any
 
-from src.core.logging import get_logger
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

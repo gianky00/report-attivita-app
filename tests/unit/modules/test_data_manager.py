@@ -4,8 +4,8 @@ Test unitari per il modulo Data Manager e sottomoduli correlati.
 
 import datetime
 
-from src.modules.importers.excel_giornaliera import _match_partial_name
-from src.modules.reports_manager import scrivi_o_aggiorna_risposta
+from modules.importers.excel_giornaliera import _match_partial_name
+from modules.reports_manager import scrivi_o_aggiorna_risposta
 
 
 def test_match_partial_name_logic():

@@ -7,18 +7,25 @@ import functools
 import sqlite3
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
-from src.core.logging import get_logger, measure_time
+from core.logging import get_logger, measure_time
 
 logger = get_logger(__name__)
 DB_NAME = "schedario.db"
 
-def retry_on_lock(retries: int = 5, delay: float = 0.5):
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def retry_on_lock(
+    retries: int = 5, delay: float = 0.5
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decoratore per riprovare un'operazione se il database è bloccato."""
-    def decorator(func: Callable):
+
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             last_err = None
             for i in range(retries):
                 try:
@@ -27,15 +34,20 @@ def retry_on_lock(retries: int = 5, delay: float = 0.5):
                     if "locked" in str(e).lower():
                         last_err = e
                         logger.warning(
-                            f"Database bloccato, tentativo {i+1}/{retries}..."
+                            f"Database bloccato, tentativo {i + 1}/{retries}..."
                         )
                         time.sleep(delay * (i + 1))
                         continue
                     raise
             logger.error(f"Database bloccato dopo {retries} tentativi.")
-            raise last_err
+            if last_err:
+                raise last_err
+            raise sqlite3.OperationalError("Database bloccato.")
+
         return wrapper
+
     return decorator
+
 
 class DatabaseEngine:
     """Gestore centralizzato delle operazioni sul database."""
@@ -71,12 +83,17 @@ class DatabaseEngine:
         try:
             cursor = conn.execute(query, params)
             rows = cursor.fetchall()
-            if not rows: return []
-            # Prova a usare keys() di sqlite3.Row, altrimenti fallback a dict vuoto
+            if not rows:
+                return []
             try:
                 return [{k: row[k] for k in row.keys()} for row in rows]
             except AttributeError:
-                return [dict(row) if hasattr(row, "__iter__") and not isinstance(row, tuple) else {} for row in rows]
+                return [
+                    dict(row)
+                    if hasattr(row, "__iter__") and not isinstance(row, tuple)
+                    else {}
+                    for row in rows
+                ]
         except sqlite3.Error as e:
             logger.error(f"Errore fetch_all: {e} | Query: {query}")
             return []
@@ -91,12 +108,16 @@ class DatabaseEngine:
         try:
             cursor = conn.execute(query, params)
             row = cursor.fetchone()
-            if not row: return None
+            if not row:
+                return None
             try:
                 return {k: row[k] for k in row.keys()}
             except AttributeError:
-                # Se row è una tupla e non Row, non possiamo mappare le chiavi senza cursore
-                return dict(row) if hasattr(row, "__iter__") and not isinstance(row, tuple) else None
+                return (
+                    dict(row)
+                    if hasattr(row, "__iter__") and not isinstance(row, tuple)
+                    else None
+                )
         except sqlite3.Error as e:
             logger.error(f"Errore fetch_one: {e} | Query: {query}")
             return None

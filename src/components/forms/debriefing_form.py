@@ -2,7 +2,7 @@
 Form per la compilazione del report di attività (debriefing).
 """
 import streamlit as st
-from src.modules.data_manager import scrivi_o_aggiorna_risposta
+from modules.data_manager import scrivi_o_aggiorna_risposta
 
 def handle_submit(report_text, stato, task, matricola_utente, data_riferimento):
     """Gestisce il salvataggio dei dati del report attività."""

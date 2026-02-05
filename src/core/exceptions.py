@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Any
 
 import streamlit as st
-from src.core.logging import get_logger, with_context
+from core.logging import get_logger, with_context
 
 logger = get_logger(__name__)
 

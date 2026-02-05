@@ -2,7 +2,7 @@
 Test per la gestione delle richieste materiali e assenze.
 """
 
-from src.modules.database.db_requests import add_material_request, salva_storico_materiali
+from modules.database.db_requests import add_material_request, salva_storico_materiali
 
 def test_add_material_request(mocker):
     """Verifica l'inserimento di una richiesta materiali."""

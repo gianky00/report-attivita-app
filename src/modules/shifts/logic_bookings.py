@@ -4,7 +4,7 @@ Gestisce i vincoli di disponibilità posti e la registrazione dei cambiamenti.
 """
 import datetime
 import streamlit as st
-from src.modules.shifts.logic_utils import log_shift_change
+from modules.shifts.logic_utils import log_shift_change
 
 from modules.db_manager import (
     add_booking,

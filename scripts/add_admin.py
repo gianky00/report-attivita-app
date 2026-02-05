@@ -9,8 +9,8 @@ from pathlib import Path
 import bcrypt
 
 # Aggiunge la cartella src al path per importare il core logging
-sys.path.append(str(Path(__file__).parent.parent))
-from src.core.logging import get_logger
+sys.path.append(str(Path(__file__).parent.parent / "src"))
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

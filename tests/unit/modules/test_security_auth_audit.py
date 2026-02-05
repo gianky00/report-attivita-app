@@ -4,8 +4,8 @@ Audit di sicurezza per l'autenticazione e il logging.
 
 import json
 import pytest
-from src.modules.auth import authenticate_user, log_access_attempt
-from src.core.logging import JsonFormatter
+from modules.auth import authenticate_user, log_access_attempt
+from core.logging import JsonFormatter
 import logging
 
 def test_login_failure_logging_privacy(mocker):

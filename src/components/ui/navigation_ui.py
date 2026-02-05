@@ -4,12 +4,12 @@ Componenti UI per la navigazione (sidebar e bottoni).
 import datetime
 import pandas as pd
 import streamlit as st
-from src.modules.importers.excel_giornaliera import _carica_giornaliera_mese
-from src.modules.db_manager import get_last_login
-from src.modules.notifications import leggi_notifiche
-from src.modules.oncall_logic import get_next_on_call_week
-from src.modules.session_manager import delete_session
-from src.components.ui.notifications_ui import render_notification_center
+from modules.importers.excel_giornaliera import _carica_giornaliera_mese
+from modules.db_manager import get_last_login
+from modules.notifications import leggi_notifiche
+from modules.oncall_logic import get_next_on_call_week
+from modules.session_manager import delete_session
+from components.ui.notifications_ui import render_notification_center
 
 def render_sidebar(matricola_utente, nome_utente_autenticato, ruolo):
     """Gestisce la navigazione laterale e le informazioni utente."""

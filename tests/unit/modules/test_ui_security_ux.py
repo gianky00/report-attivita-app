@@ -6,7 +6,7 @@ Verifica la persistenza dello stato della sessione durante la navigazione.
 import pytest
 import streamlit as st
 import pandas as pd
-from src.components.ui.navigation_ui import render_sidebar
+from components.ui.navigation_ui import render_sidebar
 
 def test_navigation_tab_persistence(mocker):
     """Verifica che il cambio tab aggiorni correttamente lo stato della sessione."""

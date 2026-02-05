@@ -12,7 +12,7 @@ from typing import Any
 import nltk
 from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
-from src.core.logging import get_logger, measure_time
+from core.logging import get_logger, measure_time
 
 logger = get_logger(__name__)
 

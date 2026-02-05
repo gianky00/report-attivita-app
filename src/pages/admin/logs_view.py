@@ -6,7 +6,7 @@ Include filtri per utente, data e esito del login.
 import pandas as pd
 import streamlit as st
 
-from src.modules.db_manager import get_access_logs
+from modules.db_manager import get_access_logs
 
 
 def render_access_logs_tab():

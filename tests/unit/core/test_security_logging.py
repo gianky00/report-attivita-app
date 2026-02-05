@@ -5,7 +5,7 @@ Verifica che dati sensibili (PII) non vengano mai scritti nei log JSON.
 
 import json
 import pytest
-from src.core.logging import get_logger, JsonFormatter
+from core.logging import get_logger, JsonFormatter
 import logging
 
 def test_log_sanitization_no_passwords():

@@ -5,8 +5,8 @@ Copre limiti di prenotazione e permessi bacheca.
 
 import pandas as pd
 import pytest
-from src.modules.shifts.logic_bookings import prenota_turno_logic
-from src.modules.shifts.logic_market import (
+from modules.shifts.logic_bookings import prenota_turno_logic
+from modules.shifts.logic_market import (
     pubblica_turno_in_bacheca_logic,
     prendi_turno_da_bacheca_logic,
 )

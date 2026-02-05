@@ -2,7 +2,7 @@
 Test per il modulo di apprendimento e indicizzazione IA.
 """
 
-from src.learning_module import build_knowledge_base
+from learning_module import build_knowledge_base
 
 def test_build_knowledge_base_no_docs(mocker):
     """Verifica il comportamento se non ci sono documenti da indicizzare."""

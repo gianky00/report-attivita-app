@@ -10,7 +10,7 @@ from typing import Any
 import pandas as pd
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
-from src.core.logging import get_logger
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

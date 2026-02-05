@@ -4,7 +4,7 @@ Test unitari per il modulo di apprendimento IA.
 
 import json
 
-from src.learning_module import integrate_knowledge
+from learning_module import integrate_knowledge
 
 
 def test_integrate_knowledge_not_found(mocker):

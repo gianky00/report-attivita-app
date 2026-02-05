@@ -4,8 +4,8 @@ Stress test per operazioni asincrone e gestione lock database.
 
 import threading
 import pytest
-from src.modules.notifications import crea_notifica
-from src.core.database import DatabaseEngine
+from modules.notifications import crea_notifica
+from core.database import DatabaseEngine
 
 def test_massive_notifications_deadlock_prevention(mocker):
     """Simula 200+ notifiche simultanee per testare il retry su lock."""

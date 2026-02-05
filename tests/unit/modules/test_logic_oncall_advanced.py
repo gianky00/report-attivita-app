@@ -7,7 +7,7 @@ import datetime
 import pytest
 import sqlite3
 import pandas as pd
-from src.modules.shifts.logic_oncall import sync_oncall_shifts, manual_override_logic
+from modules.shifts.logic_oncall import sync_oncall_shifts, manual_override_logic
 
 @pytest.fixture
 def mock_st_oncall(mocker):

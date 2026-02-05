@@ -3,7 +3,7 @@ Interfaccia di gestione del database SQLite (Facade).
 Riesporta le funzioni dai moduli specializzati per mantenere la compatibilità.
 """
 
-from src.modules.database.db_reports import (
+from modules.database.db_reports import (
     delete_report_by_id,
     delete_reports_by_ids,
     get_report_by_id,
@@ -19,7 +19,7 @@ from src.modules.database.db_reports import (
     salva_relazione,
     salva_report_intervento,
 )
-from src.modules.database.db_requests import (
+from modules.database.db_requests import (
     add_leave_request,
     add_material_request,
     get_leave_requests,
@@ -29,7 +29,7 @@ from src.modules.database.db_requests import (
     salva_storico_assenze,
     salva_storico_materiali,
 )
-from src.modules.database.db_shifts import (
+from modules.database.db_shifts import (
     add_bacheca_item,
     add_booking,
     add_shift_log,
@@ -48,7 +48,7 @@ from src.modules.database.db_shifts import (
     update_shift,
     check_user_oncall_conflict,
 )
-from src.modules.database.db_system import (
+from modules.database.db_system import (
     add_assignment_exclusion,
     add_notification,
     count_unread_notifications,
@@ -58,7 +58,7 @@ from src.modules.database.db_system import (
     get_table_names,
     save_table_data,
 )
-from src.modules.database.db_users import (
+from modules.database.db_users import (
     add_substitution_request,
     delete_substitution_request,
     get_access_logs,

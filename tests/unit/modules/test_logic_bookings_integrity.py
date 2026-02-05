@@ -4,7 +4,7 @@ Verifica la gestione di duplicati e vincoli di database.
 """
 
 import pytest
-from src.modules.shifts.logic_bookings import prenota_turno_logic
+from modules.shifts.logic_bookings import prenota_turno_logic
 
 def test_double_booking_prevention(mocker):
     """Verifica che un utente non possa prenotarsi due volte per lo stesso turno."""

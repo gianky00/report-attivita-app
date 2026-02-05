@@ -3,7 +3,7 @@ Test unitari per il modulo notifiche utilizzando il mocking totale della conness
 """
 
 import pytest
-from src.modules.notifications import (
+from modules.notifications import (
     crea_notifica,
     leggi_notifiche,
     segna_notifica_letta,

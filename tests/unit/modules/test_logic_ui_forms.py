@@ -5,8 +5,8 @@ Test per la validazione e logica dei form utente.
 import pytest
 import streamlit as st
 import datetime
-from src.components.forms.debriefing_form import handle_submit
-from src.components.forms.relazione_oncall_form import _handle_submission
+from components.forms.debriefing_form import handle_submit
+from components.forms.relazione_oncall_form import _handle_submission
 
 def test_debriefing_form_validation(mocker):
     """Verifica che il report non possa essere vuoto."""

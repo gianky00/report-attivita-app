@@ -14,7 +14,7 @@ def test_invia_email_con_outlook_async(mocker):
 
     # Eseguiamo la funzione. Poiché è asincrona, dobbiamo aspettare che il thread finisca
     # o testare la logica del subprocesso direttamente.
-    from src.modules.email_sender import _send_email_subprocess
+    from modules.email_sender import _send_email_subprocess
 
     _send_email_subprocess("Oggetto Test", "Corpo Test")
 
@@ -31,7 +31,7 @@ def test_send_email_subprocess_missing_script(mocker):
     mocker.patch("src.modules.email_sender.Path.exists", return_value=False)
     mock_logger = mocker.patch("src.modules.email_sender.logger")
 
-    from src.modules.email_sender import _send_email_subprocess
+    from modules.email_sender import _send_email_subprocess
 
     _send_email_subprocess("Test", "Test")
 

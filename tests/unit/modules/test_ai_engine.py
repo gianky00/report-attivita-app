@@ -2,7 +2,7 @@
 Test per il motore IA e la generazione dei prompt.
 """
 
-from src.modules.ai_engine import generate_technical_prompt, generate_standard_prompt
+from modules.ai_engine import generate_technical_prompt, generate_standard_prompt
 
 def test_generate_technical_prompt_injection():
     """Verifica che le informazioni tecniche siano iniettate nel prompt."""

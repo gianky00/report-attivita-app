@@ -6,7 +6,7 @@ import pytest
 import pandas as pd
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from src.modules.importers.excel_giornaliera import trova_attivita
+from modules.importers.excel_giornaliera import trova_attivita
 
 @pytest.fixture
 def mock_df_contatti():

@@ -5,8 +5,8 @@ Test avanzati per la gestione atomica dei report tecnici.
 import sqlite3
 import pytest
 from pathlib import Path
-from src.core.database import DatabaseEngine
-import src.modules.database.db_reports as dbr
+from core.database import DatabaseEngine
+import modules.database.db_reports as dbr
 
 @pytest.fixture
 def setup_db(mocker, tmp_path):

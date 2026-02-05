@@ -5,7 +5,7 @@ Verifica l'integrità dei ruoli e dei permessi durante il subentro.
 
 import pytest
 import streamlit as st
-from src.modules.shifts.logic_market import prendi_turno_da_bacheca_logic
+from modules.shifts.logic_market import prendi_turno_da_bacheca_logic
 
 def test_aiutante_cannot_take_tecnico_shift(mocker):
     """Verifica che un Aiutante non possa tecnicamente prendere un turno da Tecnico."""

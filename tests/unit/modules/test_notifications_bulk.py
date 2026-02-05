@@ -3,7 +3,7 @@ Test di efficienza per operazioni massive sulle notifiche.
 """
 
 import pytest
-from src.modules.notifications import segna_tutte_lette
+from modules.notifications import segna_tutte_lette
 
 def test_segna_tutte_lette_single_query(mocker):
     """Verifica che tutte le notifiche vengano segnate come lette con una sola operazione SQL."""

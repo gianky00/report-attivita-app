@@ -7,7 +7,7 @@ import datetime
 
 import streamlit as st
 
-import src.learning_module as learning_module
+import learning_module as learning_module
 
 
 def render_ia_management_tab():

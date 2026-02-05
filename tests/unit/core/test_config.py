@@ -3,7 +3,7 @@ Test unitari per la configurazione dell'applicazione.
 """
 
 import pytest
-from src.config import validate_config
+from config import validate_config
 
 
 def test_validate_config_missing_keys(mocker):

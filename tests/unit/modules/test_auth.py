@@ -2,7 +2,7 @@
 Test unitari per il modulo di autenticazione e gestione utenti.
 """
 
-from src.modules.auth import (
+from modules.auth import (
     authenticate_user,
     get_user_by_matricola,
     log_access_attempt,

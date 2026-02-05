@@ -5,7 +5,7 @@ Test per il decoratore safe_streamlit_run.
 import pytest
 from unittest.mock import MagicMock, patch
 import streamlit as st
-from src.core.exceptions import safe_streamlit_run
+from core.exceptions import safe_streamlit_run
 
 def test_safe_streamlit_run_catches_exception(mocker):
     """Verifica che le eccezioni siano catturate e mostrate in UI."""

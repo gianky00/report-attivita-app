@@ -4,8 +4,8 @@ Test per gestione turni e limiti temporali.
 
 import datetime
 import pandas as pd
-from src.modules.shifts.logic_oncall import sync_oncall_shifts
-from src.modules.database.db_shifts import get_shifts_by_type
+from modules.shifts.logic_oncall import sync_oncall_shifts
+from modules.database.db_shifts import get_shifts_by_type
 
 def test_sync_oncall_year_change(mocker):
     """Verifica la rotazione dei turni tra 31/12 e 01/01."""

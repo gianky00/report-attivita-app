@@ -2,18 +2,21 @@
 Funzioni database per la gestione di turni, prenotazioni e bacheca scambi.
 Gestisce l'allocazione del personale e la cronologia delle modifiche ai turni.
 """
+
 import sqlite3
-from typing import List, Dict, Optional, Any
+from typing import Any
 
 import pandas as pd
-from src.core.database import DatabaseEngine
-from src.core.logging import get_logger, measure_time
+from core.database import DatabaseEngine
+from core.logging import get_logger, measure_time
 
 logger = get_logger(__name__)
+
 
 def get_db_connection() -> sqlite3.Connection:
     """Restituisce una connessione al database core."""
     return DatabaseEngine.get_connection()
+
 
 @measure_time
 def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
@@ -28,31 +31,36 @@ def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
     finally:
         conn.close()
 
-def create_shift(data: Dict[str, Any]) -> bool:
+
+def create_shift(data: dict[str, Any]) -> bool:
     """Crea un nuovo turno operativo nel sistema."""
     cols = ", ".join(f'"{k}"' for k in data.keys())
     placeholders = ", ".join("?" for _ in data)
-    sql = f"INSERT INTO turni ({cols}) VALUES ({placeholders})"
+    sql = f"INSERT INTO turni ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(data.values()))
 
-def update_shift(shift_id: str, update_data: Dict[str, Any]) -> bool:
+
+def update_shift(shift_id: str, update_data: dict[str, Any]) -> bool:
     """Aggiorna i parametri di un turno esistente (data, orari, descrizione)."""
     set_clause = ", ".join(f'"{k}" = ?' for k in update_data.keys())
-    sql = f"UPDATE turni SET {set_clause} WHERE ID_Turno = ?"
+    sql = f"UPDATE turni SET {set_clause} WHERE ID_Turno = ?"  # nosec B608
     params = list(update_data.values()) + [shift_id]
     return DatabaseEngine.execute(sql, tuple(params))
 
-def get_shift_by_id(shift_id: str) -> Optional[Dict[str, Any]]:
+
+def get_shift_by_id(shift_id: str) -> dict[str, Any] | None:
     """Recupera i dati completi di un singolo turno tramite ID."""
     query = "SELECT * FROM turni WHERE ID_Turno = ?"
     return DatabaseEngine.fetch_one(query, (shift_id,))
 
-def add_shift_log(log_data: Dict[str, Any]) -> bool:
+
+def add_shift_log(log_data: dict[str, Any]) -> bool:
     """Registra una transazione di modifica turno nello storico log."""
     cols = ", ".join(f'"{k}"' for k in log_data.keys())
     placeholders = ", ".join("?" for _ in log_data)
-    sql = f"INSERT INTO shift_logs ({cols}) VALUES ({placeholders})"
+    sql = f"INSERT INTO shift_logs ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(log_data.values()))
+
 
 def get_bookings_for_shift(shift_id: str) -> pd.DataFrame:
     """Recupera tutte le prenotazioni del personale associate a un turno."""
@@ -63,27 +71,34 @@ def get_bookings_for_shift(shift_id: str) -> pd.DataFrame:
     finally:
         conn.close()
 
-def add_booking(data: Dict[str, Any]) -> bool:
+
+def add_booking(data: dict[str, Any]) -> bool:
     """Inserisce una nuova prenotazione tecnico/aiutante per un turno."""
     cols = ", ".join(f'"{k}"' for k in data.keys())
     placeholders = ", ".join("?" for _ in data)
-    sql = f"INSERT INTO prenotazioni ({cols}) VALUES ({placeholders})"
+    sql = f"INSERT INTO prenotazioni ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(data.values()))
+
 
 def delete_booking(booking_id: str, shift_id: str) -> bool:
     """Elimina una specifica prenotazione da un turno."""
     sql = "DELETE FROM prenotazioni WHERE ID_Prenotazione = ? AND ID_Turno = ?"
     return DatabaseEngine.execute(sql, (booking_id, shift_id))
 
+
 def delete_bookings_for_shift(shift_id: str) -> bool:
     """Rimuove integralmente tutto il personale assegnato a un turno."""
     sql = "DELETE FROM prenotazioni WHERE ID_Turno = ?"
     return DatabaseEngine.execute(sql, (shift_id,))
 
-def get_booking_by_user_and_shift(matricola: str, turno_id: str) -> Optional[Dict[str, Any]]:
+
+def get_booking_by_user_and_shift(
+    matricola: str, turno_id: str
+) -> dict[str, Any] | None:
     """Cerca se un determinato utente è già prenotato per un turno specifico."""
     query = "SELECT * FROM prenotazioni WHERE Matricola = ? AND ID_Turno = ?"
     return DatabaseEngine.fetch_one(query, (matricola, turno_id))
+
 
 def check_user_oncall_conflict(matricola: str, data_turno: str) -> bool:
     """Verifica se l'utente è già impegnato in reperibilità per la data indicata."""
@@ -96,10 +111,12 @@ def check_user_oncall_conflict(matricola: str, data_turno: str) -> bool:
     res = DatabaseEngine.fetch_one(query, (matricola, data_turno))
     return bool(res and res["count"] > 0)
 
+
 def update_booking_user(turno_id: str, vecchia_mat: str, nuova_mat: str) -> bool:
     """Effettua il subentro di un utente in una prenotazione esistente (scambio)."""
     sql = "UPDATE prenotazioni SET Matricola = ? WHERE ID_Turno = ? AND Matricola = ?"
     return DatabaseEngine.execute(sql, (nuova_mat, turno_id, vecchia_mat))
+
 
 @measure_time
 def get_all_bookings() -> pd.DataFrame:
@@ -110,24 +127,28 @@ def get_all_bookings() -> pd.DataFrame:
     finally:
         conn.close()
 
-def get_bacheca_item_by_id(item_id: str) -> Optional[Dict[str, Any]]:
+
+def get_bacheca_item_by_id(item_id: str) -> dict[str, Any] | None:
     """Recupera un annuncio della bacheca tramite il suo ID."""
     query = "SELECT * FROM bacheca WHERE ID_Bacheca = ?"
     return DatabaseEngine.fetch_one(query, (item_id,))
 
-def update_bacheca_item(item_id: str, update_data: Dict[str, Any]) -> bool:
+
+def update_bacheca_item(item_id: str, update_data: dict[str, Any]) -> bool:
     """Aggiorna lo stato o i dettagli di un annuncio in bacheca."""
     set_clause = ", ".join(f'"{k}" = ?' for k in update_data.keys())
-    sql = f"UPDATE bacheca SET {set_clause} WHERE ID_Bacheca = ?"
+    sql = f"UPDATE bacheca SET {set_clause} WHERE ID_Bacheca = ?"  # nosec B608
     params = list(update_data.values()) + [item_id]
     return DatabaseEngine.execute(sql, tuple(params))
 
-def add_bacheca_item(item_data: Dict[str, Any]) -> bool:
+
+def add_bacheca_item(item_data: dict[str, Any]) -> bool:
     """Inserisce un nuovo annuncio di turno disponibile nella bacheca scambi."""
     cols = ", ".join(f'"{k}"' for k in item_data.keys())
     placeholders = ", ".join("?" for _ in item_data)
-    sql = f"INSERT INTO bacheca ({cols}) VALUES ({placeholders})"
+    sql = f"INSERT INTO bacheca ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(item_data.values()))
+
 
 @measure_time
 def get_all_bacheca_items() -> pd.DataFrame:

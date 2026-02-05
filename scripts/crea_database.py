@@ -9,9 +9,10 @@ import sys
 import warnings
 from pathlib import Path
 
-# Aggiunge la cartella src al path per importare il core logging
-sys.path.append(str(Path(__file__).parent.parent))
-from src.core.logging import get_logger
+# Aggiunge la cartella src al path per importare i moduli interni
+BASE_DIR = Path(__file__).parent.parent
+sys.path.append(str(BASE_DIR / "src"))
+from core.logging import get_logger
 
 logger = get_logger(__name__)
 

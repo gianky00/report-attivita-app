@@ -5,7 +5,7 @@ Focalizzato sul recupero login e log di sistema.
 
 import pandas as pd
 import pytest
-from src.modules.database.db_users import get_last_login, get_access_logs
+from modules.database.db_users import get_last_login, get_access_logs
 
 def test_get_last_login_found(mocker):
     """Verifica il recupero corretto dell'ultimo timestamp di login."""

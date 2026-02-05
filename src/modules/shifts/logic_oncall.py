@@ -6,7 +6,7 @@ import sqlite3
 
 import pandas as pd
 import streamlit as st
-from src.modules.shifts.logic_utils import find_matricola_by_surname, log_shift_change
+from modules.shifts.logic_utils import find_matricola_by_surname, log_shift_change
 
 from modules.auth import get_user_by_matricola
 from modules.db_manager import (

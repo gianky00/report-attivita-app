@@ -5,7 +5,7 @@ Centralizza la gestione dei prompt e la logica di revisione tecnica.
 
 import google.generativeai as genai
 import streamlit as st
-from src.core.logging import get_logger
+from core.logging import get_logger
 
 from modules.instrumentation_logic import (
     analyze_domain_terminology,

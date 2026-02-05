@@ -5,9 +5,9 @@ Test unitari per comunicazioni, PDF e notifiche.
 import os
 import pytest
 from pathlib import Path
-from src.modules.email_sender import _send_email_subprocess
-from src.modules.pdf_utils import generate_on_call_pdf
-from src.modules.notifications import crea_notifica, segna_tutte_lette
+from modules.email_sender import _send_email_subprocess
+from modules.pdf_utils import generate_on_call_pdf
+from modules.notifications import crea_notifica, segna_tutte_lette
 
 def test_send_email_subprocess_error_handling(mocker):
     """Verifica la gestione degli errori se il subprocess fallisce."""

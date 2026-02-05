@@ -2,7 +2,7 @@
 Test per le funzioni di sistema e blacklist assegnamenti.
 """
 
-from src.modules.database.db_system import add_assignment_exclusion, get_globally_excluded_activities
+from modules.database.db_system import add_assignment_exclusion, get_globally_excluded_activities
 
 def test_add_assignment_exclusion(mocker):
     """Verifica l'inserimento di un'esclusione."""

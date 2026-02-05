@@ -33,6 +33,11 @@ def render_reperibilita_tab(df_prenotazioni, df_contatti, matricola_utente, ruol
     """Renderizza il tab della reperibilità settimanale."""
     st.subheader("📅 Calendario Reperibilità")
 
+    # Inizializzazione session_state
+    if "week_start_date" not in st.session_state:
+        today = datetime.date.today()
+        st.session_state.week_start_date = today - datetime.timedelta(days=today.weekday())
+
     if st.session_state.get("editing_oncall_shift_id"):
         _render_oncall_edit_form(matricola_utente)
         return

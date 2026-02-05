@@ -4,7 +4,7 @@ Verifica la gestione di nomi estremamente lunghi e caratteri speciali.
 """
 
 import pytest
-from src.modules.pdf_utils import generate_on_call_pdf
+from modules.pdf_utils import generate_on_call_pdf
 
 def test_generate_pdf_with_extremely_long_names(mocker):
     """Verifica che il layout PDF non si rompa con nomi tecnici molto lunghi."""

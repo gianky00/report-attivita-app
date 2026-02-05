@@ -7,7 +7,8 @@ import datetime
 import sqlite3
 from typing import Any
 
-from src.core.logging import get_logger
+import pandas as pd
+from core.logging import get_logger
 
 from modules.db_manager import (
     add_notification,
@@ -18,14 +19,20 @@ from modules.db_manager import (
 logger = get_logger(__name__)
 
 
-def leggi_notifiche(utente: str) -> list[dict[str, Any]]:
+def leggi_notifiche(utente: str) -> pd.DataFrame:
     """Legge le notifiche di un utente direttamente dal database."""
     try:
         res = get_notifications_for_user(utente)
-        return list(res) if res is not None else []
+        if not res:
+            return pd.DataFrame(columns=["ID_Notifica", "Timestamp", "Messaggio", "Stato"])
+        
+        df = pd.DataFrame(res)
+        if "Stato" not in df.columns:
+            df["Stato"] = "letta" # Fallback di sicurezza
+        return df
     except Exception as e:
         logger.error(f"Errore durante il caricamento notifiche per {utente}: {e}")
-        return []
+        return pd.DataFrame(columns=["ID_Notifica", "Timestamp", "Messaggio", "Stato"])
 
 
 def crea_notifica(destinatario: str, messaggio: str, link_azione: str = "") -> bool:
@@ -76,7 +83,7 @@ def segna_tutte_lette(matricola: str) -> bool:
             # Verifichiamo lo schema nel file crea_database.py se necessario.
             # Dallo schema in crea_database.py: Destinatario_Matricola
             sql = "UPDATE notifiche SET Stato = 'letta' WHERE Destinatario_Matricola = ?"
-            cursor = conn.execute(sql, (matricola,))
+            conn.execute(sql, (matricola,))
             return True
     except sqlite3.Error as e:
         logger.error(f"Errore aggiornamento notifiche per {matricola}: {e}")

@@ -2,8 +2,8 @@
 Test unitari per la gestione delle sessioni utente.
 """
 
-import src.modules.session_manager as sm
-from src.modules.session_manager import delete_session, load_session, save_session
+import modules.session_manager as sm
+from modules.session_manager import delete_session, load_session, save_session
 
 
 def test_save_and_load_session(tmp_path, monkeypatch, mocker):

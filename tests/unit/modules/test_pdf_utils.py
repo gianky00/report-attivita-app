@@ -4,7 +4,7 @@ Test unitari per la generazione di PDF.
 
 from pathlib import Path
 
-from src.modules.pdf_utils import generate_on_call_pdf
+from modules.pdf_utils import generate_on_call_pdf
 
 
 def test_generate_on_call_pdf_success(tmp_path, monkeypatch):

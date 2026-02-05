@@ -2,7 +2,7 @@
 Test unitari per le utility di manipolazione orari e dati.
 """
 
-from src.modules.utils import merge_time_slots
+from modules.utils import merge_time_slots
 
 
 def test_merge_time_slots_overlapping():

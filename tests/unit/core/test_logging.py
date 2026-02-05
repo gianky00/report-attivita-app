@@ -6,7 +6,7 @@ import io
 import json
 import logging
 
-from src.core.logging import JsonFormatter, get_logger, with_context
+from core.logging import JsonFormatter, get_logger, with_context
 
 
 def test_json_formatter_structure():

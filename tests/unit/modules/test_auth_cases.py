@@ -5,7 +5,7 @@ Copre casi limite come password errate, 2FA malformati e setup amministratore.
 
 import bcrypt
 import pytest
-from src.modules.auth import (
+from modules.auth import (
     authenticate_user,
     create_user,
     verify_2fa_code,

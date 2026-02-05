@@ -4,8 +4,8 @@ Test per la resilienza IO e integrità dei log.
 
 import datetime
 import logging
-from src.core.logging import JsonFormatter
-from src.learning_module import load_report_knowledge_base
+from core.logging import JsonFormatter
+from learning_module import load_report_knowledge_base
 
 def test_json_formatter_serialization():
     """Verifica che il formatter generi un JSON valido per i campi standard."""

@@ -2,7 +2,7 @@
 Test per la gestione dei report nel database.
 """
 
-from src.modules.database.db_reports import move_report_atomically
+from modules.database.db_reports import move_report_atomically
 
 def test_move_report_atomically_success(mocker):
     """Verifica lo spostamento atomico di un report tra tabelle."""

@@ -2,19 +2,22 @@
 Funzioni database di sistema, notifiche e utility generiche.
 Gestisce le esclusioni degli assegnamenti, le notifiche e le operazioni sulle tabelle.
 """
+
 import datetime
 import sqlite3
-from typing import List, Dict, Any
+from typing import Any
 
 import pandas as pd
-from src.core.database import DatabaseEngine
-from src.core.logging import get_logger
+from core.database import DatabaseEngine
+from core.logging import get_logger
 
 logger = get_logger(__name__)
+
 
 def get_db_connection() -> sqlite3.Connection:
     """Restituisce una connessione al database core."""
     return DatabaseEngine.get_connection()
+
 
 def add_assignment_exclusion(matricola_escludente: str, id_attivita: str) -> bool:
     """Registra un blocco per un determinato assegnamento di attività."""
@@ -25,29 +28,34 @@ def add_assignment_exclusion(matricola_escludente: str, id_attivita: str) -> boo
     params = (matricola_escludente, id_attivita, datetime.datetime.now().isoformat())
     return DatabaseEngine.execute(sql, params)
 
-def get_globally_excluded_activities() -> List[str]:
+
+def get_globally_excluded_activities() -> list[str]:
     """Recupera l'elenco di tutti i PdL/Attività bloccati a livello globale."""
     query = "SELECT id_attivita FROM esclusioni_assegnamenti"
     rows = DatabaseEngine.fetch_all(query)
     return [row["id_attivita"] for row in rows]
 
-def get_notifications_for_user(utente: str) -> List[Dict[str, Any]]:
+
+def get_notifications_for_user(utente: str) -> list[dict[str, Any]]:
     """Recupera la cronologia delle notifiche per un determinato utente."""
     query = "SELECT * FROM notifiche WHERE Destinatario_Matricola = ? ORDER BY Timestamp DESC"
     return DatabaseEngine.fetch_all(query, (utente,))
 
-def add_notification(n: Dict[str, Any]) -> bool:
+
+def add_notification(n: dict[str, Any]) -> bool:
     """Salva una nuova notifica destinata a un tecnico o admin."""
     cols = ", ".join(f'"{k}"' for k in n.keys())
     placeholders = ", ".join("?" for _ in n)
-    sql = f"INSERT INTO notifiche ({cols}) VALUES ({placeholders})"
+    sql = f"INSERT INTO notifiche ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(n.values()))
+
 
 def count_unread_notifications(matricola: str) -> int:
     """Restituisce il numero di notifiche pendenti (non lette) per l'utente."""
     query = "SELECT COUNT(*) as count FROM notifiche WHERE Destinatario_Matricola = ? AND Stato = 'non letta'"
     res = DatabaseEngine.fetch_one(query, (matricola,))
     return res["count"] if res else 0
+
 
 def save_table_data(df: pd.DataFrame, table_name: str) -> bool:
     """Sincronizza integralmente una tabella del DB partendo da un DataFrame Pandas."""
@@ -61,15 +69,17 @@ def save_table_data(df: pd.DataFrame, table_name: str) -> bool:
     finally:
         conn.close()
 
+
 def get_table_data(table_name: str) -> pd.DataFrame:
     """Scarica il contenuto integrale di una tabella in un DataFrame."""
     conn = get_db_connection()
     try:
-        return pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+        return pd.read_sql_query(f"SELECT * FROM {table_name}", conn)  # nosec B608
     finally:
         conn.close()
 
-def get_table_names() -> List[str]:
+
+def get_table_names() -> list[str]:
     """Interroga lo schema SQLite per ottenere l'elenco delle tabelle non di sistema."""
     query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
     rows = DatabaseEngine.fetch_all(query)
