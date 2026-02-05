@@ -2236,3 +2236,4 @@
 {"timestamp": "2026-02-04T23:12:53.712343", "level": "WARNING", "logger": "config", "message": "[REDACTED] Messaggio contenente dati potenzialmente sensibili", "module": "config", "func": "<module>", "line": 28}
 {"timestamp": "2026-02-04T23:13:52.606083", "level": "WARNING", "logger": "config", "message": "[REDACTED] Messaggio contenente dati potenzialmente sensibili", "module": "config", "func": "<module>", "line": 28}
 {"timestamp": "2026-02-04T23:14:41.707387", "level": "WARNING", "logger": "config", "message": "[REDACTED] Messaggio contenente dati potenzialmente sensibili", "module": "config", "func": "<module>", "line": 28}
+{"timestamp": "2026-02-04T23:15:41.401670", "level": "WARNING", "logger": "config", "message": "[REDACTED] Messaggio contenente dati potenzialmente sensibili", "module": "config", "func": "<module>", "line": 28}

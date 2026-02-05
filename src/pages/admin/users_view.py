@@ -140,7 +140,7 @@ def _render_new_user_expander(df_contatti):
             if st.form_submit_button("Crea Utente"):
                 if new_nome and new_cognome and new_matricola:
                     if not df_contatti[
-                        df_contatti["Matricola"].astype(str) == str(new_matricola)
+                        df_contatti["Matricola"].astype(str) == str(new_matricola).strip()
                     ].empty:
                         st.error(f"Errore: La matricola '{new_matricola}' esiste già.")
                     else:
