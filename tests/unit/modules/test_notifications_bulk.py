@@ -7,7 +7,7 @@ from modules.notifications import segna_tutte_lette
 
 def test_segna_tutte_lette_single_query(mocker):
     """Verifica che tutte le notifiche vengano segnate come lette con una sola operazione SQL."""
-    mock_db = mocker.patch("src.modules.notifications.get_db_connection")
+    mock_db = mocker.patch("modules.notifications.get_db_connection")
     mock_conn = mock_db.return_value
     mock_conn.__enter__.return_value = mock_conn
     

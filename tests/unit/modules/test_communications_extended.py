@@ -12,12 +12,12 @@ from modules.notifications import crea_notifica, segna_tutte_lette
 def test_send_email_subprocess_error_handling(mocker):
     """Verifica la gestione degli errori se il subprocess fallisce."""
     # Mock di subprocess.run per simulare un errore (returncode != 0)
-    mock_run = mocker.patch("src.modules.email_sender.subprocess.run")
+    mock_run = mocker.patch("modules.email_sender.subprocess.run")
     mock_run.return_value.returncode = 1
     mock_run.return_value.stderr = "Outlook Error"
     
-    mock_logger = mocker.patch("src.modules.email_sender.logger")
-    mocker.patch("src.modules.email_sender.Path.exists", return_value=True)
+    mock_logger = mocker.patch("modules.email_sender.logger")
+    mocker.patch("modules.email_sender.Path.exists", return_value=True)
     
     _send_email_subprocess("Test", "Body")
     
@@ -28,7 +28,7 @@ def test_send_email_subprocess_error_handling(mocker):
 def test_generate_on_call_pdf_integrity(tmp_path, mocker):
     """Verifica che il PDF venga generato correttamente con i metadati attesi."""
     # Cambiamo directory di lavoro temporaneamente per evitare di scrivere nella cartella reale
-    mocker.patch("src.modules.pdf_utils.Path.mkdir") # Evitiamo creazione cartella reale
+    mocker.patch("modules.pdf_utils.Path.mkdir") # Evitiamo creazione cartella reale
     
     # Prepariamo dati minimi
     data = [
@@ -37,7 +37,7 @@ def test_generate_on_call_pdf_integrity(tmp_path, mocker):
     ]
     
     # Mock dell'output per non scrivere file
-    mock_pdf_output = mocker.patch("src.modules.pdf_utils.PDF.output")
+    mock_pdf_output = mocker.patch("modules.pdf_utils.PDF.output")
     
     file_path = generate_on_call_pdf(data, "gennaio", 2025)
     
@@ -47,8 +47,8 @@ def test_generate_on_call_pdf_integrity(tmp_path, mocker):
 
 def test_notifications_bulk_operations(mocker):
     """Testa la creazione di notifiche e la logica 'Segna tutte come lette'."""
-    mock_add = mocker.patch("src.modules.notifications.add_notification", return_value=True)
-    mock_db = mocker.patch("src.modules.notifications.get_db_connection")
+    mock_add = mocker.patch("modules.notifications.add_notification", return_value=True)
+    mock_db = mocker.patch("modules.notifications.get_db_connection")
     mock_cursor = mock_db.return_value.execute.return_value
     mock_cursor.rowcount = 5 # Simula 5 righe aggiornate
     

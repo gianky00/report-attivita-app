@@ -9,7 +9,7 @@ from core.database import DatabaseEngine
 
 def test_database_thread_safety(mocker):
     """Verifica che chiamate concorrenti non mandino in crash l'engine."""
-    mocker.patch("src.core.database.DB_NAME", ":memory:")
+    mocker.patch("core.database.DB_NAME", ":memory:")
     
     def worker():
         for _ in range(10):
@@ -24,11 +24,11 @@ def test_database_thread_safety(mocker):
 def test_move_report_atomically_failure_middle(mocker):
     """Verifica l'integrità della transazione se l'eliminazione fallisce."""
     report_data = {"id": "R1", "val": "data"}
-    mocker.patch("src.modules.database.db_reports.get_report_by_id", return_value=report_data)
+    mocker.patch("modules.database.db_reports.get_report_by_id", return_value=report_data)
     
     # Mock connessione reale per testare il rollback indirettamente tramite eccezione
     mock_conn = mocker.MagicMock()
-    mocker.patch("src.modules.database.db_reports.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.database.db_reports.get_db_connection", return_value=mock_conn)
     
     # Simula errore durante l'esecuzione nel context manager
     mock_conn.__enter__.return_value = mock_conn

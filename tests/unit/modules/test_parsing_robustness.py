@@ -28,10 +28,10 @@ def test_pdl_regex_extraction(mocker):
     mock_cursor.fetchone.return_value = ("Mario Rossi",)
     
     # Patchiamo get_db_connection
-    mocker.patch("src.modules.reports_manager.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.reports_manager.get_db_connection", return_value=mock_conn)
     
     # Patchiamo l'invio email (importato localmente come modules.email_sender)
-    mocker.patch("src.modules.email_sender.invia_email_con_outlook_async")
+    mocker.patch("modules.email_sender.invia_email_con_outlook_async")
     
     # Dati di test
     data_rif = datetime.date(2025, 1, 1)

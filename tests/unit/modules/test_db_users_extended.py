@@ -10,21 +10,21 @@ from modules.database.db_users import get_last_login, get_access_logs
 def test_get_last_login_found(mocker):
     """Verifica il recupero corretto dell'ultimo timestamp di login."""
     mock_row = {"timestamp": "2026-02-04 10:00:00"}
-    mocker.patch("src.modules.database.db_users.DatabaseEngine.fetch_one", return_value=mock_row)
+    mocker.patch("modules.database.db_users.DatabaseEngine.fetch_one", return_value=mock_row)
     
     last_login = get_last_login("12345")
     assert last_login == "2026-02-04 10:00:00"
 
 def test_get_last_login_not_found(mocker):
     """Verifica il comportamento quando non ci sono log per l'utente."""
-    mocker.patch("src.modules.database.db_users.DatabaseEngine.fetch_one", return_value=None)
+    mocker.patch("modules.database.db_users.DatabaseEngine.fetch_one", return_value=None)
     
     assert get_last_login("NONEXISTENT") is None
 
 def test_get_access_logs_dataframe(mocker):
     """Verifica che get_access_logs restituisca un DataFrame pandas."""
     # Mocking get_db_connection per pd.read_sql_query
-    mock_conn = mocker.patch("src.modules.database.db_users.get_db_connection")
+    mock_conn = mocker.patch("modules.database.db_users.get_db_connection")
     
     # Prepariamo dati fittizi
     data = {"timestamp": ["2026-01-01"], "username": ["test_user"], "status": ["success"]}

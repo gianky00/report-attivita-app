@@ -10,7 +10,7 @@ from modules.email_sender import invia_email_con_outlook_async
 def test_email_rapid_fire_threading(mocker):
     """Verifica che l'invio di molteplici email in parallelo non causi crash."""
     # Mock del subprocesso per non eseguire realmente Outlook
-    mock_sub = mocker.patch("src.modules.email_sender._send_email_subprocess")
+    mock_sub = mocker.patch("modules.email_sender._send_email_subprocess")
     
     # Lanciamo 10 email quasi simultaneamente
     threads = []

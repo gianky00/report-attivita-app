@@ -14,7 +14,7 @@ def test_massive_notifications_deadlock_prevention(mocker):
     
     # In una situazione reale, SQLite lancerebbe 'database is locked'.
     # Qui verifichiamo che il sistema gestisca chiamate multiple senza crash.
-    mocker.patch("src.core.database.DatabaseEngine.execute", return_value=True)
+    mocker.patch("core.database.DatabaseEngine.execute", return_value=True)
     
     def worker(i):
         crea_notifica(f"MATR_{i}", f"Messaggio di stress test {i}")

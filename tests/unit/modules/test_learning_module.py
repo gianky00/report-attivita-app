@@ -9,7 +9,7 @@ from learning_module import integrate_knowledge
 
 def test_integrate_knowledge_not_found(mocker):
     """Verifica la gestione di una voce non trovata nelle conoscenze non revisionate."""
-    mocker.patch("src.learning_module.load_unreviewed_knowledge", return_value=[])
+    mocker.patch("learning_module.load_unreviewed_knowledge", return_value=[])
 
     result = integrate_knowledge("999", {})
     assert result["success"] is False
@@ -27,10 +27,10 @@ def test_integrate_knowledge_success(mocker, tmp_path):
     test_core_file.write_text("{}", encoding="utf-8")
 
     mocker.patch(
-        "src.learning_module.load_unreviewed_knowledge", return_value=unreviewed
+        'learning_module.load_unreviewed_knowledge', return_value=unreviewed
     )
-    mocker.patch("src.learning_module.save_unreviewed_knowledge")
-    mocker.patch("src.learning_module.KNOWLEDGE_CORE_PATH", test_core_file)
+    mocker.patch("learning_module.save_unreviewed_knowledge")
+    mocker.patch("learning_module.KNOWLEDGE_CORE_PATH", test_core_file)
 
     details = {
         "equipment_key": "valvola",

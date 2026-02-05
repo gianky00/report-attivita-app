@@ -11,7 +11,7 @@ from modules.database.db_shifts import create_shift, add_booking, get_bookings_f
 def setup_db_cascade(mocker, tmp_path):
     """Fixture per impostare un database con vincoli di integrità attivi."""
     db_path = tmp_path / "test_shifts.db"
-    mocker.patch("src.core.database.DB_NAME", str(db_path))
+    mocker.patch("core.database.DB_NAME", str(db_path))
     
     # Sovrascriviamo get_connection per assicurarci che ogni connessione abbia FK ON
     def get_test_conn():
@@ -20,8 +20,8 @@ def setup_db_cascade(mocker, tmp_path):
         conn.execute("PRAGMA foreign_keys = ON;")
         return conn
         
-    mocker.patch("src.modules.database.db_shifts.get_db_connection", side_effect=get_test_conn)
-    mocker.patch("src.core.database.DatabaseEngine.get_connection", side_effect=get_test_conn)
+    mocker.patch("modules.database.db_shifts.get_db_connection", side_effect=get_test_conn)
+    mocker.patch("core.database.DatabaseEngine.get_connection", side_effect=get_test_conn)
     
     conn = get_test_conn()
     conn.execute("""

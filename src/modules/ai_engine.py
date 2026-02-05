@@ -3,7 +3,6 @@ Modulo per l'interfaccia con l'Intelligenza Artificiale (Google Gemini).
 Centralizza la gestione dei prompt e la logica di revisione tecnica.
 """
 
-import google.generativeai as genai
 import streamlit as st
 from core.logging import get_logger
 
@@ -55,6 +54,12 @@ def revisiona_con_ia(testo: str) -> dict:
     """
     Esegue la revisione del testo tramite Gemini, applicando analisi semantica ISA.
     """
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        logger.error("Libreria google-generativeai non importabile. Verificare installazione.")
+        return {"success": False, "error": "Servizio IA non disponibile (errore dipendenze)."}
+
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
         logger.error("API Key Gemini mancante nei secrets.")

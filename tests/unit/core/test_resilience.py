@@ -38,7 +38,7 @@ def test_load_kb_resilience(mocker, tmp_path, monkeypatch):
             return mock_obj
         raise Exception("Corrupt")
         
-    mocker.patch("src.learning_module.Document", side_effect=mock_doc)
+    mocker.patch("learning_module.Document", side_effect=mock_doc)
     
     text = load_report_knowledge_base()
     assert "Testo valido" in text

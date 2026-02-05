@@ -12,15 +12,15 @@ import modules.database.db_reports as dbr
 def setup_db(mocker, tmp_path):
     """Fixture per impostare un database fisico temporaneo per i test."""
     db_path = tmp_path / "test_reports.db"
-    mocker.patch("src.core.database.DB_NAME", str(db_path))
+    mocker.patch("core.database.DB_NAME", str(db_path))
     
     def get_test_conn():
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         return conn
         
-    mocker.patch("src.modules.database.db_reports.get_db_connection", side_effect=get_test_conn)
-    mocker.patch("src.core.database.DatabaseEngine.get_connection", side_effect=get_test_conn)
+    mocker.patch("modules.database.db_reports.get_db_connection", side_effect=get_test_conn)
+    mocker.patch("core.database.DatabaseEngine.get_connection", side_effect=get_test_conn)
     
     conn = get_test_conn()
     conn.execute("CREATE TABLE report_da_validare (id_report TEXT PRIMARY KEY, val TEXT)")

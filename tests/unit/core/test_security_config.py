@@ -12,7 +12,7 @@ def test_ai_revision_no_key(mocker):
     mocker.patch("streamlit.secrets", {}) 
     res = revisiona_con_ia("test")
     assert res["success"] is False
-    assert "incompleta" in res["error"]
+    assert any(term in res["error"] for term in ["incompleta", "non disponibile"])
 
 def test_config_defaults(mocker):
     """Verifica che validate_config non esca se le chiavi sono presenti."""

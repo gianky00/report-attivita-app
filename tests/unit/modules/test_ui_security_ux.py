@@ -19,9 +19,9 @@ def test_navigation_tab_persistence(mocker):
     mock_rerun = mocker.patch("streamlit.rerun")
     
     # Mock moduli esterni
-    mocker.patch("src.components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"]))
-    mocker.patch("src.components.ui.navigation_ui.get_last_login", return_value="2025-01-01 10:00")
-    mocker.patch("src.components.ui.navigation_ui.get_next_on_call_week", return_value=None)
+    mocker.patch("components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"]))
+    mocker.patch("components.ui.navigation_ui.get_last_login", return_value="2025-01-01 10:00")
+    mocker.patch("components.ui.navigation_ui.get_next_on_call_week", return_value=None)
     
     render_sidebar("123", "Mario Rossi", "Tecnico")
     
@@ -34,10 +34,10 @@ def test_session_clear_on_logout(mocker):
     st.session_state.session_token = "token-xyz"
     
     mocker.patch("streamlit.button", side_effect=lambda label, **kwargs: label == "Disconnetti")
-    mocker.patch("src.components.ui.navigation_ui.delete_session")
-    mocker.patch("src.components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"]))
-    mocker.patch("src.components.ui.navigation_ui.get_last_login", return_value=None)
-    mocker.patch("src.components.ui.navigation_ui.get_next_on_call_week", return_value=None)
+    mocker.patch("components.ui.navigation_ui.delete_session")
+    mocker.patch("components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"]))
+    mocker.patch("components.ui.navigation_ui.get_last_login", return_value=None)
+    mocker.patch("components.ui.navigation_ui.get_next_on_call_week", return_value=None)
     mock_rerun = mocker.patch("streamlit.rerun")
     
     render_sidebar("123", "Mario Rossi", "Tecnico")

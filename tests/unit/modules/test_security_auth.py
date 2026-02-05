@@ -13,7 +13,7 @@ def test_first_user_is_always_admin(mocker):
     mock_cursor = mock_conn.cursor.return_value
     mock_cursor.fetchone.return_value = [0] # Count = 0
     
-    mocker.patch("src.modules.auth.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.auth.get_db_connection", return_value=mock_conn)
     
     # Tentativo di login con qualsiasi credenziale su DB vuoto
     status, data = authenticate_user("99999", "nuova_password")
@@ -29,8 +29,8 @@ def test_authenticate_user_not_found_returns_failed(mocker):
     mock_cursor = mock_conn.cursor.return_value
     mock_cursor.fetchone.return_value = [5] # Ci sono già altri utenti
     
-    mocker.patch("src.modules.auth.get_db_connection", return_value=mock_conn)
-    mocker.patch("src.modules.auth.get_user_by_matricola", return_value=None)
+    mocker.patch("modules.auth.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.auth.get_user_by_matricola", return_value=None)
     
     status, _ = authenticate_user("NON_EXIST", "any")
     assert status == "FAILED"

@@ -3,6 +3,7 @@ Test unitari per il modulo notifiche utilizzando il mocking totale della conness
 """
 
 import pytest
+import pandas as pd
 from modules.notifications import (
     crea_notifica,
     leggi_notifiche,
@@ -16,14 +17,14 @@ def mock_db_notifications(mocker):
     mock_conn = mocker.MagicMock()
     # Simula il context manager 'with conn:'
     mock_conn.__enter__.return_value = mock_conn
-    mocker.patch("src.modules.notifications.get_db_connection", return_value=mock_conn)
-    mocker.patch("src.modules.db_manager.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.notifications.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.db_manager.get_db_connection", return_value=mock_conn)
     return mock_conn
 
 
 def test_crea_notifica_mock(mocker, mock_db_notifications):
     """Verifica la logica di creazione notifica."""
-    mocker.patch("src.modules.notifications.add_notification", return_value=True)
+    mocker.patch("modules.notifications.add_notification", return_value=True)
     assert crea_notifica("123", "Messaggio Test") is True
 
 
@@ -40,9 +41,10 @@ def test_segna_notifica_letta_mock(mock_db_notifications):
 def test_leggi_notifiche_mock(mocker, mock_db_notifications):
     """Verifica il recupero delle notifiche."""
     mocker.patch(
-        "src.modules.notifications.get_notifications_for_user",
+        "modules.notifications.get_notifications_for_user",
         return_value=[{"Messaggio": "M1"}],
     )
     res = leggi_notifiche("123")
+    assert isinstance(res, pd.DataFrame)
     assert len(res) == 1
-    assert res[0]["Messaggio"] == "M1"
+    assert res.iloc[0]["Messaggio"] == "M1"

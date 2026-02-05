@@ -11,11 +11,11 @@ import logging
 def test_login_failure_logging_privacy(mocker):
     """Verifica che i tentativi falliti non logghino password o segreti."""
     # 1. Mock DB per fallimento login
-    mocker.patch("src.modules.auth.get_db_connection")
-    mocker.patch("src.modules.auth.get_user_by_matricola", return_value=None)
+    mocker.patch("modules.auth.get_db_connection")
+    mocker.patch("modules.auth.get_user_by_matricola", return_value=None)
     
     # 2. Mock del logger per catturare l'output
-    mock_log = mocker.patch("src.modules.auth.logger")
+    mock_log = mocker.patch("modules.auth.logger")
     
     # Tentativo con password sensibile
     password_pericolosa = "Password123!"

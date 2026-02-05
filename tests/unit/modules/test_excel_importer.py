@@ -17,7 +17,7 @@ def mock_df_contatti():
 
 def test_trova_attivita_no_sheet(mocker, mock_df_contatti):
     """Verifica che la funzione gestisca l'assenza del foglio excel senza crashare."""
-    mocker.patch("src.modules.importers.excel_giornaliera._load_day_sheet", return_value=None)
+    mocker.patch("modules.importers.excel_giornaliera._load_day_sheet", return_value=None)
     res = trova_attivita("123", 1, 1, 2025, mock_df_contatti)
     assert res == []
 
@@ -37,8 +37,8 @@ def test_trova_attivita_parsing_success(mocker, mock_df_contatti):
     for i in range(15):
         if i not in df_sheet.columns: df_sheet[i] = ""
         
-    mocker.patch("src.modules.importers.excel_giornaliera._load_day_sheet", return_value=df_sheet)
-    mocker.patch("src.modules.importers.excel_giornaliera.get_globally_excluded_activities", return_value=[])
+    mocker.patch("modules.importers.excel_giornaliera._load_day_sheet", return_value=df_sheet)
+    mocker.patch("modules.importers.excel_giornaliera.get_globally_excluded_activities", return_value=[])
     
     res = trova_attivita("123", 1, 1, 2025, mock_df_contatti)
     
@@ -61,8 +61,8 @@ def test_trova_attivita_malformed_data(mocker, mock_df_contatti):
     for i in range(15):
         if i not in df_sheet.columns: df_sheet[i] = ""
         
-    mocker.patch("src.modules.importers.excel_giornaliera._load_day_sheet", return_value=df_sheet)
-    mocker.patch("src.modules.importers.excel_giornaliera.get_globally_excluded_activities", return_value=[])
+    mocker.patch("modules.importers.excel_giornaliera._load_day_sheet", return_value=df_sheet)
+    mocker.patch("modules.importers.excel_giornaliera.get_globally_excluded_activities", return_value=[])
     
     res = trova_attivita("123", 1, 1, 2025, mock_df_contatti)
     # Deve comunque processare la riga valida

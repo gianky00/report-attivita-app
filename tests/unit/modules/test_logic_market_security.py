@@ -16,7 +16,7 @@ def test_aiutante_cannot_take_tecnico_shift(mocker):
         "Ruolo_Originale": "Tecnico",
         "ID_Turno": "T1"
     }
-    mocker.patch("src.modules.shifts.logic_market.get_bacheca_item_by_id", return_value=mock_item)
+    mocker.patch("modules.shifts.logic_market.get_bacheca_item_by_id", return_value=mock_item)
     
     # Simula utente Aiutante
     status = prendi_turno_da_bacheca_logic("MAT123", "Aiutante", "B1")

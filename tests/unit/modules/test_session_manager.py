@@ -14,7 +14,7 @@ def test_save_and_load_session(tmp_path, monkeypatch, mocker):
     monkeypatch.setattr(sm, "SESSION_DIR", test_session_dir)
 
     # Mock di streamlit session_state
-    mock_st = mocker.patch("src.modules.session_manager.st")
+    mock_st = mocker.patch("modules.session_manager.st")
     mock_st.session_state = mocker.MagicMock()
 
     token = save_session("12345", "Tecnico")

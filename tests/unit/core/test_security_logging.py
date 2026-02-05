@@ -5,8 +5,7 @@ Verifica che dati sensibili (PII) non vengano mai scritti nei log JSON.
 
 import json
 import pytest
-from core.logging import get_logger, JsonFormatter
-import logging
+from core.logging import JsonFormatter
 
 def test_log_sanitization_no_passwords():
     """Verifica che i messaggi di log non contengano stringhe simili a password o segreti."""
@@ -25,14 +24,13 @@ def test_log_sanitization_no_passwords():
 
     formatter = JsonFormatter()
     
-    # Tentativo di loggare una password
+    # Il formatter deve sanitizzare automaticamente
     record = MockRecord("User 12345 logged in with password 'secret123'")
     log_output = formatter.format(record)
-    
-    # Nota: Attualmente il formatter NON sanitizza automaticamente.
-    # Questo test serve ad evidenziare la vulnerabilità.
-    # Dovremmo implementare un filtro nel JsonFormatter.
-    assert "secret123" in log_output # Fallirà se implementiamo la protezione
+
+    # Verifichiamo che la password sia stata oscurata
+    assert "secret123" not in log_output
+    assert "[REDACTED]" in log_output
 
 def test_log_extra_data_privacy():
     """Verifica che dati PII passati come extra_data siano gestiti correttamente."""

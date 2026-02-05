@@ -17,8 +17,8 @@ def test_generate_pdf_with_extremely_long_names(mocker):
     ]
     
     # Mocking output per non scrivere su disco
-    mocker.patch("src.modules.pdf_utils.PDF.output")
-    mocker.patch("src.modules.pdf_utils.Path.mkdir")
+    mocker.patch("modules.pdf_utils.PDF.output")
+    mocker.patch("modules.pdf_utils.Path.mkdir")
     
     # Se la funzione crasha qui, il test fallirà
     file_path = generate_on_call_pdf(data, "gennaio", 2025)

@@ -9,7 +9,7 @@ from modules.database.db_reports import salva_report_intervento
 def test_excel_import_idempotency(mocker):
     """Verifica che l'inserimento dello stesso report più volte non crei duplicati."""
     # Patchiamo DatabaseEngine.execute che è il metodo centralizzato
-    mock_exec = mocker.patch("src.modules.database.db_reports.DatabaseEngine.execute")
+    mock_exec = mocker.patch("modules.database.db_reports.DatabaseEngine.execute")
     
     report_data = {
         "id_report": "ST_2025_001",

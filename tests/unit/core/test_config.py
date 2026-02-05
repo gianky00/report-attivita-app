@@ -8,7 +8,7 @@ from config import validate_config
 
 def test_validate_config_missing_keys(mocker):
     """Verifica che la validazione fallisca se mancano chiavi obbligatorie."""
-    mocker.patch("src.config.logger")
+    mocker.patch("config.logger")
     mocker.patch("sys.exit")
 
     # Forniamo un dizionario con chiavi mancanti.
@@ -23,7 +23,7 @@ def test_validate_config_missing_keys(mocker):
 
 def test_validate_config_success(mocker):
     """Verifica che la validazione passi con una configurazione completa."""
-    mocker.patch("src.config.Path.exists", return_value=True)
+    mocker.patch("config.Path.exists", return_value=True)
     mock_exit = mocker.patch("sys.exit")
 
     good_conf = {

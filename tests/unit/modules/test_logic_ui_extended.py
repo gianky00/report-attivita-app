@@ -10,7 +10,7 @@ from components.ui.activity_ui import disegna_sezione_attivita, visualizza_stori
 def test_disegna_sezione_attivita_empty(mocker):
     """Verifica il rendering con lista attività vuota."""
     mock_success = mocker.patch("streamlit.success")
-    mocker.patch("src.components.ui.activity_ui.get_unvalidated_reports_by_technician", return_value=pd.DataFrame())
+    mocker.patch("components.ui.activity_ui.get_unvalidated_reports_by_technician", return_value=pd.DataFrame())
     
     disegna_sezione_attivita([], "empty_sec", "Tecnico")
     
@@ -34,7 +34,7 @@ def test_disegna_sezione_attivita_role_check(mocker):
     """Verifica che un Aiutante non possa compilare report di team."""
     mocker.patch("streamlit.header")
     mocker.patch("streamlit.divider")
-    mocker.patch("src.components.ui.activity_ui.get_unvalidated_reports_by_technician", return_value=pd.DataFrame())
+    mocker.patch("components.ui.activity_ui.get_unvalidated_reports_by_technician", return_value=pd.DataFrame())
     mock_warning = mocker.patch("streamlit.warning")
     
     attivita = [{
@@ -47,7 +47,7 @@ def test_disegna_sezione_attivita_role_check(mocker):
     }]
     
     mocker.patch("streamlit.expander")
-    mocker.patch("src.components.ui.activity_ui.merge_time_slots", return_value=["08:00-12:00"])
+    mocker.patch("components.ui.activity_ui.merge_time_slots", return_value=["08:00-12:00"])
     
     disegna_sezione_attivita(attivita, "role_sec", "Aiutante")
     

@@ -16,7 +16,7 @@ def mock_auth_db(mocker):
     """Fixture per mockare la connessione al database in auth.py."""
     mock_conn = mocker.MagicMock()
     mock_conn.__enter__.return_value = mock_conn
-    mocker.patch("src.modules.auth.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.auth.get_db_connection", return_value=mock_conn)
     return mock_conn
 
 def test_authenticate_user_wrong_password(mocker, mock_auth_db):
@@ -32,7 +32,7 @@ def test_authenticate_user_wrong_password(mocker, mock_auth_db):
         "PasswordHash": bcrypt.hashpw(b"correct_pass", bcrypt.gensalt()).decode("utf-8"),
         "2FA_Secret": "JBSWY3DPEHPK3PXP"
     }
-    mocker.patch("src.modules.auth.get_user_by_matricola", return_value=mock_user)
+    mocker.patch("modules.auth.get_user_by_matricola", return_value=mock_user)
     
     # Password errata
     status, _ = authenticate_user("12345", "wrong_pass")
