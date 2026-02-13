@@ -206,9 +206,8 @@ def _render_oncall_navigation() -> None:
     """Pulsanti di navigazione settimanale."""
     c = st.columns([1, 10, 1])
     if c[0].button(
-        "Indietro",
+        "",
         icon=":material/arrow_back:",
-        label_visibility="collapsed",  # type: ignore[call-arg]
         use_container_width=True,
     ):
         st.session_state.week_start_date -= datetime.timedelta(days=7)
@@ -222,9 +221,8 @@ def _render_oncall_navigation() -> None:
     )
 
     if c[2].button(
-        "Avanti",
+        "",
         icon=":material/arrow_forward:",
-        label_visibility="collapsed",  # type: ignore[call-arg]
         use_container_width=True,
     ):
         st.session_state.week_start_date += datetime.timedelta(days=7)
@@ -305,20 +303,18 @@ def _render_day_cell(
     if (user_on_call or ruolo == "Amministratore") and s_id:
         c1, c2 = st.columns(2)
         if c1.button(
-            "Gestisci",
+            "",
             icon=":material/build:",
             key=f"m_{day}",
-            label_visibility="collapsed",  # type: ignore[call-arg]
             use_container_width=True,
         ):
             st.session_state.managing_oncall_shift_id = s_id
             st.session_state.managing_oncall_user_matricola = managed_mat
             st.rerun()
         if ruolo == "Amministratore" and c2.button(
-            "Modifica",
+            "",
             icon=ICONS["EDIT"],
             key=f"e_{day}",
-            label_visibility="collapsed",  # type: ignore[call-arg]
             use_container_width=True,
         ):
             st.session_state.editing_oncall_shift_id = s_id
