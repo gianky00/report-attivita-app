@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
+
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -18,20 +19,18 @@ logger = get_logger(__name__)
 class PDF(FPDF):
     """Classe personalizzata per la generazione di report PDF."""
 
-    def header(self):
+    def header(self) -> None:
         """Metodo per l'intestazione della pagina (attualmente vuota)."""
         pass
 
-    def footer(self):
+    def footer(self) -> None:
         """Metodo per il piè di pagina con numerazione."""
         self.set_y(-15)
         self.set_font("helvetica", "I", 8)
         self.cell(0, 10, f"Pagina {self.page_no()} di {{nb}}", align="R")
 
 
-def generate_on_call_pdf(
-    data: list[dict[str, Any]], month_name: str, year: int
-) -> str | None:
+def generate_on_call_pdf(data: list[dict[str, Any]], month_name: str, year: int) -> str | None:
     """
     Genera un file PDF contenente la tabella della reperibilità.
     """
@@ -50,8 +49,7 @@ def generate_on_call_pdf(
         "dicembre": "December",
     }
 
-    english_month = italian_to_english_month.get(month_name.lower())
-    if not english_month:
+    if not (english_month := italian_to_english_month.get(month_name.lower())):
         logger.error(f"Nome mese non valido: {month_name}")
         return None
 
@@ -66,17 +64,17 @@ def generate_on_call_pdf(
         if data:
             df_data = pd.DataFrame(data)
             df_data["Data"] = pd.to_datetime(df_data["Data"])
-            df_pivot = df_data.pivot_table(
-                index="Data",
-                columns="RuoloOccupato",
-                values="Nome Cognome",
-                aggfunc="first",
-            ).reset_index()
-
-            df_pivot = df_pivot.rename(
-                columns={"Tecnico": "Persona 1", "Aiutante": "Persona 2"}
+            df_pivot = (
+                df_data.pivot_table(
+                    index="Data",
+                    columns="RuoloOccupato",
+                    values="Nome Cognome",
+                    aggfunc="first",
+                )
+                .reset_index()
+                .rename(columns={"Tecnico": "Persona 1", "Aiutante": "Persona 2"})
             )
-            for col in ["Persona 1", "Persona 2"]:
+            for col in ("Persona 1", "Persona 2"):
                 if col not in df_pivot:
                     df_pivot[col] = ""
 

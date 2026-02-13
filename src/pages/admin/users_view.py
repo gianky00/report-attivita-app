@@ -3,9 +3,12 @@ Modulo per la gestione amministrativa degli account tecnici e amministratori.
 Include funzionalità di creazione, modifica, eliminazione e reset credenziali/2FA.
 """
 
+from typing import Any
+
 import pandas as pd
 import streamlit as st
 
+from constants import ICONS
 from modules.auth import (
     create_user,
     delete_user,
@@ -16,51 +19,47 @@ from modules.auth import (
 from modules.db_manager import get_all_users
 
 
-def _render_user_edit_form(user_to_edit):
+def _render_user_edit_form(user_to_edit: Any) -> None:
     """Sotto-funzione per il form di modifica utente."""
     with st.form(key="edit_user_form"):
         st.subheader(f"Modifica Utente: {user_to_edit['Nome Cognome']}")
-        new_nome_cognome = st.text_input(
-            "Nome Cognome", value=user_to_edit["Nome Cognome"]
-        )
+        new_nome_cognome = st.text_input("Nome Cognome", value=user_to_edit["Nome Cognome"])
         new_matricola = st.text_input("Matricola", value=user_to_edit["Matricola"])
         ruoli_disponibili = ["Tecnico", "Aiutante", "Amministratore"]
         try:
             current_role_index = ruoli_disponibili.index(user_to_edit["Ruolo"])
         except ValueError:
             current_role_index = 0
-        new_role = st.selectbox(
-            "Nuovo Ruolo", options=ruoli_disponibili, index=current_role_index
-        )
+        new_role = st.selectbox("Nuovo Ruolo", options=ruoli_disponibili, index=current_role_index)
 
         col1, col2 = st.columns(2)
-        if col1.form_submit_button("Salva Modifiche", type="primary"):
+        if col1.form_submit_button("Salva Modifiche", type="primary", icon=ICONS["SAVE"]):
             update_data = {
                 "Nome Cognome": new_nome_cognome,
                 "Matricola": new_matricola,
                 "Ruolo": new_role,
             }
             if update_user(st.session_state.editing_user_matricola, update_data):
-                st.success("Utente aggiornato con successo.")
+                st.success("Utente aggiornato con successo.", icon=ICONS["CHECK"])
                 st.session_state.editing_user_matricola = None
                 st.rerun()
             else:
-                st.error("Errore durante il salvataggio delle modifiche.")
-        if col2.form_submit_button("Annulla"):
+                st.error("Errore durante il salvataggio delle modifiche.", icon=ICONS["ERROR"])
+        if col2.form_submit_button("Annulla", icon=ICONS["CANCEL"]):
             st.session_state.editing_user_matricola = None
             st.rerun()
 
 
-def _render_user_card(user):
+def _render_user_card(user: Any) -> None:
     """Sotto-funzione per renderizzare la card di un singolo utente nell'elenco."""
     user_name = user["Nome Cognome"]
     user_matricola = user["Matricola"]
 
-    def start_edit():
+    def start_edit() -> None:
         st.session_state.editing_user_matricola = user_matricola
         st.session_state.deleting_user_matricola = None
 
-    def start_delete():
+    def start_delete() -> None:
         st.session_state.deleting_user_matricola = user_matricola
         st.session_state.editing_user_matricola = None
 
@@ -75,59 +74,67 @@ def _render_user_card(user):
             )
         with col2:
             st.button(
-                "✏️ Modifica",
+                "Modifica",
+                icon=ICONS["EDIT"],
                 key=f"edit_{user_matricola}",
                 on_click=start_edit,
             )
 
         b1, b2, b3 = st.columns(3)
         b1.button(
-            "🔑 Resetta Password",
+            "Resetta Password",
+            icon=":material/key:",
             key=f"reset_pwd_{user_matricola}",
-            on_click=lambda m=user_matricola, n=user_name: (
-                reset_user_password(m) and st.success(f"Password per {n} resettata.")
+            on_click=lambda m=user_matricola, n=user_name: (  # type: ignore[arg-type]
+                reset_user_password(m)
+                and st.success(f"Password per {n} resettata.", icon=ICONS["CHECK"])
             ),
         )
         b2.button(
-            "📱 Resetta 2FA",
+            "Resetta 2FA",
+            icon=":material/smartphone:",
             key=f"reset_2fa_{user_matricola}",
-            on_click=lambda m=user_matricola, n=user_name: (
-                reset_user_2fa(m) and st.success(f"2FA per {n} resettata.")
+            on_click=lambda m=user_matricola, n=user_name: (  # type: ignore[arg-type]
+                reset_user_2fa(m) and st.success(f"2FA per {n} resettata.", icon=ICONS["CHECK"])
             ),
             disabled=pd.isna(user.get("2FA_Secret")),
         )
 
         if st.session_state.deleting_user_matricola == user_matricola:
             st.warning(
-                f"Sei sicuro di voler eliminare l'utente **{user_name}**? Questa azione è irreversibile."
+                f"Sei sicuro di voler eliminare l'utente **{user_name}**? Questa azione è irreversibile.",
+                icon=ICONS["WARNING"],
             )
             c1, c2 = st.columns(2)
             if c1.button(
-                "✅ Conferma Eliminazione",
+                "Conferma Eliminazione",
+                icon=ICONS["CHECK"],
                 key=f"confirm_delete_{user_matricola}",
                 type="primary",
             ):
                 if delete_user(user_matricola):
-                    st.success(f"Utente {user_name} eliminato.")
+                    st.success(f"Utente {user_name} eliminato.", icon=ICONS["CHECK"])
                     st.session_state.deleting_user_matricola = None
                     st.rerun()
                 else:
-                    st.error("Errore durante l'eliminazione.")
-            if c2.button("❌ Annulla", key=f"cancel_delete_{user_matricola}"):
+                    st.error("Errore durante l'eliminazione.", icon=ICONS["ERROR"])
+            if c2.button("Annulla", icon=ICONS["CANCEL"], key=f"cancel_delete_{user_matricola}"):
                 st.session_state.deleting_user_matricola = None
                 st.rerun()
         else:
             b3.button(
-                "❌ Elimina Utente",
+                "Elimina Utente",
+                icon=ICONS["DELETE"],
                 key=f"delete_{user_matricola}",
                 on_click=start_delete,
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-def _render_new_user_expander(df_contatti):
+def _render_new_user_expander(df_contatti: pd.DataFrame) -> None:
     """Sotto-funzione per il form di creazione nuovo utente."""
-    with st.expander("➕ Crea Nuovo Utente"):
+    with st.expander("Crea Nuovo Utente"):
+        st.markdown(f"{ICONS['ADD']} **Crea Nuovo Utente**", unsafe_allow_html=True)
         with st.form("new_user_form", clear_on_submit=True):
             st.subheader("Dati Nuovo Utente")
             c1, c2 = st.columns(2)
@@ -137,16 +144,19 @@ def _render_new_user_expander(df_contatti):
             new_matricola = c3.text_input("Matricola*")
             new_ruolo = c4.selectbox("Ruolo", ["Tecnico", "Aiutante", "Amministratore"])
 
-            if st.form_submit_button("Crea Utente"):
+            if st.form_submit_button("Crea Utente", icon=ICONS["ADD"]):
                 if new_nome and new_cognome and new_matricola:
                     if not df_contatti[
-                        df_contatti["Matricola"].astype(str) == str(new_matricola).strip()
+                        df_contatti["Matricola"].astype(str) == new_matricola.strip()
                     ].empty:
-                        st.error(f"Errore: La matricola '{new_matricola}' esiste già.")
+                        st.error(
+                            f"Errore: La matricola '{new_matricola}' esiste già.",
+                            icon=ICONS["ERROR"],
+                        )
                     else:
                         nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
                         new_user_data = {
-                            "Matricola": str(new_matricola),
+                            "Matricola": new_matricola,
                             "Nome Cognome": nome_completo,
                             "Ruolo": new_ruolo,
                             "PasswordHash": None,
@@ -154,16 +164,19 @@ def _render_new_user_expander(df_contatti):
                         }
                         if create_user(new_user_data):
                             st.success(
-                                f"Utente '{nome_completo}' creato. Dovrà impostare la password al primo accesso."
+                                f"Utente '{nome_completo}' creato. Dovrà impostare la password al primo accesso.",
+                                icon=ICONS["CHECK"],
                             )
                             st.rerun()
                         else:
-                            st.error("Errore durante la creazione dell'utente.")
+                            st.error(
+                                "Errore durante la creazione dell'utente.", icon=ICONS["ERROR"]
+                            )
                 else:
-                    st.warning("Nome, Cognome e Matricola sono obbligatori.")
+                    st.warning("Nome, Cognome e Matricola sono obbligatori.", icon=ICONS["WARNING"])
 
 
-def render_gestione_account():
+def render_gestione_account() -> None:
     """Renderizza l'interfaccia di gestione degli account utenti."""
     st.subheader("Gestione Account Utente")
     df_contatti = get_all_users()
@@ -174,23 +187,17 @@ def render_gestione_account():
         st.session_state.deleting_user_matricola = None
 
     if st.session_state.editing_user_matricola:
-        user_rows = df_contatti[
-            df_contatti["Matricola"] == st.session_state.editing_user_matricola
-        ]
+        user_rows = df_contatti[df_contatti["Matricola"] == st.session_state.editing_user_matricola]
         if not user_rows.empty:
             _render_user_edit_form(user_rows.iloc[0])
 
     st.subheader("Elenco Utenti")
-    search_term = st.text_input(
-        "Cerca per nome o matricola...", key="user_search_admin"
-    )
+    search_term = st.text_input("Cerca per nome o matricola...", key="user_search_admin")
     df_filtrati = df_contatti
     if search_term:
         df_filtrati = df_contatti[
             df_contatti["Nome Cognome"].str.contains(search_term, case=False, na=False)
-            | df_contatti["Matricola"]
-            .astype(str)
-            .str.contains(search_term, case=False, na=False)
+            | df_contatti["Matricola"].astype(str).str.contains(search_term, case=False, na=False)
         ]
 
     for _, user in df_filtrati.iterrows():

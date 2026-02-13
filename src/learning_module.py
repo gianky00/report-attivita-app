@@ -12,6 +12,7 @@ from typing import Any
 import nltk
 from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
+
 from core.logging import get_logger, measure_time
 
 logger = get_logger(__name__)
@@ -25,25 +26,24 @@ def load_unreviewed_knowledge() -> list[dict[str, Any]]:
     if not UNREVIEWED_KNOWLEDGE_PATH.exists():
         return []
     with suppress(json.JSONDecodeError, FileNotFoundError):
-        return json.loads(UNREVIEWED_KNOWLEDGE_PATH.read_text(encoding="utf-8"))
+        result: list[dict[str, Any]] = json.loads(
+            UNREVIEWED_KNOWLEDGE_PATH.read_text(encoding="utf-8")
+        )
+        return result
     return []
 
 
-def save_unreviewed_knowledge(data: list[dict[str, Any]]):
+def save_unreviewed_knowledge(data: list[dict[str, Any]]) -> None:
     """Salva le conoscenze non revisionate nel file JSON."""
     UNREVIEWED_KNOWLEDGE_PATH.write_text(
         json.dumps(data, indent=4, ensure_ascii=False), encoding="utf-8"
     )
 
 
-def integrate_knowledge(
-    entry_id: str, integration_details: dict[str, Any]
-) -> dict[str, Any]:
+def integrate_knowledge(entry_id: str, integration_details: dict[str, Any]) -> dict[str, Any]:
     """Integra una voce revisionata nel knowledge_core.json principale."""
     unreviewed = load_unreviewed_knowledge()
-    entry_to_integrate = next(
-        (entry for entry in unreviewed if entry["id"] == entry_id), None
-    )
+    entry_to_integrate = next((entry for entry in unreviewed if entry["id"] == entry_id), None)
 
     if not entry_to_integrate:
         return {"success": False, "error": "Voce non trovata."}
@@ -78,15 +78,13 @@ def integrate_knowledge(
         return {"success": True, "message": "Knowledge Core aggiornato con successo."}
 
     except Exception as e:
-        logger.error(
-            f"Errore durante l'integrazione della conoscenza: {e}", exc_info=True
-        )
-        return {"success": False, "error": f"{e}"}
+        logger.error(f"Errore durante l'integrazione della conoscenza: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
 
 
 def load_report_knowledge_base() -> str:
     """Carica la base di conoscenza leggendo i file .docx e .txt locali."""
-    knowledge_base_text = []
+    knowledge_base_text: list[str] = []
 
     # Percorso 1: Documenti Storici
     local_base_path = Path("knowledge_base_docs")
@@ -94,9 +92,9 @@ def load_report_knowledge_base() -> str:
         for filepath in local_base_path.rglob("*.docx"):
             with suppress(Exception):
                 doc = Document(str(filepath))
-                for para in doc.paragraphs:
-                    if text := para.text.strip():
-                        knowledge_base_text.append(text)
+                knowledge_base_text.extend(
+                    text for para in doc.paragraphs if (text := para.text.strip())
+                )
     else:
         logger.warning(f"Cartella '{local_base_path}' non trovata.")
 
@@ -127,11 +125,9 @@ def build_knowledge_base() -> dict[str, Any]:
     """Crea e salva un indice TF-IDF dalla base di conoscenza."""
     try:
         # 1. Download risorse NLTK
-        for res in ["punkt", "stopwords"]:
+        for res in ("punkt", "stopwords"):
             with suppress(LookupError):
-                nltk.data.find(
-                    f"tokenizers/{res}" if res == "punkt" else f"corpora/{res}"
-                )
+                nltk.data.find(f"tokenizers/{res}" if res == "punkt" else f"corpora/{res}")
                 continue
             nltk.download(res, quiet=True)
 

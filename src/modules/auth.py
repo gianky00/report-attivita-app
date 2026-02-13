@@ -9,22 +9,12 @@ from typing import Any
 
 import bcrypt
 import pyotp
-from core.logging import get_logger
 
+from constants import VALID_USER_COLUMNS
+from core.logging import get_logger
 from modules.db_manager import get_db_connection
 
 logger = get_logger(__name__)
-
-# Colonne valide per la tabella contatti per prevenire SQL Injection via chiavi dict
-VALID_USER_COLUMNS = {
-    "Matricola",
-    "Nome Cognome",
-    "Ruolo",
-    "PasswordHash",
-    "2FA_Secret",
-    "Email",
-    "Telefono",
-}
 
 
 def get_user_by_matricola(matricola: str) -> dict[str, Any] | None:
@@ -54,7 +44,7 @@ def create_user(user_data: dict[str, Any]) -> bool:
     conn = get_db_connection()
     try:
         with conn:
-            cols = ", ".join(f'"{k}"' for k in filtered_data.keys())
+            cols = ", ".join(f'"{k}"' for k in filtered_data)
             placeholders = ", ".join("?" for _ in filtered_data)
             sql = f"INSERT INTO contatti ({cols}) VALUES ({placeholders})"  # nosec B608
             conn.execute(sql, list(filtered_data.values()))
@@ -79,9 +69,9 @@ def update_user(matricola: str, update_data: dict[str, Any]) -> bool:
     conn = get_db_connection()
     try:
         with conn:
-            set_clause = ", ".join(f'"{k}" = ?' for k in filtered_data.keys())
+            set_clause = ", ".join(f'"{k}" = ?' for k in filtered_data)
             sql = f"UPDATE contatti SET {set_clause} WHERE Matricola = ?"  # nosec B608
-            params = list(filtered_data.values()) + [matricola]
+            params = [*list(filtered_data.values()), matricola]
             conn.execute(sql, params)
         return True
     except sqlite3.Error as e:
@@ -126,8 +116,10 @@ def generate_2fa_secret() -> str:
 def get_provisioning_uri(username: str, secret: str) -> str:
     """Genera l'URI di provisioning per il QR code."""
     safe_username = "".join(c for c in username if c.isalnum())
-    return pyotp.totp.TOTP(secret).provisioning_uri(
-        name=safe_username, issuer_name="AppManutenzioneSMI"
+    return str(
+        pyotp.totp.TOTP(secret).provisioning_uri(
+            name=safe_username, issuer_name="AppManutenzioneSMI"
+        )
     )
 
 
@@ -164,7 +156,7 @@ def authenticate_user(matricola: str, password: str) -> tuple[str, Any]:
 
         nome_completo = str(user_row["Nome Cognome"]).strip()
         ruolo = user_row.get("Ruolo", "Tecnico")
-        password_bytes = str(password).encode("utf-8")
+        password_bytes = password.encode("utf-8")
 
         password_hash = user_row.get("PasswordHash")
         if not password_hash or not str(password_hash).strip():
@@ -189,9 +181,7 @@ def log_access_attempt(username: str, status: str) -> bool:
     conn = get_db_connection()
     try:
         with conn:
-            sql = (
-                "INSERT INTO access_logs (timestamp, username, status) VALUES (?, ?, ?)"
-            )
+            sql = "INSERT INTO access_logs (timestamp, username, status) VALUES (?, ?, ?)"
             now_iso = datetime.datetime.now().isoformat()
             conn.execute(sql, (now_iso, username, status))
         return True

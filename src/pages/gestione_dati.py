@@ -2,9 +2,12 @@
 Modulo per la gestione diretta dei dati del database e delle esclusioni assegnamenti.
 """
 
+from typing import Any
+
 import pandas as pd
 import streamlit as st
 
+from constants import ICONS
 from modules.data_manager import get_all_assigned_activities
 from modules.db_manager import (
     add_assignment_exclusion,
@@ -16,17 +19,18 @@ from modules.db_manager import (
 )
 
 
-def render_gestione_dati_tab():
+def render_gestione_dati_tab() -> None:
     """Renderizza l'interfaccia per la gestione tabellare del database."""
     st.subheader("Gestione Dati")
     st.info(
         "Questa sezione permette di visualizzare e modificare i dati di "
-        "qualsiasi tabella del database."
+        "qualsiasi tabella del database.",
+        icon=ICONS["INFO"],
     )
 
     table_names = get_table_names()
     if not table_names:
-        st.warning("Nessuna tabella trovata nel database.")
+        st.warning("Nessuna tabella trovata nel database.", icon=ICONS["WARNING"])
         return
 
     selected_table = st.selectbox("Seleziona una tabella", table_names)
@@ -36,32 +40,29 @@ def render_gestione_dati_tab():
         st.write(f"Dati della tabella: **{selected_table}**")
         edited_df = st.data_editor(df, num_rows="dynamic")
 
-        if st.button("Salva Modifiche"):
+        if st.button("Salva Modifiche", icon=ICONS["SAVE"], type="primary"):
             if save_table_data(edited_df, selected_table):
-                st.success("Dati salvati con successo!")
+                st.success("Dati salvati con successo!", icon=ICONS["CHECK"])
             else:
-                st.error("Errore durante il salvataggio dei dati.")
+                st.error("Errore durante il salvataggio dei dati.", icon=ICONS["ERROR"])
 
     st.divider()
     _render_esclusioni_sezione()
 
 
-def _render_esclusioni_sezione():
+def _render_esclusioni_sezione() -> None:
     """Sotto-funzione per la gestione delle esclusioni degli assegnamenti."""
     st.subheader("Gestione Esclusioni Assegnamenti")
     st.info(
         "Questa sezione permette di eliminare un assegnamento di attività per "
-        "un tecnico e bloccarlo per tutto il team."
+        "un tecnico e bloccarlo per tutto il team.",
+        icon=ICONS["INFO"],
     )
 
     users_df = get_all_users()
-    technicians_and_admins = users_df[
-        users_df["Ruolo"].isin(["Tecnico", "Amministratore"])
-    ]
+    technicians_and_admins = users_df[users_df["Ruolo"].isin(["Tecnico", "Amministratore"])]
     technician_names = technicians_and_admins["Nome Cognome"].tolist()
-    selected_technician_name = st.selectbox(
-        "Seleziona un tecnico", [""] + sorted(technician_names)
-    )
+    selected_technician_name = st.selectbox("Seleziona un tecnico", ["", *sorted(technician_names)])
 
     if selected_technician_name:
         selected_row = technicians_and_admins[
@@ -77,25 +78,19 @@ def _render_esclusioni_sezione():
         validated_activities = set()
         if not validated_reports_df.empty:
             for _, report in validated_reports_df.iterrows():
-                validated_activities.add(
-                    (report["pdl"], report["descrizione_attivita"])
-                )
+                validated_activities.add((report["pdl"], report["descrizione_attivita"]))
 
         unvalidated_activities = [
-            a
-            for a in all_activities
-            if (a["pdl"], a["attivita"]) not in validated_activities
+            a for a in all_activities if (a["pdl"], a["attivita"]) not in validated_activities
         ]
 
         if not unvalidated_activities:
-            st.info(
-                f"Nessuna attività non validata trovata per {selected_technician_name}."
-            )
+            st.info(f"Nessuna attività non validata trovata per {selected_technician_name}.")
         else:
             _render_assignments_table(unvalidated_activities)
 
 
-def _render_assignments_table(activities):
+def _render_assignments_table(activities: list[dict[str, Any]]) -> None:
     """Renderizza la tabella degli assegnamenti filtrati per il blocco."""
     assignments_df = pd.DataFrame(activities)
     assignments_df["team"] = assignments_df["team"].apply(
@@ -117,14 +112,13 @@ def _render_assignments_table(activities):
     )
 
     selected_assignment = edited_assignments_df[edited_assignments_df["seleziona"]]
-    if not selected_assignment.empty:
-        if st.button("Blocca Assegnamento Selezionato"):
-            pdl = selected_assignment.iloc[0]["pdl"]
-            task = selected_assignment.iloc[0]["attivita"]
-            identifier = f"{pdl}-{task}"
-            admin_matricola = st.session_state.get("authenticated_user")
-            if add_assignment_exclusion(admin_matricola, identifier):
-                st.success("Assegnamento bloccato! Ricarica la pagina.")
-                st.rerun()
-            else:
-                st.error("Errore durante il blocco.")
+    if not selected_assignment.empty and st.button("Blocca Assegnamento Selezionato"):
+        pdl = selected_assignment.iloc[0]["pdl"]
+        task = selected_assignment.iloc[0]["attivita"]
+        identifier = f"{pdl}-{task}"
+        admin_matricola = st.session_state.get("authenticated_user")
+        if add_assignment_exclusion(admin_matricola, identifier):  # type: ignore[arg-type]
+            st.success("Assegnamento bloccato! Ricarica la pagina.")
+            st.rerun()
+        else:
+            st.error("Errore durante il blocco.")

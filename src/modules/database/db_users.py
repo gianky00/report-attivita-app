@@ -7,6 +7,7 @@ import sqlite3
 from typing import Any
 
 import pandas as pd
+
 from core.database import DatabaseEngine
 from core.logging import measure_time
 
@@ -64,7 +65,7 @@ def delete_substitution_request(id_richiesta: str) -> bool:
 
 def add_substitution_request(data: dict[str, Any]) -> bool:
     """Inserisce una nuova proposta di scambio turno nel database."""
-    cols = ", ".join(f'"{k}"' for k in data.keys())
+    cols = ", ".join(f'"{k}"' for k in data)
     placeholders = ", ".join("?" for _ in data)
     sql = f"INSERT INTO sostituzioni ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(data.values()))

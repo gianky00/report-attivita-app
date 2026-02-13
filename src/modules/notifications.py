@@ -5,11 +5,10 @@ Le notifiche vengono salvate nel database e possono essere segnate come lette.
 
 import datetime
 import sqlite3
-from typing import Any
 
 import pandas as pd
-from core.logging import get_logger
 
+from core.logging import get_logger
 from modules.db_manager import (
     add_notification,
     get_db_connection,
@@ -25,10 +24,10 @@ def leggi_notifiche(utente: str) -> pd.DataFrame:
         res = get_notifications_for_user(utente)
         if not res:
             return pd.DataFrame(columns=["ID_Notifica", "Timestamp", "Messaggio", "Stato"])
-        
+
         df = pd.DataFrame(res)
         if "Stato" not in df.columns:
-            df["Stato"] = "letta" # Fallback di sicurezza
+            df["Stato"] = "letta"  # Fallback di sicurezza
         return df
     except Exception as e:
         logger.error(f"Errore durante il caricamento notifiche per {utente}: {e}")
@@ -51,7 +50,7 @@ def crea_notifica(destinatario: str, messaggio: str, link_azione: str = "") -> b
 
     logger.info(f"Creazione notifica per {destinatario}: {messaggio[:50]}...")
     res = add_notification(nuova_notifica)
-    return bool(res)
+    return res
 
 
 def segna_notifica_letta(id_notifica: str) -> bool:
@@ -79,7 +78,7 @@ def segna_tutte_lette(matricola: str) -> bool:
     try:
         with conn:
             # Nota: nel database la colonna è Destinatario_Matricola per le notifiche
-            # ma add_notification usa 'Destinatario' nel dizionario. 
+            # ma add_notification usa 'Destinatario' nel dizionario.
             # Verifichiamo lo schema nel file crea_database.py se necessario.
             # Dallo schema in crea_database.py: Destinatario_Matricola
             sql = "UPDATE notifiche SET Stato = 'letta' WHERE Destinatario_Matricola = ?"

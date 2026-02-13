@@ -3,6 +3,7 @@ import datetime
 import pandas as pd
 import streamlit as st
 
+from constants import ICONS
 from modules.db_manager import (
     add_leave_request,
     add_material_request,
@@ -14,25 +15,22 @@ from modules.db_manager import (
 )
 
 
-def render_richieste_tab(matricola_utente, ruolo, nome_utente_autenticato):
-    st.header("Richieste")
-    richieste_tabs = st.tabs(["Materiali", "Assenze"])
+def render_richieste_tab(matricola_utente: str, ruolo: str, nome_utente_autenticato: str) -> None:
+    richieste_tabs = st.tabs(
+        [f"{ICONS['MATERIAL']} **Materiali**", f"{ICONS['LEAVE']} **Assenze**"]
+    )
 
     with richieste_tabs[0]:
         st.subheader("Richiesta Materiali")
         with st.form("form_richiesta_materiali", clear_on_submit=True):
-            dettagli_richiesta = st.text_area(
-                "Elenca qui i materiali necessari:", height=150
-            )
-            submitted = st.form_submit_button(
-                "Invia Richiesta Materiali", type="primary"
-            )
+            dettagli_richiesta = st.text_area("Elenca qui i materiali necessari:", height=150)
+            submitted = st.form_submit_button("Invia Richiesta Materiali", type="primary")
             if submitted and dettagli_richiesta.strip():
                 now_iso = datetime.datetime.now().isoformat()
                 new_id = f"MAT_{int(datetime.datetime.now().timestamp())}"
                 new_request_data = {
                     "ID_Richiesta": new_id,
-                    "Richiedente_Matricola": str(matricola_utente),
+                    "Richiedente_Matricola": matricola_utente,
                     "Timestamp": now_iso,
                     "Stato": "Inviata",
                     "Dettagli": dettagli_richiesta,
@@ -41,7 +39,7 @@ def render_richieste_tab(matricola_utente, ruolo, nome_utente_autenticato):
                 if add_material_request(new_request_data):
                     storico_data = {
                         "id_richiesta": new_id,
-                        "richiedente_matricola": str(matricola_utente),
+                        "richiedente_matricola": matricola_utente,
                         "nome_richiedente": nome_utente_autenticato,
                         "timestamp_richiesta": now_iso,
                         "dettagli_richiesta": dettagli_richiesta,
@@ -70,12 +68,10 @@ def render_richieste_tab(matricola_utente, ruolo, nome_utente_autenticato):
                 right_on="Matricola",
                 how="left",
             )
-            df_richieste_con_nome["Nome Cognome"] = df_richieste_con_nome[
-                "Nome Cognome"
-            ].fillna("Sconosciuto")
-            df_richieste_con_nome["Timestamp"] = pd.to_datetime(
-                df_richieste_con_nome["Timestamp"]
+            df_richieste_con_nome["Nome Cognome"] = df_richieste_con_nome["Nome Cognome"].fillna(
+                "Sconosciuto"
             )
+            df_richieste_con_nome["Timestamp"] = pd.to_datetime(df_richieste_con_nome["Timestamp"])
             st.dataframe(
                 df_richieste_con_nome[
                     ["Timestamp", "Nome Cognome", "Dettagli", "Stato"]
@@ -86,29 +82,22 @@ def render_richieste_tab(matricola_utente, ruolo, nome_utente_autenticato):
     with richieste_tabs[1]:
         st.subheader("Richiesta Assenze (Ferie/Permessi)")
         with st.form("form_richiesta_assenze", clear_on_submit=True):
-            tipo_assenza = st.selectbox(
-                "Tipo di Assenza", ["Ferie", "Permesso (L. 104)"]
-            )
+            tipo_assenza = st.selectbox("Tipo di Assenza", ["Ferie", "Permesso (L. 104)"])
             col1, col2 = st.columns(2)
             data_inizio = col1.date_input("Data Inizio")
             data_fine = col2.date_input("Data Fine")
             note_assenza = st.text_area("Note (opzionale):", height=100)
-            submitted_assenza = st.form_submit_button(
-                "Invia Richiesta Assenza", type="primary"
-            )
+            submitted_assenza = st.form_submit_button("Invia Richiesta Assenza", type="primary")
 
             if submitted_assenza:
                 if data_inizio > data_fine:
-                    st.error(
-                        "La data di inizio non può essere "
-                        "successiva alla data di fine."
-                    )
+                    st.error("La data di inizio non può essere successiva alla data di fine.")
                 else:
                     now_iso = datetime.datetime.now().isoformat()
                     new_id = f"ASS_{int(datetime.datetime.now().timestamp())}"
                     new_leave_request = {
                         "ID_Richiesta": new_id,
-                        "Richiedente_Matricola": str(matricola_utente),
+                        "Richiedente_Matricola": matricola_utente,
                         "Timestamp": now_iso,
                         "Tipo_Assenza": tipo_assenza,
                         "Data_Inizio": data_inizio.isoformat(),
@@ -119,7 +108,7 @@ def render_richieste_tab(matricola_utente, ruolo, nome_utente_autenticato):
                     if add_leave_request(new_leave_request):
                         storico_data = {
                             "id_richiesta": new_id,
-                            "richiedente_matricola": str(matricola_utente),
+                            "richiedente_matricola": matricola_utente,
                             "nome_richiedente": nome_utente_autenticato,
                             "timestamp_richiesta": now_iso,
                             "tipo_assenza": tipo_assenza,

@@ -9,8 +9,9 @@ import logging
 import sys
 import threading
 import time
+import typing
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -31,18 +32,22 @@ R = TypeVar("R")
 class JsonFormatter(logging.Formatter):
     """Formatter personalizzato per produrre log in formato JSON con sanitizzazione PII."""
 
-    SENSITIVE_KEYS = {"password", "secret", "2fa_secret", "passwordhash", "token"}
+    SENSITIVE_KEYS: typing.ClassVar[set[str]] = {
+        "password",
+        "secret",
+        "2fa_secret",
+        "passwordhash",
+        "token",
+    }
 
     def _sanitize(self, data: Any) -> Any:
         """Maschera i valori sensibili in un dizionario o lista."""
         if isinstance(data, dict):
             sanitized = {}
             for k, v in data.items():
-                if isinstance(k, str) and any(
-                    s in k.lower() for s in self.SENSITIVE_KEYS
-                ):
+                if isinstance(k, str) and any(s in k.lower() for s in self.SENSITIVE_KEYS):
                     sanitized[k] = "********"
-                elif isinstance(v, (dict, list)):
+                elif isinstance(v, dict | list):
                     sanitized[k] = self._sanitize(v)
                 else:
                     sanitized[k] = v
@@ -65,9 +70,7 @@ class JsonFormatter(logging.Formatter):
         # Sanitizza il messaggio principale se contiene parole chiave
         msg_str = str(log_data["message"]).lower()
         if "password" in msg_str or "secret" in msg_str:
-            log_data["message"] = (
-                "[REDACTED] Messaggio contenente dati potenzialmente sensibili"
-            )
+            log_data["message"] = "[REDACTED] Messaggio contenente dati potenzialmente sensibili"
 
         # Aggiungi trace_id se presente nel contesto
         if hasattr(_context, "trace_id"):
@@ -110,7 +113,7 @@ def get_logger(name: str) -> logging.Logger:
 
 
 @contextmanager
-def with_context(trace_id: str | None = None, **kwargs):
+def with_context(trace_id: str | None = None, **kwargs: Any) -> Generator[str, None, None]:
     """
     Manager di contesto per iniettare trace_id e metadati nei log.
     """

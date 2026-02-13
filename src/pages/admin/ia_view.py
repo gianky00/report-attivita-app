@@ -4,16 +4,18 @@ Permette la revisione dei suggerimenti dei tecnici e l'aggiornamento degli indic
 """
 
 import datetime
+from typing import Any
 
 import streamlit as st
 
 import learning_module as learning_module
+from constants import COLORS, ICONS
 
 
-def render_ia_management_tab():
+def render_ia_management_tab() -> None:
     """Interfaccia principale per la gestione dell'IA."""
     st.subheader("Gestione Intelligenza Artificiale")
-    ia_tabs = st.tabs(["Revisione Conoscenze", "Memoria IA"])
+    ia_tabs = st.tabs([f"{ICONS['IA']} Revisione Conoscenze", f"{ICONS['IA']} Memoria IA"])
 
     with ia_tabs[0]:
         _render_knowledge_review()
@@ -21,40 +23,55 @@ def render_ia_management_tab():
         _render_ia_memory_update()
 
 
-def _render_knowledge_review():
+def _render_knowledge_review() -> None:
     """Logica di revisione del Knowledge Core."""
-    st.markdown("### 🧠 Revisione Voci del Knowledge Core")
+    from modules.utils import colored_label
+
+    st.markdown(
+        colored_label(
+            "Revisione Voci del Knowledge Core",
+            ICONS["IA"],
+            COLORS["PRIMARY"],
+            font_size="1.5rem",
+            bold=True,
+        ),
+        unsafe_allow_html=True,
+    )
     unreviewed = learning_module.load_unreviewed_knowledge()
     pending = [e for e in unreviewed if e.get("stato") == "in attesa di revisione"]
 
     if not pending:
-        st.success("🎉 Nessuna nuova voce da revisionare!")
+        st.success("Nessuna nuova voce da revisionare!", icon=ICONS["CHECK"])
         return
 
-    st.info(f"Ci sono {len(pending)} nuove voci da revisionare.")
+    st.info(f"Ci sono {len(pending)} nuove voci da revisionare.", icon=ICONS["INFO"])
     for i, entry in enumerate(pending):
         _render_review_expander(entry, i == 0)
 
 
-def _render_ia_memory_update():
+def _render_ia_memory_update() -> None:
     """Interfaccia per l'aggiornamento dell'indice vettoriale dell'IA."""
     st.subheader("Gestione Modello IA")
-    st.info("Aggiorna la base di conoscenza dell'IA con le nuove relazioni inviate.")
-    if st.button("🧠 Aggiorna Memoria IA", type="primary"):
+    st.info(
+        "Aggiorna la base di conoscenza dell'IA con le nuove relazioni inviate.", icon=ICONS["INFO"]
+    )
+    if st.button("Aggiorna Memoria IA", type="primary", icon=ICONS["IA"]):
         with st.spinner("Ricostruzione dell'indice in corso..."):
             result = learning_module.build_knowledge_base()
         if result.get("success"):
-            st.success(result.get("message"))
+            st.success(result.get("message"), icon=ICONS["CHECK"])
             st.cache_data.clear()
         else:
-            st.error(result.get("message"))
+            st.error(result.get("message"), icon=ICONS["ERROR"])
 
 
-def _render_review_expander(entry, is_expanded):
+def _render_review_expander(entry: dict[str, Any], is_expanded: bool) -> None:
     """Expander per la singola voce del Knowledge Core in revisione."""
-    label = f"**Voce ID:** `{entry['id']}` - **Attività:** {entry['attivita_collegata']}"
+    label = f"Voce ID: {entry['id']} - Attività: {entry['attivita_collegata']}"
     with st.expander(label, expanded=is_expanded):
-        sugg_dt = datetime.datetime.fromisoformat(entry["data_suggerimento"]).strftime("%d/%m/%Y %H:%M")
+        sugg_dt = datetime.datetime.fromisoformat(entry["data_suggerimento"]).strftime(
+            "%d/%m/%Y %H:%M"
+        )
         st.markdown(f"*Suggerito da: **{entry['suggerito_da']}** il {sugg_dt}*")
         st.markdown(f"*PdL di riferimento: `{entry['pdl']}`*")
         st.write("**Dettagli:**")
@@ -66,21 +83,25 @@ def _render_review_expander(entry, is_expanded):
         key = c1.text_input("Chiave Attrezzatura", key=f"k_{entry['id']}")
         name = c2.text_input("Nome Visualizzato", key=f"n_{entry['id']}")
 
-        if st.button("✅ Integra", key=f"int_{entry['id']}", type="primary"):
+        if st.button("Integra", key=f"int_{entry['id']}", type="primary", icon=ICONS["CHECK"]):
             if key and name:
                 _integrate_entry(entry, key, name)
             else:
-                st.warning("Fornire sia chiave che nome.")
+                st.warning("Fornire sia chiave che nome.", icon=ICONS["WARNING"])
 
 
-def _integrate_entry(entry, equipment_key, display_name):
+def _integrate_entry(entry: dict[str, Any], equipment_key: str, display_name: str) -> None:
     """Esegue l'integrazione effettiva di una voce nel Knowledge Core."""
     first_question = {
         "id": "sintomo_iniziale",
         "text": "Qual era il sintomo principale?",
         "options": {k.lower().replace(" ", "_"): v for k, v in entry["dettagli_report"].items()},
     }
-    details = {"equipment_key": equipment_key, "display_name": display_name, "new_question": first_question}
+    details = {
+        "equipment_key": equipment_key,
+        "display_name": display_name,
+        "new_question": first_question,
+    }
 
     result = learning_module.integrate_knowledge(entry["id"], details)
     if result.get("success"):

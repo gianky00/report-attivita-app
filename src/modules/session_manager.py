@@ -2,7 +2,6 @@ import datetime
 import json
 import re
 import uuid
-from contextlib import suppress
 from pathlib import Path
 
 import streamlit as st
@@ -24,7 +23,7 @@ def get_session_path(token: str) -> Path:
     return SESSION_DIR / f"session_{token}.json"
 
 
-def save_session(matricola, role):
+def save_session(matricola: str, role: str) -> str | None:
     """Salva i dati di una sessione in un file basato su token e restituisce il token."""
     token = str(uuid.uuid4())
     session_filepath = get_session_path(token)
@@ -41,7 +40,7 @@ def save_session(matricola, role):
         return None
 
 
-def load_session(token):
+def load_session(token: str | None) -> bool:
     """Carica una sessione da un file basato su token, se valida."""
     if not token or not re.match(r"^[a-f0-9-]+$", token):
         return False
@@ -53,8 +52,7 @@ def load_session(token):
 
             session_time = datetime.datetime.fromisoformat(session_data["timestamp"])
             if (
-                datetime.datetime.now()
-                - datetime.timedelta(hours=SESSION_DURATION_HOURS)
+                datetime.datetime.now() - datetime.timedelta(hours=SESSION_DURATION_HOURS)
                 < session_time
             ):
                 st.session_state.authenticated_user = session_data["authenticated_user"]
@@ -65,14 +63,14 @@ def load_session(token):
                 delete_session(token)  # Sessione scaduta
                 return False
         except Exception:
-            # Qualsiasi errore (JSON corrotto, chiavi mancanti, tipi errati, 
+            # Qualsiasi errore (JSON corrotto, chiavi mancanti, tipi errati,
             # o problemi con st.session_state) porta alla distruzione della sessione.
             delete_session(token)
             return False
     return False
 
 
-def delete_session(token):
+def delete_session(token: str | None) -> None:
     """Cancella un file di sessione basato su token."""
     if not token:
         return
@@ -80,9 +78,9 @@ def delete_session(token):
     try:
         if session_filepath.exists():
             import gc
-            import os
+
             gc.collect()  # Forza la chiusura di eventuali handle orfani
-            os.remove(str(session_filepath))
+            session_filepath.unlink()
             logger.debug(f"Sessione {token} rimossa con successo.")
     except Exception as e:
         logger.warning(f"Impossibile rimuovere la sessione {token}: {e}")

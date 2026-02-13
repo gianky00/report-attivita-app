@@ -1,8 +1,9 @@
 import streamlit as st
 
+from modules.utils import render_svg_icon
 
-def render_guida_tab(ruolo):
-    st.title("❓ Guida all'Uso del Gestionale")
+
+def render_guida_tab(ruolo: str) -> None:
     st.write(
         "Benvenuto nel Gestionale. Questa guida fornisce una panoramica completa "
         "delle funzionalità dell'applicazione, con sezioni dedicate sia ai "
@@ -13,7 +14,10 @@ def render_guida_tab(ruolo):
         "e scoprire come utilizzare al meglio ogni strumento a tua disposizione."
     )
 
-    with st.expander("📝 Attività Assegnate", expanded=True):
+    with st.expander("Attività Assegnate", expanded=True):
+        st.markdown(
+            render_svg_icon("report", 20) + "**Attività Assegnate**", unsafe_allow_html=True
+        )
         st.markdown("""
         Questa sezione è il fulcro del tuo lavoro quotidiano. Qui puoi
         visualizzare e rendicontare le attività a te assegnate.
@@ -30,7 +34,8 @@ def render_guida_tab(ruolo):
         compilare il report.
         """)
 
-    with st.expander("📅 Gestione Turni"):
+    with st.expander("Gestione Turni"):
+        st.markdown(render_svg_icon("calendar", 20) + "**Gestione Turni**", unsafe_allow_html=True)
         st.markdown("""
         Questa sezione ti permette di gestire la tua disponibilità per i turni
         di assistenza, straordinario e reperibilità.
@@ -44,7 +49,8 @@ def render_guida_tab(ruolo):
         Se non puoi coprire un turno, puoi pubblicarlo in bacheca.
         """)
 
-    with st.expander("📋 Richieste"):
+    with st.expander("Richieste"):
+        st.markdown(render_svg_icon("request", 20) + "**Richieste**", unsafe_allow_html=True)
         st.markdown("""
         Utilizza questa sezione per inviare richieste formali di materiali
         o assenze.
@@ -54,29 +60,11 @@ def render_guida_tab(ruolo):
           Lo storico è visibile solo agli **Amministratori**.
         """)
 
-    with st.expander("🗂️ Archivio Storico"):
-        st.markdown("""
-        L'**Archivio Storico** è la memoria a lungo termine dell'applicazione.
-        Qui puoi consultare tutti i report, le relazioni e le richieste validate.
-
-        #### Storico Attività
-        Contiene l'archivio completo di tutti i **report di intervento** validati.
-        - **Ricerca Rapida:** Filtra per **PdL, descrizione o tecnico**.
-        - **Organizzazione:** I risultati sono raggruppati per **PdL**.
-
-        #### Storico Relazioni
-        Qui trovi tutte le **relazioni di reperibilità** approvate,
-        ordinate dalla più recente.
-
-        #### Storico Materiali
-        Elenca tutte le **richieste di materiali** inviate e approvate.
-
-        #### Storico Assenze
-        Storico di tutte le **richieste di ferie e permessi** approvate.
-        """)
-
     if ruolo == "Amministratore":
-        with st.expander("⚙️ Amministrazione (Solo Amministratori)"):
+        with st.expander("Amministrazione"):
+            st.markdown(
+                render_svg_icon("settings", 20) + "**Amministrazione**", unsafe_allow_html=True
+            )
             st.markdown("""
             Strumenti avanzati per la gestione del sistema e del team.
 
@@ -92,7 +80,10 @@ def render_guida_tab(ruolo):
             - **Gestione IA:** Strumenti per la revisione e addestramento dell'IA.
             """)
 
-    with st.expander("🔐 Sicurezza dell'Account"):
+    with st.expander("Sicurezza dell'Account"):
+        st.markdown(
+            render_svg_icon("security", 20) + "**Sicurezza dell'Account**", unsafe_allow_html=True
+        )
         st.markdown("""
         **Verifica in Due Passaggi (2FA):**
         Al primo accesso, configura la 2FA per la sicurezza dell'account.

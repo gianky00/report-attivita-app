@@ -7,6 +7,7 @@ import sqlite3
 from typing import Any
 
 import pandas as pd
+
 from core.database import DatabaseEngine
 from core.logging import measure_time
 
@@ -18,7 +19,7 @@ def get_db_connection() -> sqlite3.Connection:
 
 def add_material_request(request_data: dict[str, Any]) -> bool:
     """Inserisce una nuova richiesta di materiali nel database."""
-    cols = ", ".join(f'"{k}"' for k in request_data.keys())
+    cols = ", ".join(f'"{k}"' for k in request_data)
     placeholders = ", ".join("?" for _ in request_data)
     sql = f"INSERT INTO richieste_materiali ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(request_data.values()))
@@ -26,7 +27,7 @@ def add_material_request(request_data: dict[str, Any]) -> bool:
 
 def add_leave_request(request_data: dict[str, Any]) -> bool:
     """Inserisce una nuova richiesta di assenza nel database."""
-    cols = ", ".join(f'"{k}"' for k in request_data.keys())
+    cols = ", ".join(f'"{k}"' for k in request_data)
     placeholders = ", ".join("?" for _ in request_data)
     sql = f"INSERT INTO richieste_assenze ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(request_data.values()))
@@ -54,7 +55,7 @@ def get_leave_requests() -> pd.DataFrame:
 
 def salva_storico_materiali(dati: dict[str, Any]) -> bool:
     """Archivia una richiesta materiali nello storico dopo l'approvazione/rifiuto."""
-    cols = ", ".join(f'"{k}"' for k in dati.keys())
+    cols = ", ".join(f'"{k}"' for k in dati)
     placeholders = ", ".join("?" for _ in dati)
     sql = f"INSERT INTO storico_richieste_materiali ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(dati.values()))
@@ -62,7 +63,7 @@ def salva_storico_materiali(dati: dict[str, Any]) -> bool:
 
 def salva_storico_assenze(dati: dict[str, Any]) -> bool:
     """Archivia una richiesta assenza nello storico dopo l'approvazione/rifiuto."""
-    cols = ", ".join(f'"{k}"' for k in dati.keys())
+    cols = ", ".join(f'"{k}"' for k in dati)
     placeholders = ", ".join("?" for _ in dati)
     sql = f"INSERT INTO storico_richieste_assenze ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(dati.values()))

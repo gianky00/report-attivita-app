@@ -5,7 +5,8 @@ Funge da router per le diverse funzionalità gestionali.
 
 import streamlit as st
 
-def render_caposquadra_view(matricola_utente):
+
+def render_caposquadra_view(matricola_utente: str) -> None:
     """Renderizza la vista per il Caposquadra."""
     from .shifts_view import render_new_shift_form
     from .validation_view import (
@@ -20,9 +21,7 @@ def render_caposquadra_view(matricola_utente):
         render_new_shift_form()
 
     with caposquadra_tabs[1]:
-        validation_tabs = st.tabs(
-            ["Validazione Report Attività", "Validazione Relazioni"]
-        )
+        validation_tabs = st.tabs(["Validazione Report Attività", "Validazione Relazioni"])
         with validation_tabs[0]:
             render_report_validation_tab(matricola_utente)
         with validation_tabs[1]:
@@ -30,17 +29,16 @@ def render_caposquadra_view(matricola_utente):
     st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_sistema_view():
+def render_sistema_view() -> None:
     """Renderizza la vista 'Sistema' suddivisa in tab operative."""
+    from pages.gestione_dati import render_gestione_dati_tab
+
     from .ia_view import render_ia_management_tab
     from .logs_view import render_access_logs_tab
     from .users_view import render_gestione_account
-    from pages.gestione_dati import render_gestione_dati_tab
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    tabs = st.tabs(
-        ["Gestione Account", "Cronologia Accessi", "Gestione Dati", "Gestione IA"]
-    )
+    tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione Dati", "Gestione IA"])
 
     with tabs[0]:
         render_gestione_account()

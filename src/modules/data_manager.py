@@ -12,7 +12,7 @@ from modules.reports_manager import scrivi_o_aggiorna_risposta
 
 __all__ = [
     "carica_knowledge_core",
+    "get_all_assigned_activities",
     "scrivi_o_aggiorna_risposta",
     "trova_attivita",
-    "get_all_assigned_activities",
 ]

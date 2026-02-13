@@ -1,12 +1,12 @@
 """
 Logica di business specifica per la reperibilità.
 """
+
 import datetime
 import sqlite3
 
 import pandas as pd
 import streamlit as st
-from modules.shifts.logic_utils import find_matricola_by_surname, log_shift_change
 
 from modules.auth import get_user_by_matricola
 from modules.db_manager import (
@@ -17,9 +17,10 @@ from modules.db_manager import (
     get_shifts_by_type,
 )
 from modules.oncall_logic import get_on_call_pair
+from modules.shifts.logic_utils import find_matricola_by_surname, log_shift_change
 
 
-def sync_oncall_shifts(start_date, end_date):
+def sync_oncall_shifts(start_date: datetime.date, end_date: datetime.date) -> bool:
     """Sincronizza i turni di reperibilità in modo transazionale."""
     df_turni = get_shifts_by_type("Reperibilità")
     df_contatti = get_all_users()
@@ -56,7 +57,7 @@ def sync_oncall_shifts(start_date, end_date):
         }
 
         if create_shift(new_shift):
-            for sname, role in [(technician1, tech1_role), (technician2, tech2_role)]:
+            for sname, role in ((technician1, tech1_role), (technician2, tech2_role)):
                 matricola = find_matricola_by_surname(df_contatti, sname)
                 if matricola:
                     new_booking = {
@@ -68,16 +69,14 @@ def sync_oncall_shifts(start_date, end_date):
                     }
                     add_booking(new_booking)
                 else:
-                    st.warning(
-                        f"Attenzione: Cognome '{sname}' non trovato "
-                        f"per la data {date_str}."
-                    )
+                    st.warning(f"Attenzione: Cognome '{sname}' non trovato per la data {date_str}.")
         current_date += datetime.timedelta(days=1)
     return changes_made
 
+
 def manual_override_logic(
-    shift_id, new_tech1_matricola, new_tech2_matricola, admin_matricola
-):
+    shift_id: str, new_tech1_matricola: str, new_tech2_matricola: str, admin_matricola: str
+) -> bool:
     """Sovrascrive manualmente le prenotazioni per un turno di reperibilità."""
     conn = get_db_connection()
     try:
@@ -91,18 +90,19 @@ def manual_override_logic(
             user_info = get_user_by_matricola(t_matricola)
             role = user_info.get("Ruolo", "Tecnico") if user_info else "Tecnico"
             sql_ins = "INSERT INTO prenotazioni (ID_Prenotazione, ID_Turno, Matricola, RuoloOccupato, Timestamp) VALUES (?, ?, ?, ?, ?)"
-            cursor.execute(sql_ins, (
-                f"P_{shift_id}_{t_matricola}_{i}",
-                shift_id,
-                t_matricola,
-                role,
-                datetime.datetime.now().isoformat()
-            ))
+            cursor.execute(
+                sql_ins,
+                (
+                    f"P_{shift_id}_{t_matricola}_{i}",
+                    shift_id,
+                    t_matricola,
+                    role,
+                    datetime.datetime.now().isoformat(),
+                ),
+            )
 
         conn.commit()
-        log_shift_change(
-            shift_id, "Sovrascrittura Manuale", matricola_eseguito_da=admin_matricola
-        )
+        log_shift_change(shift_id, "Sovrascrittura Manuale", matricola_eseguito_da=admin_matricola)
         return True
     except sqlite3.Error as e:
         conn.rollback()

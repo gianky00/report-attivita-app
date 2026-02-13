@@ -2,6 +2,9 @@
 Vista tabellare per l'elenco dei turni di assistenza e straordinario.
 Permette il filtraggio, la ricerca e le operazioni di prenotazione/scambio.
 """
+
+from typing import Any
+
 import pandas as pd
 import streamlit as st
 
@@ -13,14 +16,28 @@ from modules.shift_management import (
 )
 
 
-def render_turni_list(df_turni: pd.DataFrame, df_bookings: pd.DataFrame, df_users: pd.DataFrame, matricola_utente: str, ruolo: str, key_suffix: str):
+def render_turni_list(
+    df_turni: pd.DataFrame,
+    df_bookings: pd.DataFrame,
+    df_users: pd.DataFrame,
+    matricola_utente: str,
+    ruolo: str,
+    key_suffix: str,
+) -> None:
     """Visualizza l'elenco dei turni disponibili con filtri di ricerca."""
     if df_turni.empty:
         st.info("Nessun turno di questo tipo disponibile al momento.")
         return
 
     mostra_solo_disponibili = st.checkbox("Solo posti disponibili", key=f"filter_{key_suffix}")
-    m_to_n = pd.Series(df_users["Nome Cognome"].values, index=df_users["Matricola"].astype(str)).to_dict()
+    m_to_n: dict[str, Any] = {
+        str(k): v
+        for k, v in pd.Series(
+            df_users["Nome Cognome"].values, index=df_users["Matricola"].astype(str)
+        )
+        .to_dict()
+        .items()
+    }
 
     if ruolo == "Amministratore":
         search = st.text_input("Cerca descrizione...", key=f"search_{key_suffix}")
@@ -29,10 +46,26 @@ def render_turni_list(df_turni: pd.DataFrame, df_bookings: pd.DataFrame, df_user
 
     st.divider()
     for _, turno in df_turni.iterrows():
-        _render_turno_card(turno, df_bookings, m_to_n, matricola_utente, key_suffix, mostra_solo_disponibili, df_users)
+        _render_turno_card(
+            turno,
+            df_bookings,
+            m_to_n,
+            matricola_utente,
+            key_suffix,
+            mostra_solo_disponibili,
+            df_users,
+        )
 
 
-def _render_turno_card(turno: pd.Series, df_bookings: pd.DataFrame, m_to_n: dict, matricola_utente: str, key_suffix: str, filter_active: bool, df_users: pd.DataFrame):
+def _render_turno_card(
+    turno: pd.Series,
+    df_bookings: pd.DataFrame,
+    m_to_n: dict[str, Any],
+    matricola_utente: str,
+    key_suffix: str,
+    filter_active: bool,
+    df_users: pd.DataFrame,
+) -> None:
     """Sotto-funzione per il rendering della card del singolo turno."""
     p_turno = df_bookings[df_bookings["ID_Turno"] == turno["ID_Turno"]]
     posti_t, posti_a = int(turno["PostiTecnico"]), int(turno["PostiAiutante"])
@@ -46,52 +79,100 @@ def _render_turno_card(turno: pd.Series, df_bookings: pd.DataFrame, m_to_n: dict
         st.markdown(f"**{turno['Descrizione']}**")
         dt = pd.to_datetime(turno["Data"]).strftime("%d/%m/%Y")
         st.caption(f"{dt} | {turno['OrarioInizio']} - {turno['OrarioFine']}")
-        
+
         st.markdown(f"`Tecnici: {booked_t}/{posti_t}` | `Aiutanti: {booked_a}/{posti_a}`")
-        
+
         if not p_turno.empty:
-            names = [f"{m_to_n.get(str(p['Matricola']), 'N/D')} ({p['RuoloOccupato']})" for _, p in p_turno.iterrows()]
+            names = [
+                f"{m_to_n.get(str(p['Matricola']), 'N/D')} ({p['RuoloOccupato']})"
+                for _, p in p_turno.iterrows()
+            ]
             st.markdown(f"**Prenotati:** {', '.join(names)}")
 
-        _render_turno_actions(turno, p_turno, matricola_utente, key_suffix, booked_t, posti_t, booked_a, posti_a, df_users, m_to_n)
+        _render_turno_actions(
+            turno,
+            p_turno,
+            matricola_utente,
+            key_suffix,
+            booked_t,
+            posti_t,
+            booked_a,
+            posti_a,
+            df_users,
+            m_to_n,
+        )
 
 
-def _render_turno_actions(turno: pd.Series, p_turno: pd.DataFrame, matricola_utente: str, key_suffix: str, b_t: int, p_t: int, b_a: int, p_a: int, df_users: pd.DataFrame, m_to_n: dict):
+from constants import ICONS
+
+
+def _render_turno_actions(
+    turno: pd.Series,
+    p_turno: pd.DataFrame,
+    matricola_utente: str,
+    key_suffix: str,
+    b_t: int,
+    p_t: int,
+    b_a: int,
+    p_a: int,
+    df_users: pd.DataFrame,
+    m_to_n: dict[str, Any],
+) -> None:
     """Gestisce i pulsanti di azione (Prenota, Cancella, Scambio) per un turno."""
-    p_utente = p_turno[p_turno["Matricola"] == str(matricola_utente)]
+    p_utente = p_turno[p_turno["Matricola"] == matricola_utente]
     t_id = turno["ID_Turno"]
 
     if not p_utente.empty:
-        st.success("Sei prenotato.")
+        st.success("Sei prenotato.", icon=ICONS["CHECK"])
         c1, c2, c3 = st.columns(3)
-        if c1.button("Cancella", key=f"del_{t_id}_{key_suffix}"):
-            if cancella_prenotazione_logic(matricola_utente, t_id): st.rerun()
-        if c2.button("📢 Bacheca", key=f"pub_{t_id}_{key_suffix}"):
-            if pubblica_turno_in_bacheca_logic(matricola_utente, t_id): st.rerun()
-        if c3.button("🔄 Scambio", key=f"ask_{t_id}_{key_suffix}"):
+        if c1.button(
+            "Cancella", icon=ICONS["CANCEL"], key=f"del_{t_id}_{key_suffix}"
+        ) and cancella_prenotazione_logic(matricola_utente, t_id):
+            st.rerun()
+        if c2.button(
+            "Bacheca", icon=ICONS["BULLETIN"], key=f"pub_{t_id}_{key_suffix}"
+        ) and pubblica_turno_in_bacheca_logic(matricola_utente, t_id):
+            st.rerun()
+        if c3.button("Scambio", icon=ICONS["SWAP"], key=f"ask_{t_id}_{key_suffix}"):
             st.session_state["sostituzione_turno_id"] = t_id
             st.rerun()
     else:
         opts = []
-        if b_t < p_t: opts.append("Tecnico")
-        if b_a < p_a: opts.append("Aiutante")
+        if b_t < p_t:
+            opts.append("Tecnico")
+        if b_a < p_a:
+            opts.append("Aiutante")
         if opts:
             role = st.selectbox("Ruolo:", opts, key=f"sel_{t_id}_{key_suffix}")
-            if st.button("Prenota", key=f"add_{t_id}_{key_suffix}"):
-                if prenota_turno_logic(matricola_utente, t_id, role): st.rerun()
+            if st.button(
+                "Prenota", icon=ICONS["ADD"], key=f"add_{t_id}_{key_suffix}", type="primary"
+            ) and prenota_turno_logic(matricola_utente, t_id, role):
+                st.rerun()
         else:
-            st.warning("Completo.")
+            st.warning("Completo.", icon=ICONS["INFO"])
 
     if st.session_state.get("sostituzione_turno_id") == t_id:
         _render_substitution_form(t_id, matricola_utente, df_users, m_to_n, key_suffix)
 
 
-def _render_substitution_form(t_id: str, matricola_utente: str, df_users: pd.DataFrame, m_to_n: dict, key_suffix: str):
+def _render_substitution_form(
+    t_id: str,
+    matricola_utente: str,
+    df_users: pd.DataFrame,
+    m_to_n: dict[str, Any],
+    key_suffix: str,
+) -> None:
     """Visualizza il mini-form per la richiesta di sostituzione diretta."""
     st.markdown("---")
-    riceventi = [str(m) for m in df_users["Matricola"] if str(m) != str(matricola_utente)]
-    target = st.selectbox("Chiedi a:", riceventi, format_func=lambda m: m_to_n.get(m, m), key=f"sw_{t_id}_{key_suffix}")
-    if st.button("Invia", key=f"conf_{t_id}_{key_suffix}"):
-        if richiedi_sostituzione_logic(matricola_utente, target, t_id):
-            del st.session_state["sostituzione_turno_id"]
-            st.rerun()
+    riceventi = [str(m) for m in df_users["Matricola"] if str(m) != matricola_utente]
+    target = st.selectbox(
+        "Chiedi a:",
+        riceventi,
+        format_func=lambda m: m_to_n.get(m, m),
+        key=f"sw_{t_id}_{key_suffix}",
+    )
+    if st.button("Invia", key=f"conf_{t_id}_{key_suffix}") and richiedi_sostituzione_logic(
+        matricola_utente, target, t_id
+    ):
+        del st.session_state["sostituzione_turno_id"]
+        st.rerun()

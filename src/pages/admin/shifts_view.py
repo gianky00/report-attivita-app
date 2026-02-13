@@ -11,14 +11,12 @@ from modules.db_manager import create_shift, get_all_users
 from modules.notifications import crea_notifica
 
 
-def render_new_shift_form():
+def render_new_shift_form() -> None:
     """Form per la creazione di un nuovo turno da parte del caposquadra."""
     with st.form("new_shift_form", clear_on_submit=True):
         st.subheader("Dettagli Nuovo Turno")
         tipo_turno = st.selectbox("Tipo Turno", ["Assistenza", "Straordinario"])
-        desc_turno = st.text_input(
-            "Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')"
-        )
+        desc_turno = st.text_input("Descrizione Turno (es. 'Mattina', 'Straordinario Sabato')")
         data_turno = st.date_input("Data Turno")
         col1, col2 = st.columns(2)
         ora_inizio = col1.time_input("Orario Inizio", datetime.time(8, 0))
@@ -43,13 +41,17 @@ def render_new_shift_form():
                     "Tipo": tipo_turno,
                 }
                 if create_shift(new_shift_data):
-                    st.success(f"Turno '{desc_turno}' creato con successo!")
+                    st.success(
+                        f"Turno '{desc_turno}' creato con successo!", icon=":material/check_circle:"
+                    )
                     df_contatti = get_all_users()
                     if not df_contatti.empty:
+                        from constants import ICONS
+
                         utenti_da_notificare = df_contatti["Matricola"].tolist()
                         data_str = data_turno.strftime("%d/%m/%Y")
                         messaggio = (
-                            f"📢 Nuovo turno disponibile: '{desc_turno}' "
+                            f"{ICONS['BULLETIN']} Nuovo turno disponibile: '{desc_turno}' "
                             f"il {data_str}."
                         )
                         for matricola in utenti_da_notificare:

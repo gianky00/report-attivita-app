@@ -1,0 +1,5 @@
+[codespell]
+skip = .git,.venv,venv,__pycache__,*.egg-info,build,dist,logs,sessions,assets,*.xlsm,*.xlsx,*.db,*.json,*.jpeg,*.jpg,*.png
+ignore-words-list = ned,ND,nd,ser,dati,attivita,richieste,ore,turni,storico,sur,fo,te,ist,alle,allo,classe,compilate,fase,impossibile,momento,nome,separato,sigle,stati,vai,validata,valide,visibile
+count =
+quiet-level = 2

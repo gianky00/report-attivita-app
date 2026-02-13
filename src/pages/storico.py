@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from constants import ICONS
 from modules.db_manager import (
     get_storico_richieste_assenze,
     get_storico_richieste_materiali,
@@ -9,20 +10,17 @@ from modules.db_manager import (
 )
 
 
-def render_storico_tab():
+def render_storico_tab() -> None:
     """
     Renderizza la sezione "Storico" con le sottoschede per le attività
     e le relazioni validate.
     """
-    st.subheader("Archivio Storico")
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     tab1, tab2, tab3, tab4 = st.tabs(
         [
-            "**Storico Attività**",
-            "**Storico Relazioni**",
-            "**Storico Materiali**",
-            "**Storico Assenze**",
+            f"{ICONS['STORICO']} **Attività**",
+            f"{ICONS['RELATION']} **Relazioni**",
+            f"{ICONS['MATERIAL']} **Materiali**",
+            f"{ICONS['LEAVE']} **Assenze**",
         ]
     )
 
@@ -41,9 +39,7 @@ def render_storico_tab():
                     | df_attivita["descrizione_attivita"].str.contains(
                         search_term, case=False, na=False
                     )
-                    | df_attivita["nome_tecnico"].str.contains(
-                        search_term, case=False, na=False
-                    )
+                    | df_attivita["nome_tecnico"].str.contains(search_term, case=False, na=False)
                 ]
 
             # Group by PDL
@@ -71,14 +67,11 @@ def render_storico_tab():
 
                         with st.expander(sub_expander_title):
                             # Dettagli all'interno dell'expander
-                            st.markdown(
-                                f"**Report compilato da:** {row['nome_tecnico']}"
-                            )
+                            st.markdown(f"**Report compilato da:** {row['nome_tecnico']}")
                             st.markdown(f"**Stato:** {row['stato_attivita']}")
                             comp_dt = pd.to_datetime(row["data_compilazione"])
                             st.markdown(
-                                f"**Data Compilazione:** "
-                                f"{comp_dt.strftime('%d/%m/%Y %H:%M')}"
+                                f"**Data Compilazione:** {comp_dt.strftime('%d/%m/%Y %H:%M')}"
                             )
                             st.text_area(
                                 "Report:",
@@ -96,12 +89,8 @@ def render_storico_tab():
         if not df_relazioni.empty:
             # Ordina le relazioni per data di intervento
             if "data_intervento" in df_relazioni.columns:
-                df_relazioni["data_intervento"] = pd.to_datetime(
-                    df_relazioni["data_intervento"]
-                )
-                df_relazioni = df_relazioni.sort_values(
-                    by="data_intervento", ascending=False
-                )
+                df_relazioni["data_intervento"] = pd.to_datetime(df_relazioni["data_intervento"])
+                df_relazioni = df_relazioni.sort_values(by="data_intervento", ascending=False)
 
             for _, row in df_relazioni.iterrows():
                 # Formatta la data per una visualizzazione più pulita
@@ -114,8 +103,7 @@ def render_storico_tab():
                 t_comp = row.get("tecnico_compilatore", "N/D")
                 t_part = row.get("partner", "N/D")
                 expander_title = (
-                    f"**{data_intervento_str}** - Tecnico: **{t_comp}** - "
-                    f"Partner: **{t_part}**"
+                    f"**{data_intervento_str}** - Tecnico: **{t_comp}** - Partner: **{t_part}**"
                 )
 
                 with st.expander(expander_title):
@@ -159,9 +147,7 @@ def render_storico_tab():
         df_assenze = get_storico_richieste_assenze()
         if not df_assenze.empty:
             for _, row in df_assenze.iterrows():
-                data_inizio_str = pd.to_datetime(row["data_inizio"]).strftime(
-                    "%d/%m/%Y"
-                )
+                data_inizio_str = pd.to_datetime(row["data_inizio"]).strftime("%d/%m/%Y")
                 data_fine_str = pd.to_datetime(row["data_fine"]).strftime("%d/%m/%Y")
                 tipo_ass = row.get("tipo_assenza", "N/D")
                 n_rich = row.get("nome_richiedente", "N/D")
@@ -179,4 +165,3 @@ def render_storico_tab():
                     )
         else:
             st.success("Nessuna richiesta di assenze nello storico.")
-    st.markdown("</div>", unsafe_allow_html=True)

@@ -3,9 +3,11 @@ Modulo per l'interfaccia con l'Intelligenza Artificiale (Google Gemini).
 Centralizza la gestione dei prompt e la logica di revisione tecnica.
 """
 
-import streamlit as st
-from core.logging import get_logger
+from typing import Any
 
+import streamlit as st
+
+from core.logging import get_logger
 from modules.instrumentation_logic import (
     analyze_domain_terminology,
     find_and_analyze_tags,
@@ -50,7 +52,7 @@ def generate_standard_prompt(testo_originale: str) -> str:
     """
 
 
-def revisiona_con_ia(testo: str) -> dict:
+def revisiona_con_ia(testo: str) -> dict[str, Any]:
     """
     Esegue la revisione del testo tramite Gemini, applicando analisi semantica ISA.
     """
@@ -101,4 +103,4 @@ def revisiona_con_ia(testo: str) -> dict:
 
     except Exception as e:
         logger.error(f"Errore durante la chiamata IA: {e}", exc_info=True)
-        return {"success": False, "error": f"L'IA ha riscontrato un problema: {str(e)}"}
+        return {"success": False, "error": f"L'IA ha riscontrato un problema: {e!s}"}

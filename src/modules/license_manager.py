@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 
 
-def check_pyarmor_license():
+def check_pyarmor_license() -> None:
     """
     Checks for the existence of a pyarmor.rkey file and, if present,
     reads it to find and log the license expiration date.
@@ -23,9 +23,7 @@ def check_pyarmor_license():
                 if "Expired Date:" in line:
                     # Assuming the format is "Expired Date: YYY-MM-DD"
                     expired_date_str = line.split("Expired Date:")[1].strip()
-                    expired_date = datetime.strptime(
-                        expired_date_str, "%Y-%m-%d"
-                    ).date()
+                    expired_date = datetime.strptime(expired_date_str, "%Y-%m-%d").date()
                     logging.info(f"PyArmor license expiration date: {expired_date}")
                     return
             logging.info(

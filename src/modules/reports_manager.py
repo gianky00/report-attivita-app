@@ -1,6 +1,7 @@
 """
 Logica per l'invio e il salvataggio dei report tecnici.
 """
+
 import datetime
 import re
 import sqlite3
@@ -12,7 +13,7 @@ from modules.db_manager import get_db_connection
 
 
 def scrivi_o_aggiorna_risposta(
-    dati_da_scrivere: dict, matricola: str, data_riferimento: datetime.date
+    dati_da_scrivere: dict[str, str], matricola: str, data_riferimento: datetime.date
 ) -> bool:
     """Scrive un report nel DB e invia notifica email."""
     timestamp_compilazione = datetime.datetime.now()
@@ -22,10 +23,11 @@ def scrivi_o_aggiorna_risposta(
         cursor.execute('SELECT "Nome Cognome" FROM contatti WHERE Matricola = ?', (matricola,))
         user_result = cursor.fetchone()
         if not user_result:
-            st.error(f"Utente {matricola} non trovato."); return False
+            st.error(f"Utente {matricola} non trovato.")
+            return False
         nome_completo = user_result[0]
 
-        pdl_match = re.search(r"PdL (\d{6}/[CS]|\d{6})", str(dati_da_scrivere["descrizione"]))
+        pdl_match = re.search(r"PdL (\d{6}/[CS]|\d{6})", dati_da_scrivere["descrizione"])
         pdl = pdl_match.group(1) if pdl_match else "N/D"
 
         report_data = {
@@ -41,21 +43,32 @@ def scrivi_o_aggiorna_risposta(
         }
 
         with conn:
-            cols = ", ".join(f'"{k}"' for k in report_data.keys())
+            cols = ", ".join(f'"{k}"' for k in report_data)
             placeholders = ", ".join("?" for _ in report_data)
-            cursor.execute(f"INSERT INTO report_da_validare ({cols}) VALUES ({placeholders})", list(report_data.values()))
+            cursor.execute(
+                f"INSERT INTO report_da_validare ({cols}) VALUES ({placeholders})",  # nosec B608
+                list(report_data.values()),
+            )
 
-        _send_validation_email(nome_completo, data_riferimento, timestamp_compilazione, dati_da_scrivere)
+        _send_validation_email(
+            nome_completo, data_riferimento, timestamp_compilazione, dati_da_scrivere
+        )
         st.cache_data.clear()
         return True
     except (sqlite3.Error, Exception) as e:
-        st.error(f"Errore salvataggio report: {e}"); return False
+        st.error(f"Errore salvataggio report: {e}")
+        return False
     finally:
-        if conn: conn.close()
+        if conn:
+            conn.close()
 
-def _send_validation_email(nome, data_rif, ts, dati):
+
+def _send_validation_email(
+    nome: str, data_rif: datetime.date, ts: datetime.datetime, dati: dict[str, str]
+) -> None:
     """Sottoprocesso per l'invio dell'email di validazione."""
     from modules.email_sender import invia_email_con_outlook_async
+
     titolo = f"Nuovo Report da Validare da: {nome}"
     html = f"""
     <html><body style="font-family: Calibri, sans-serif;">
@@ -63,10 +76,10 @@ def _send_validation_email(nome, data_rif, ts, dati):
     <table>
         <tr><th>Data Rif.</th><td>{data_rif.strftime("%d/%m/%Y")}</td></tr>
         <tr><th>Tecnico</th><td>{nome}</td></tr>
-        <tr><th>Attività</th><td>{dati['descrizione']}</td></tr>
-        <tr><th>Stato</th><td><b>{dati['stato']}</b></td></tr>
+        <tr><th>Attività</th><td>{dati["descrizione"]}</td></tr>
+        <tr><th>Stato</th><td><b>{dati["stato"]}</b></td></tr>
     </table>
-    <hr><p>{dati['report'].replace(chr(10), '<br>')}</p>
+    <hr><p>{dati["report"].replace(chr(10), "<br>")}</p>
     </body></html>
     """
     invia_email_con_outlook_async(titolo, html)

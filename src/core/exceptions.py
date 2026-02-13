@@ -8,19 +8,20 @@ from collections.abc import Callable
 from typing import Any
 
 import streamlit as st
+
 from core.logging import get_logger, with_context
 
 logger = get_logger(__name__)
 
 
-def safe_streamlit_run(func: Callable) -> Callable:
+def safe_streamlit_run(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Decoratore per rendere sicura l'esecuzione di una pagina o di un componente Streamlit.
     Cattura ogni eccezione, genera un trace_id, logga l'errore e mostra un messaggio elegante.
     """
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs) -> Any:
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         with with_context() as trace_id:
             try:
                 return func(*args, **kwargs)
@@ -33,7 +34,9 @@ def safe_streamlit_run(func: Callable) -> Callable:
                 )
 
                 # Interfaccia di errore per l'utente
-                st.error("### 🚨 Si è verificato un errore imprevisto")
+                from constants import ICONS
+
+                st.error(f"### {ICONS['ERROR']} Si è verificato un errore imprevisto", icon=None)
                 st.markdown(f"""
                 L'operazione è stata interrotta per garantire la sicurezza dei dati.
 

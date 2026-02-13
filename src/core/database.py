@@ -9,10 +9,10 @@ import time
 from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar
 
+from constants import DB_NAME
 from core.logging import get_logger, measure_time
 
 logger = get_logger(__name__)
-DB_NAME = "schedario.db"
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -33,9 +33,7 @@ def retry_on_lock(
                 except sqlite3.OperationalError as e:
                     if "locked" in str(e).lower():
                         last_err = e
-                        logger.warning(
-                            f"Database bloccato, tentativo {i + 1}/{retries}..."
-                        )
+                        logger.warning(f"Database bloccato, tentativo {i + 1}/{retries}...")
                         time.sleep(delay * (i + 1))
                         continue
                     raise
@@ -62,7 +60,7 @@ class DatabaseEngine:
     @classmethod
     @retry_on_lock()
     @measure_time
-    def execute(cls, query: str, params: tuple = ()) -> bool:
+    def execute(cls, query: str, params: tuple[Any, ...] = ()) -> bool:
         """Esegue una query di modifica (INSERT, UPDATE, DELETE)."""
         conn = cls.get_connection()
         try:
@@ -77,7 +75,7 @@ class DatabaseEngine:
 
     @classmethod
     @measure_time
-    def fetch_all(cls, query: str, params: tuple = ()) -> list[dict[str, Any]]:
+    def fetch_all(cls, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         """Esegue una query SELECT e restituisce tutti i risultati."""
         conn = cls.get_connection()
         try:
@@ -86,12 +84,10 @@ class DatabaseEngine:
             if not rows:
                 return []
             try:
-                return [{k: row[k] for k in row.keys()} for row in rows]
+                return [{k: row[k] for k in row} for row in rows]
             except AttributeError:
                 return [
-                    dict(row)
-                    if hasattr(row, "__iter__") and not isinstance(row, tuple)
-                    else {}
+                    dict(row) if hasattr(row, "__iter__") and not isinstance(row, tuple) else {}
                     for row in rows
                 ]
         except sqlite3.Error as e:
@@ -102,7 +98,7 @@ class DatabaseEngine:
 
     @classmethod
     @measure_time
-    def fetch_one(cls, query: str, params: tuple = ()) -> dict[str, Any] | None:
+    def fetch_one(cls, query: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
         """Esegue una query SELECT e restituisce il primo risultato."""
         conn = cls.get_connection()
         try:
@@ -111,12 +107,10 @@ class DatabaseEngine:
             if not row:
                 return None
             try:
-                return {k: row[k] for k in row.keys()}
+                return {k: row[k] for k in row}
             except AttributeError:
                 return (
-                    dict(row)
-                    if hasattr(row, "__iter__") and not isinstance(row, tuple)
-                    else None
+                    dict(row) if hasattr(row, "__iter__") and not isinstance(row, tuple) else None
                 )
         except sqlite3.Error as e:
             logger.error(f"Errore fetch_one: {e} | Query: {query}")
@@ -126,7 +120,7 @@ class DatabaseEngine:
 
     @classmethod
     @measure_time
-    def insert_returning_id(cls, query: str, params: tuple = ()) -> int | None:
+    def insert_returning_id(cls, query: str, params: tuple[Any, ...] = ()) -> int | None:
         """Esegue un INSERT e restituisce l'ID inserito."""
         conn = cls.get_connection()
         try:

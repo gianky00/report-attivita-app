@@ -2,17 +2,19 @@
 Logica di business per la prenotazione e cancellazione dei turni standard.
 Gestisce i vincoli di disponibilità posti e la registrazione dei cambiamenti.
 """
+
 import datetime
+
 import streamlit as st
-from modules.shifts.logic_utils import log_shift_change
 
 from modules.db_manager import (
     add_booking,
+    check_user_oncall_conflict,
     delete_booking,
     get_bookings_for_shift,
     get_shift_by_id,
-    check_user_oncall_conflict,
 )
+from modules.shifts.logic_utils import log_shift_change
 
 
 def prenota_turno_logic(matricola_utente: str, turno_id: str, ruolo_scelto: str) -> bool:
@@ -27,9 +29,12 @@ def prenota_turno_logic(matricola_utente: str, turno_id: str, ruolo_scelto: str)
 
     # 1. Controllo conflitto con Reperibilità
     if check_user_oncall_conflict(matricola_utente, turno_info["Data"]):
+        from constants import ICONS
+
         st.error(
-            "⚠️ Conflitto rilevato: sei già impegnato in reperibilità per questa data. "
-            "Non puoi prenotare turni aggiuntivi."
+            f"{ICONS['WARNING']} Conflitto rilevato: sei già impegnato in reperibilità per questa data. "
+            "Non puoi prenotare turni aggiuntivi.",
+            icon=None,
         )
         return False
 
@@ -43,9 +48,9 @@ def prenota_turno_logic(matricola_utente: str, turno_id: str, ruolo_scelto: str)
     )
 
     can_book = False
-    if ruolo_scelto == "Tecnico" and tecnici_prenotati < int(turno_info["PostiTecnico"]):
-        can_book = True
-    elif ruolo_scelto == "Aiutante" and aiutanti_prenotati < int(turno_info["PostiAiutante"]):
+    if (ruolo_scelto == "Tecnico" and tecnici_prenotati < int(turno_info["PostiTecnico"])) or (
+        ruolo_scelto == "Aiutante" and aiutanti_prenotati < int(turno_info["PostiAiutante"])
+    ):
         can_book = True
 
     if not can_book:
@@ -55,7 +60,7 @@ def prenota_turno_logic(matricola_utente: str, turno_id: str, ruolo_scelto: str)
     new_booking_data = {
         "ID_Prenotazione": f"P_{int(datetime.datetime.now().timestamp())}",
         "ID_Turno": turno_id,
-        "Matricola": str(matricola_utente),
+        "Matricola": matricola_utente,
         "RuoloOccupato": ruolo_scelto,
         "Timestamp": datetime.datetime.now().isoformat(),
     }
@@ -69,9 +74,10 @@ def prenota_turno_logic(matricola_utente: str, turno_id: str, ruolo_scelto: str)
             matricola_eseguito_da=matricola_utente,
         )
         return True
-    
+
     st.error("Errore durante la prenotazione del turno.")
     return False
+
 
 def cancella_prenotazione_logic(matricola_utente: str, turno_id: str) -> bool:
     """
@@ -86,6 +92,6 @@ def cancella_prenotazione_logic(matricola_utente: str, turno_id: str) -> bool:
         )
         st.success("Prenotazione cancellata.")
         return True
-    
+
     st.error("Prenotazione non trovata o errore durante la cancellazione.")
     return False

@@ -1,10 +1,18 @@
 """
 Form per la compilazione del report di attività (debriefing).
 """
+
+from typing import Any
+
 import streamlit as st
+
+from constants import STATI_ATTIVITA
 from modules.data_manager import scrivi_o_aggiorna_risposta
 
-def handle_submit(report_text, stato, task, matricola_utente, data_riferimento):
+
+def handle_submit(
+    report_text: str, stato: str, task: dict[str, Any], matricola_utente: str, data_riferimento: Any
+) -> bool:
     """Gestisce il salvataggio dei dati del report attività."""
     if not report_text.strip():
         st.warning("Il report non può essere vuoto.")
@@ -26,32 +34,44 @@ def handle_submit(report_text, stato, task, matricola_utente, data_riferimento):
         st.error("Errore durante il salvataggio del report.")
         return False
 
-def render_debriefing_ui(knowledge_core, matricola_utente, data_riferimento):
+
+def render_debriefing_ui(
+    knowledge_core: dict[str, Any], matricola_utente: str, data_riferimento: Any
+) -> None:
     """UI per la compilazione del report di attività dopo un intervento."""
     task = st.session_state.debriefing_task
 
-    st.title("📝 Compila Report")
+    from modules.utils import render_svg_icon
+
+    st.markdown(
+        render_svg_icon("report", 32) + "<h1 style='display:inline;'>Compila Report</h1>",
+        unsafe_allow_html=True,
+    )
     st.subheader(f"PdL `{task['pdl']}` - {task['attivita']}")
     report_text = st.text_area(
         "Inserisci il tuo report qui:", value=task.get("report", ""), height=200
     )
 
-    opts = ["TERMINATA", "SOSPESA", "IN CORSO", "NON SVOLTA"]
+    opts = STATI_ATTIVITA
     current = task.get("stato")
     idx = opts.index(current) if current in opts else 0
     stato = st.selectbox("Stato Finale", opts, index=idx, key="manual_stato")
 
     c1, c2 = st.columns(2)
-    if c1.button("Invia Report", type="primary"):
-        if handle_submit(report_text, stato, task, matricola_utente, data_riferimento):
-            st.rerun()
+    if c1.button("Invia Report", type="primary") and handle_submit(
+        report_text, stato, task, matricola_utente, data_riferimento
+    ):
+        st.rerun()
     if c2.button("Annulla"):
         del st.session_state.debriefing_task
         st.rerun()
 
-def _update_completed_tasks(task, report, stato, section_key):
+
+def _update_completed_tasks(
+    task: dict[str, Any], report: str, stato: str, section_key: str
+) -> None:
     """Aggiorna lo stato delle attività completate nella sessione Streamlit."""
-    completed_data = {**task, "report": report, "stato": stato}
+    completed_data = task | {"report": report, "stato": stato}
     key = f"completed_tasks_{section_key}"
 
     current_list = st.session_state.get(key, [])

@@ -8,6 +8,7 @@ import sqlite3
 from typing import Any
 
 import pandas as pd
+
 from core.database import DatabaseEngine
 from core.logging import get_logger
 
@@ -44,7 +45,7 @@ def get_notifications_for_user(utente: str) -> list[dict[str, Any]]:
 
 def add_notification(n: dict[str, Any]) -> bool:
     """Salva una nuova notifica destinata a un tecnico o admin."""
-    cols = ", ".join(f'"{k}"' for k in n.keys())
+    cols = ", ".join(f'"{k}"' for k in n)
     placeholders = ", ".join("?" for _ in n)
     sql = f"INSERT INTO notifiche ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(n.values()))

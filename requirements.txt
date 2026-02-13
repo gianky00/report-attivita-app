@@ -18,17 +18,45 @@ nltk==3.8.1
 fpdf2
 toml
 
-# Dev Tools
-mypy
+# === Linting & Formatting ===
 ruff
-refurb
-black
+
+# === Type Checking ===
+mypy
+
+# === Type Stubs ===
+types-openpyxl
+types-requests
+types-Pillow
+
+# === Security ===
 bandit
-vulture
-xenon
+
+# === Dependencies ===
 deptry
+
+# === Spelling ===
 codespell
+
+# === Modernization ===
+refurb
+
+# === Dead Code ===
+vulture
+
+# === Complexity ===
+xenon
+
+# === Docstrings ===
 interrogate
-pip-audit
+
+# === Git Hooks ===
+pre-commit
+
+# === Testing ===
 pytest
+pytest-cov
 pytest-mock
+
+# === Audit ===
+pip-audit

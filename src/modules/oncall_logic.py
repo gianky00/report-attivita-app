@@ -5,32 +5,12 @@ Basato su un ciclo di 4 settimane con cambio turno ogni venerdì.
 
 import datetime
 
-# Data di riferimento (Anchor Date): Venerdì 28 Novembre 2025, inizio del turno della Coppia 1
-ANCHOR_DATE = datetime.date(2025, 11, 28)
-
-# Sequenza ciclica di 4 coppie di reperibilità.
-# Ogni coppia è una tupla che contiene due tuple: (COGNOME, RUOLO)
-ON_CALL_ROTATION = [
-    (
-        ("RICIPUTO", "Tecnico"),
-        ("GUARINO", "Aiutante"),
-    ),  # Andrea Riciputo, Riccardo Guarino
-    (
-        ("SPINALI", "Tecnico"),
-        ("ALLEGRETTI", "Aiutante"),
-    ),  # Domenico Spinali, Giancarlo Allegretti
-    (
-        ("MILLO", "Tecnico"),
-        ("GUARINO", "Aiutante"),
-    ),  # Francesco Millo, Riccardo Guarino
-    (
-        ("TARASCIO", "Tecnico"),
-        ("PARTESANO", "Aiutante"),
-    ),  # Benito Tarascio, Vincenzo Partesano
-]
+from constants import ANCHOR_DATE, ON_CALL_ROTATION
 
 
-def get_on_call_pair(current_date: datetime.date) -> tuple:
+def get_on_call_pair(
+    current_date: datetime.date | object,
+) -> tuple[tuple[str, str], tuple[str, str]]:
     """
     Calcola la coppia di reperibilità per una data specifica basandosi su un ciclo di 4 settimane.
 

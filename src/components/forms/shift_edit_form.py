@@ -1,21 +1,26 @@
 """
 Form per la modifica dei turni esistenti (riservato agli amministratori).
 """
+
 import datetime
+from typing import Any
+
 import pandas as pd
 import streamlit as st
+
 from modules.db_manager import (
+    add_booking,
+    delete_booking,
     get_all_users,
     get_bookings_for_shift,
     get_shift_by_id,
     update_shift,
-    delete_booking,
-    add_booking,
 )
 from modules.notifications import crea_notifica
 from modules.shift_management import log_shift_change
 
-def render_edit_shift_form():
+
+def render_edit_shift_form() -> None:
     """Renderizza il form per la modifica di un turno esistente (solo Admin)."""
     t_id = st.session_state.get("editing_turno_id")
     if not t_id:
@@ -28,7 +33,9 @@ def render_edit_shift_form():
         return
 
     bookings = get_bookings_for_shift(t_id)
-    current_roles = bookings.set_index("Matricola")["RuoloOccupato"].to_dict()
+    current_roles: dict[str, Any] = {
+        str(k): v for k, v in bookings.set_index("Matricola")["RuoloOccupato"].to_dict().items()
+    }
     users = get_all_users()
     u_dict = users.set_index("Matricola")["Nome Cognome"].to_dict()
 
@@ -48,28 +55,44 @@ def render_edit_shift_form():
         e_inp = c3.time_input("Fine", value=end_val)
 
         techs = st.multiselect(
-            "Tecnici", u_dict.keys(), format_func=lambda x: u_dict[x],
-            default=[m for m, r in current_roles.items() if r == "Tecnico"]
+            "Tecnici",
+            u_dict.keys(),
+            format_func=lambda x: u_dict[x],
+            default=[m for m, r in current_roles.items() if r == "Tecnico"],
         )
         helpers = st.multiselect(
-            "Aiutanti", u_dict.keys(), format_func=lambda x: u_dict[x],
-            default=[m for m, r in current_roles.items() if r == "Aiutante"]
+            "Aiutanti",
+            u_dict.keys(),
+            format_func=lambda x: u_dict[x],
+            default=[m for m, r in current_roles.items() if r == "Aiutante"],
         )
 
         if st.form_submit_button("Salva"):
             upd = {
-                "Descrizione": desc, "Tipo": tipo, "Data": d_inp.isoformat(),
-                "OraInizio": s_inp.strftime("%H:%M"), "OraFine": e_inp.strftime("%H:%M")
+                "Descrizione": desc,
+                "Tipo": tipo,
+                "Data": d_inp.isoformat(),
+                "OraInizio": s_inp.strftime("%H:%M"),
+                "OraFine": e_inp.strftime("%H:%M"),
             }
             if update_shift(t_id, upd):
-                _handle_shift_update_participants(t_id, desc, current_roles, techs, helpers)
+                _handle_shift_update_participants(
+                    t_id,
+                    desc,
+                    current_roles.copy(),
+                    [str(t) for t in techs],
+                    [str(h) for h in helpers],
+                )
                 st.success("Aggiornato!")
                 del st.session_state["editing_turno_id"]
                 st.rerun()
             else:
                 st.error("Errore aggiornamento.")
 
-def _handle_shift_update_participants(t_id, desc, old_roles, new_techs, new_helpers):
+
+def _handle_shift_update_participants(
+    t_id: str, desc: str, old_roles: dict[str, Any], new_techs: list[str], new_helpers: list[str]
+) -> None:
     """Gestisce la logica di aggiunta/rimozione partecipanti dopo l'aggiornamento di un turno."""
     old_set = set(old_roles.keys())
     new_set = set(new_techs + new_helpers)
@@ -78,8 +101,10 @@ def _handle_shift_update_participants(t_id, desc, old_roles, new_techs, new_help
         if delete_booking(m, t_id):
             crea_notifica(m, f"Rimosso dal turno '{desc}'.")
             log_shift_change(
-                t_id, "Rimozione", matricola_originale=m,
-                matricola_eseguito_da=st.session_state["authenticated_user"]
+                t_id,
+                "Rimozione",
+                matricola_originale=m,
+                matricola_eseguito_da=st.session_state["authenticated_user"],
             )
 
     for m in new_set - old_set:
@@ -87,6 +112,8 @@ def _handle_shift_update_participants(t_id, desc, old_roles, new_techs, new_help
         if add_booking({"ID_Turno": t_id, "Matricola": m, "RuoloOccupato": role}):
             crea_notifica(m, f"Aggiunto al turno '{desc}'.")
             log_shift_change(
-                t_id, "Aggiunta", matricola_subentrante=m,
-                matricola_eseguito_da=st.session_state["authenticated_user"]
+                t_id,
+                "Aggiunta",
+                matricola_subentrante=m,
+                matricola_eseguito_da=st.session_state["authenticated_user"],
             )

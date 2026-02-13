@@ -6,20 +6,22 @@ Include filtri per utente, data e esito del login.
 import pandas as pd
 import streamlit as st
 
+from constants import ICONS
 from modules.db_manager import get_access_logs
 
 
-def render_access_logs_tab():
+def render_access_logs_tab() -> None:
     """Visualizza e filtra i log di accesso al sistema."""
     st.subheader("Cronologia Accessi al Sistema")
     st.info(
-        "Questa sezione mostra tutti i tentativi di accesso registrati, dal più recente al più vecchio."
+        "Questa sezione mostra tutti i tentativi di accesso registrati, dal più recente al più vecchio.",
+        icon=ICONS["INFO"],
     )
 
     logs_df = get_access_logs()
 
     if logs_df.empty:
-        st.warning("Nessun tentativo di accesso registrato.")
+        st.warning("Nessun tentativo di accesso registrato.", icon=ICONS["WARNING"])
         return
 
     logs_df["timestamp"] = pd.to_datetime(logs_df["timestamp"])
@@ -27,7 +29,12 @@ def render_access_logs_tab():
 
     st.subheader("Filtra Cronologia")
     all_users = sorted(logs_df["username"].unique().tolist())
-    selected_users = st.multiselect("Filtra per Utente:", options=all_users, default=[])
+    selected_users = st.multiselect(
+        "Filtra per Utente:",
+        options=all_users,
+        default=[],
+        icon=ICONS["USERS"],  # type: ignore[call-overload]
+    )
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("Data Inizio", value=None)
@@ -45,12 +52,10 @@ def render_access_logs_tab():
     st.divider()
     st.subheader("Risultati")
     if filtered_df.empty:
-        st.info("Nessun record trovato per i filtri selezionati.")
+        st.info("Nessun record trovato per i filtri selezionati.", icon=ICONS["INFO"])
     else:
         display_df = filtered_df.copy()
-        display_df["timestamp"] = display_df["timestamp"].dt.strftime(
-            "%d/%m/%Y %H:%M:%S"
-        )
+        display_df["timestamp"] = display_df["timestamp"].dt.strftime("%d/%m/%Y %H:%M:%S")
         display_df.rename(
             columns={
                 "timestamp": "Data e Ora",

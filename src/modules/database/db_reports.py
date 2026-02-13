@@ -8,14 +8,12 @@ import sqlite3
 from typing import Any
 
 import pandas as pd
+
+from constants import VALID_HISTORY_TABLES, VALID_REPORT_TABLES
 from core.database import DatabaseEngine
 from core.logging import get_logger, measure_time
 
 logger = get_logger(__name__)
-
-# Liste di tabelle consentite per prevenire SQL Injection tramite nomi di tabelle dinamici
-VALID_REPORT_TABLES = {"report_da_validare", "report_interventi"}
-VALID_HISTORY_TABLES = {"relazioni", "report_interventi"}
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -50,7 +48,7 @@ def process_and_commit_validated_reports(reports: list[dict[str, Any]]) -> bool:
         with conn:
             for r in reports:
                 r["timestamp_validazione"] = now
-                cols = ", ".join(f'"{k}"' for k in r.keys())
+                cols = ", ".join(f'"{k}"' for k in r)
                 placeholders = ", ".join("?" for _ in r)
                 sql_ins = f"INSERT INTO report_interventi ({cols}) VALUES ({placeholders})"  # nosec B608
                 conn.execute(sql_ins, tuple(r.values()))
@@ -70,9 +68,7 @@ def get_unvalidated_relazioni() -> pd.DataFrame:
     """Recupera le relazioni di reperibilità inviate ma non ancora validate."""
     conn = get_db_connection()
     try:
-        return pd.read_sql_query(
-            "SELECT * FROM relazioni WHERE stato = 'Inviata'", conn
-        )
+        return pd.read_sql_query("SELECT * FROM relazioni WHERE stato = 'Inviata'", conn)
     finally:
         conn.close()
 
@@ -99,7 +95,7 @@ def process_and_commit_validated_relazioni(df: pd.DataFrame, admin_id: str) -> b
 
 def salva_report_intervento(dati: dict[str, Any]) -> bool:
     """Inserisce un report di intervento direttamente nella tabella definitiva."""
-    cols = ", ".join(f'"{k}"' for k in dati.keys())
+    cols = ", ".join(f'"{k}"' for k in dati)
     placeholders = ", ".join("?" for _ in dati)
     sql = f"INSERT INTO report_interventi ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(dati.values()))
@@ -107,7 +103,7 @@ def salva_report_intervento(dati: dict[str, Any]) -> bool:
 
 def salva_relazione(dati: dict[str, Any]) -> bool:
     """Inserisce una nuova relazione di reperibilità nel database."""
-    cols = ", ".join(f'"{k}"' for k in dati.keys())
+    cols = ", ".join(f'"{k}"' for k in dati)
     placeholders = ", ".join("?" for _ in dati)
     sql = f"INSERT INTO relazioni ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(dati.values()))
@@ -142,9 +138,7 @@ def get_validated_intervention_reports(
             )
             return pd.read_sql_query(query, conn, params=(matricola_tecnico,))
 
-        query = (
-            "SELECT * FROM report_interventi ORDER BY data_riferimento_attivita DESC"
-        )
+        query = "SELECT * FROM report_interventi ORDER BY data_riferimento_attivita DESC"
         return pd.read_sql_query(query, conn)
     finally:
         conn.close()
@@ -170,7 +164,7 @@ def insert_report(report_data: dict[str, Any], table_name: str) -> bool:
     """Inserisce i dati di un report in una tabella specifica."""
     if table_name not in VALID_REPORT_TABLES:
         return False
-    cols = ", ".join(f'"{k}"' for k in report_data.keys())
+    cols = ", ".join(f'"{k}"' for k in report_data)
     placeholders = ", ".join("?" for _ in report_data)
     sql = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"  # nosec B608
     return DatabaseEngine.execute(sql, tuple(report_data.values()))
@@ -188,7 +182,7 @@ def move_report_atomically(report_id: str, source_table: str, dest_table: str) -
     conn = get_db_connection()
     try:
         with conn:
-            cols = ", ".join(f'"{k}"' for k in report.keys())
+            cols = ", ".join(f'"{k}"' for k in report)
             placeholders = ", ".join("?" for _ in report)
             sql_ins = f"INSERT INTO {dest_table} ({cols}) VALUES ({placeholders})"  # nosec B608
             conn.execute(sql_ins, tuple(report.values()))

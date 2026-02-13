@@ -84,9 +84,7 @@ def parse_instrument_tag(tag: str) -> dict[str, Any] | None:
     # Composizione descrizione finale
     measured_var = MEASURED_VARIABLE_KB.get(prefix[0], "Sconosciuta")
     description = (
-        f"{base_name} di {measured_var.lower()}"
-        if prefix[0] in MEASURED_VARIABLE_KB
-        else base_name
+        f"{base_name} di {measured_var.lower()}" if prefix[0] in MEASURED_VARIABLE_KB else base_name
     )
 
     return {
@@ -98,13 +96,15 @@ def parse_instrument_tag(tag: str) -> dict[str, Any] | None:
     }
 
 
-def find_and_analyze_tags(text: str) -> tuple[dict[str, list[dict]], list[dict]]:
+def find_and_analyze_tags(
+    text: str,
+) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     """
     Trova e analizza tutti i TAG ISA nel testo fornito.
     """
     potential_tags = re.findall(r"\b[A-Z]{1,4}\d{2,4}[A-Z]{0,2}\b", text.upper())
-    loops: dict[str, list[dict]] = {}
-    analyzed_tags: list[dict] = []
+    loops: dict[str, list[dict[str, Any]]] = {}
+    analyzed_tags: list[dict[str, Any]] = []
 
     for tag in potential_tags:
         parsed = parse_instrument_tag(tag)
@@ -129,8 +129,7 @@ TROUBLESHOOTING_KB = {
         "termocoppia": [
             "Suggerimento TC: Segnale a fondo scala indica spesso "
             "una TC 'bruciata' o un circuito aperto.",
-            "Suggerimento TC: Se il segnale è rumoroso, "
-            "controllare la messa a terra della calza.",
+            "Suggerimento TC: Se il segnale è rumoroso, controllare la messa a terra della calza.",
         ],
         "pressione differenziale": [
             "Suggerimento DP: Verificare che le prese d'impulso non siano ostruite.",

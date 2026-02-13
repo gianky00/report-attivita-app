@@ -3,9 +3,12 @@ Punto di ingresso principale per la gestione turni.
 Funge da router per le diverse visualizzazioni dei turni.
 """
 
+from typing import Any
+
 import pandas as pd
 import streamlit as st
 
+from constants import ICONS
 from modules.db_manager import (
     get_all_bacheca_items,
     get_all_bookings,
@@ -18,19 +21,26 @@ from pages.shifts.oncall_calendar_view import render_reperibilita_tab
 from pages.shifts.shifts_list_view import render_turni_list
 
 
-def render_gestione_turni_tab(matricola_utente, ruolo):
+def render_gestione_turni_tab(matricola_utente: str, ruolo: str) -> None:
     """Router per la gestione dei turni."""
-    st.subheader("Gestione Turni")
-
     df_p = get_all_bookings()
     df_u = get_all_users()
     df_b = get_all_bacheca_items()
     df_s = get_all_substitutions()
-    m_to_n = pd.Series(
-        df_u["Nome Cognome"].values, index=df_u["Matricola"].astype(str)
-    ).to_dict()
+    m_to_n: dict[str, Any] = {
+        str(k): v
+        for k, v in pd.Series(df_u["Nome Cognome"].values, index=df_u["Matricola"].astype(str))
+        .to_dict()
+        .items()
+    }
 
-    t1, t2, t3 = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
+    t1, t2, t3 = st.tabs(
+        [
+            f"{ICONS['TURNI']} **Turni**",
+            ":material/campaign: **Bacheca**",
+            ":material/swap_calls: **Sostituzioni**",
+        ]
+    )
 
     with t1:
         st1, st2, st3 = st.tabs(["Assistenza", "Straordinario", "Reperibilità"])
