@@ -38,7 +38,7 @@ def render_sidebar(matricola_utente: str, nome_utente_autenticato: str, ruolo: s
 
         st.divider()
         if st.button("Guida", icon=ICONS["GUIDA"], use_container_width=True):
-            st.session_state.main_tab = "❓ Guida"
+            st.session_state.main_tab = "Guida"
             st.rerun()
         if st.button("Disconnetti", icon=ICONS["LOGOUT"], use_container_width=True):
             delete_session(st.session_state.get("session_token"))
@@ -74,7 +74,7 @@ def _render_nav_buttons() -> None:
         st.rerun()
     st.divider()
     if st.button("Gestione Turni", icon=ICONS["TURNI"], use_container_width=True):
-        st.session_state.main_tab = "📅 Gestione Turni"
+        st.session_state.main_tab = "Gestione Turni"
         st.rerun()
     if st.button("Richieste", icon=ICONS["RICHIESTE"], use_container_width=True):
         st.session_state.main_tab = "Richieste"

@@ -17,10 +17,10 @@ def render_storico_tab() -> None:
     """
     tab1, tab2, tab3, tab4 = st.tabs(
         [
-            f"{ICONS['STORICO']} **Attività**",
-            f"{ICONS['RELATION']} **Relazioni**",
-            f"{ICONS['MATERIAL']} **Materiali**",
-            f"{ICONS['LEAVE']} **Assenze**",
+            f"{ICONS['STORICO']} Attività",
+            f"{ICONS['RELATION']} Relazioni",
+            f"{ICONS['MATERIAL']} Materiali",
+            f"{ICONS['LEAVE']} Assenze",
         ]
     )
 

@@ -16,9 +16,7 @@ from modules.db_manager import (
 
 
 def render_richieste_tab(matricola_utente: str, ruolo: str, nome_utente_autenticato: str) -> None:
-    richieste_tabs = st.tabs(
-        [f"{ICONS['MATERIAL']} **Materiali**", f"{ICONS['LEAVE']} **Assenze**"]
-    )
+    richieste_tabs = st.tabs([f"{ICONS['MATERIAL']} Materiali", f"{ICONS['LEAVE']} Assenze"])
 
     with richieste_tabs[0]:
         st.subheader("Richiesta Materiali")

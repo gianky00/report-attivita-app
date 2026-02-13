@@ -8,7 +8,6 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from constants import ICONS
 from modules.db_manager import (
     get_all_bacheca_items,
     get_all_bookings,
@@ -34,13 +33,7 @@ def render_gestione_turni_tab(matricola_utente: str, ruolo: str) -> None:
         .items()
     }
 
-    t1, t2, t3 = st.tabs(
-        [
-            f"{ICONS['TURNI']} **Turni**",
-            ":material/campaign: **Bacheca**",
-            ":material/swap_calls: **Sostituzioni**",
-        ]
-    )
+    t1, t2, t3 = st.tabs(["📅 Turni", "📢 Bacheca", "🔄 Sostituzioni"])
 
     with t1:
         st1, st2, st3 = st.tabs(["Assistenza", "Straordinario", "Reperibilità"])
