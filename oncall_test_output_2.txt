@@ -24,7 +24,7 @@ self = <test_oncall_calendar_logic.TestOncallCalendarLogic testMethod=test_oncal
             "week_start_date": datetime.date(2023, 1, 2),
             "user": {"Ruolo": "Amministratore", "Matricola": "ADM01"}
         })
-    
+
         # Mocking data to ensure we hit the cell rendering
         with patch('streamlit.session_state', state), \
              patch('streamlit.rerun') as mock_rerun, \
@@ -35,7 +35,7 @@ self = <test_oncall_calendar_logic.TestOncallCalendarLogic testMethod=test_oncal
              patch('pages.shifts.oncall_calendar_view.get_bookings_for_shift') as mock_get_bookings, \
              patch('pages.shifts.oncall_calendar_view.get_all_users') as mock_get_users:
 
-tests\unit\modules\test_oncall_calendar_logic.py:92: 
+tests\unit\modules\test_oncall_calendar_logic.py:92:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 C:\Program Files\Python312\Lib\unittest\mock.py:1467: in __enter__
     original, local = self.get_original()
@@ -47,20 +47,20 @@ self = <unittest.mock._patch object at 0x000002AD75768F20>
     def get_original(self):
         target = self.getter()
         name = self.attribute
-    
+
         original = DEFAULT
         local = False
-    
+
         try:
             original = target.__dict__[name]
         except (AttributeError, KeyError):
             original = getattr(target, name, DEFAULT)
         else:
             local = True
-    
+
         if name in _builtins and isinstance(target, ModuleType):
             self.create = True
-    
+
         if not self.create and original is DEFAULT:
 >           raise AttributeError(
                 "%s does not have the attribute %r" % (target, name)

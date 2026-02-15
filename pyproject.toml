@@ -40,7 +40,7 @@ dev = [
     "types-python-dateutil",
     "types-openpyxl",
     "types-Pillow",
-    "types-pytz", 
+    "types-pytz",
     # === Security ===
     "bandit",
     # === Dependencies ===
@@ -258,11 +258,18 @@ DEP002 = [
     "pillow",         # PIL, usato indirettamente
     "passlib",        # hashing password in auth
     "pywin32",        # import condizionale win32com
+    # Google API auth (usati come backend da gspread/oauth2client)
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "google-api-python-client",
+    # Plotting backend
+    "seaborn",        # usato opzionalmente per grafici
 ]
 DEP003 = [
     # Import transitivi verificati come necessari
     "PIL",
     "pytz",
+    "toml",           # importato da streamlit config.py
 ]
 
 # =============================================================================

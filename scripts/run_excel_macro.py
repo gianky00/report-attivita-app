@@ -44,9 +44,7 @@ def run_macro():
         logger.info("Macro completata e file salvato con successo.")
 
     except Exception as e:
-        logger.error(
-            f"Eccezione durante l'esecuzione della macro Excel: {e}", exc_info=True
-        )
+        logger.error(f"Eccezione durante l'esecuzione della macro Excel: {e}", exc_info=True)
         if excel:
             excel.Quit()
         sys.exit(1)

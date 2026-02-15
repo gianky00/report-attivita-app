@@ -19,20 +19,28 @@ from modules import notifications
 class NonClosingConnection:
     def __init__(self, connection):
         self.connection = connection
+
     def __getattr__(self, name):
         return getattr(self.connection, name)
+
     def close(self):
         pass
+
     def execute(self, *args, **kwargs):
         return self.connection.execute(*args, **kwargs)
+
     def commit(self):
         return self.connection.commit()
+
     def cursor(self):
         return self.connection.cursor()
+
     def __enter__(self):
         return self.connection.__enter__()
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         return self.connection.__exit__(exc_type, exc_val, exc_tb)
+
 
 class TestInstrumentationNotifications(unittest.TestCase):
     def setUp(self):
@@ -63,7 +71,9 @@ class TestInstrumentationNotifications(unittest.TestCase):
         self.real_conn.commit()
 
         # Patch DatabaseEngine.get_connection
-        self.patcher = patch('core.database.DatabaseEngine.get_connection', side_effect=self._get_mock_connection)
+        self.patcher = patch(
+            "core.database.DatabaseEngine.get_connection", side_effect=self._get_mock_connection
+        )
         self.mock_get_connection = self.patcher.start()
 
     def _get_mock_connection(self):
@@ -78,7 +88,9 @@ class TestInstrumentationNotifications(unittest.TestCase):
         res = notifications.crea_notifica("USER123", "Test Message")
         self.assertTrue(res, "crea_notifica deve ritornare True")
 
-        row = self.cursor.execute("SELECT * FROM notifiche WHERE Destinatario_Matricola='USER123'").fetchone()
+        row = self.cursor.execute(
+            "SELECT * FROM notifiche WHERE Destinatario_Matricola='USER123'"
+        ).fetchone()
         self.assertIsNotNone(row)
         self.assertEqual(row["Messaggio"], "Test Message")
 
@@ -108,5 +120,6 @@ class TestInstrumentationNotifications(unittest.TestCase):
         row = self.cursor.execute("SELECT Stato FROM notifiche WHERE ID_Notifica='N1'").fetchone()
         self.assertEqual(row["Stato"], "letta")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

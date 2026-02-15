@@ -17,10 +17,13 @@ def test_database_thread_safety(mocker):
             DatabaseEngine.execute("SELECT 1")
 
     threads = [threading.Thread(target=worker) for _ in range(5)]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
     assert True
+
 
 def test_move_report_atomically_failure_middle(mocker):
     """Verifica l'integrità della transazione se l'eliminazione fallisce."""

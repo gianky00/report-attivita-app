@@ -12,6 +12,7 @@ def test_build_knowledge_base_no_docs(mocker):
     assert result["success"] is False
     assert "Nessun documento" in result["message"]
 
+
 def test_build_knowledge_base_success(mocker, tmp_path, monkeypatch):
     """Verifica la creazione corretta dell'indice tramite dati reali serializzabili."""
     monkeypatch.chdir(tmp_path)

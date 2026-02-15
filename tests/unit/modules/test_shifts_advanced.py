@@ -17,13 +17,16 @@ def test_sync_oncall_year_change(mocker):
 
     mocker.patch("modules.shifts.logic_oncall.get_shifts_by_type", return_value=pd.DataFrame())
     mocker.patch("modules.shifts.logic_oncall.get_all_users", return_value=pd.DataFrame())
-    mocker.patch("modules.shifts.logic_oncall.get_on_call_pair", return_value=(("A", "T"), ("B", "A")))
+    mocker.patch(
+        "modules.shifts.logic_oncall.get_on_call_pair", return_value=(("A", "T"), ("B", "A"))
+    )
     mock_create = mocker.patch("modules.shifts.logic_oncall.create_shift", return_value=True)
 
     sync_oncall_shifts(start, end)
 
     # Deve aver creato 2 turni
     assert mock_create.call_count == 2
+
 
 def test_get_shifts_by_invalid_type(mocker):
     """Verifica che un tipo turno inesistente non causi errori."""

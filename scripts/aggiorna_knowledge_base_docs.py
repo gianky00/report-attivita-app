@@ -47,10 +47,7 @@ def sync_files(src_path: Path, dest_path: Path):
             dest_file.parent.mkdir(parents=True, exist_ok=True)
 
             try:
-                if (
-                    not dest_file.exists()
-                    or src_file.stat().st_mtime > dest_file.stat().st_mtime
-                ):
+                if not dest_file.exists() or src_file.stat().st_mtime > dest_file.stat().st_mtime:
                     shutil.copy2(src_file, dest_file)
                     copied += 1
                     logger.debug(f"Copiato: {relative}")

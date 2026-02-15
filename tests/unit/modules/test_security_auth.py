@@ -11,7 +11,7 @@ def test_first_user_is_always_admin(mocker):
     # Mock di una connessione che restituisce 0 utenti
     mock_conn = mocker.MagicMock()
     mock_cursor = mock_conn.cursor.return_value
-    mock_cursor.fetchone.return_value = [0] # Count = 0
+    mock_cursor.fetchone.return_value = [0]  # Count = 0
 
     mocker.patch("modules.auth.get_db_connection", return_value=mock_conn)
 
@@ -23,11 +23,12 @@ def test_first_user_is_always_admin(mocker):
     assert data[1] == "Amministratore"
     assert "Admin User" in data[0]
 
+
 def test_authenticate_user_not_found_returns_failed(mocker):
     """Verifica che un utente non esistente non possa bypassare i controlli."""
     mock_conn = mocker.MagicMock()
     mock_cursor = mock_conn.cursor.return_value
-    mock_cursor.fetchone.return_value = [5] # Ci sono già altri utenti
+    mock_cursor.fetchone.return_value = [5]  # Ci sono già altri utenti
 
     mocker.patch("modules.auth.get_db_connection", return_value=mock_conn)
     mocker.patch("modules.auth.get_user_by_matricola", return_value=None)

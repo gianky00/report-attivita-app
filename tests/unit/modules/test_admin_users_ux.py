@@ -41,14 +41,13 @@ def test_user_creation_duplicate_error(mocker):
     mock_create = mocker.patch("pages.admin.users_view.create_user")
 
     # Prepariamo un DF con la matricola "123" come stringa, senza spazi
-    df_contatti = pd.DataFrame([
-        {"Matricola": "123", "Nome Cognome": "Esistente"}
-    ])
+    df_contatti = pd.DataFrame([{"Matricola": "123", "Nome Cognome": "Esistente"}])
 
     _render_new_user_expander(df_contatti)
 
     assert mock_error.called, "st.error dovrebbe essere chiamato per matricola duplicata"
     assert not mock_create.called, "create_user non dovrebbe essere chiamato per un duplicato"
+
 
 def test_user_creation_success(mocker):
     """Verifica il flusso di successo nella creazione di un utente."""
@@ -70,6 +69,7 @@ def test_user_creation_success(mocker):
 
     assert mock_success.called
 
+
 def test_user_deletion_confirmation(mocker):
     """Verifica che la cancellazione richieda conferma."""
     user = {"Matricola": "123", "Nome Cognome": "Mario Rossi", "Ruolo": "Tecnico"}
@@ -82,7 +82,9 @@ def test_user_deletion_confirmation(mocker):
         return [mocker.MagicMock() for _ in range(n)]
 
     mocker.patch("streamlit.columns", side_effect=mock_cols)
-    mocker.patch("streamlit.button", side_effect=lambda label, **kwargs: label == "✅ Conferma Eliminazione")
+    mocker.patch(
+        "streamlit.button", side_effect=lambda label, **kwargs: label == "✅ Conferma Eliminazione"
+    )
     mock_warning = mocker.patch("streamlit.warning")
     mocker.patch("pages.admin.users_view.delete_user", return_value=True)
     mocker.patch("streamlit.rerun")
@@ -91,8 +93,10 @@ def test_user_deletion_confirmation(mocker):
 
     assert mock_warning.called
 
+
 def test_render_gestione_account_search(mocker):
     from pages.admin.users_view import render_gestione_account
+
     mocker.patch("streamlit.subheader")
     mocker.patch("streamlit.text_input", return_value="Mario")
     mocker.patch("streamlit.container")
@@ -100,14 +104,23 @@ def test_render_gestione_account_search(mocker):
     def mock_cols(spec):
         n = spec if isinstance(spec, int) else len(spec)
         return [mocker.MagicMock() for _ in range(n)]
+
     mocker.patch("streamlit.columns", side_effect=mock_cols)
 
     mocker.patch("streamlit.button")
     mocker.patch("streamlit.markdown")
 
-    df = pd.DataFrame([
-        {"Matricola": "123", "Nome Cognome": "Mario Rossi", "Ruolo": "Tecnico", "PasswordHash": "H", "2FA_Secret": "S"}
-    ])
+    df = pd.DataFrame(
+        [
+            {
+                "Matricola": "123",
+                "Nome Cognome": "Mario Rossi",
+                "Ruolo": "Tecnico",
+                "PasswordHash": "H",
+                "2FA_Secret": "S",
+            }
+        ]
+    )
     mocker.patch("pages.admin.users_view.get_all_users", return_value=df)
 
     render_gestione_account()

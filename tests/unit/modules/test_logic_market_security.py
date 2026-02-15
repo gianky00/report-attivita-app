@@ -13,7 +13,7 @@ def test_aiutante_cannot_take_tecnico_shift(mocker):
         "ID_Bacheca": "B1",
         "Stato": "Disponibile",
         "Ruolo_Originale": "Tecnico",
-        "ID_Turno": "T1"
+        "ID_Turno": "T1",
     }
     mocker.patch("modules.shifts.logic_market.get_bacheca_item_by_id", return_value=mock_item)
 

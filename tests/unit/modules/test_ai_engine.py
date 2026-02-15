@@ -16,6 +16,7 @@ def test_generate_technical_prompt_injection():
     assert text in prompt
     assert "Direttore Tecnico" in prompt
 
+
 def test_generate_standard_prompt():
     """Verifica la struttura del prompt standard."""
     text = "Testo base."

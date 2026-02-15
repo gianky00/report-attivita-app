@@ -26,9 +26,7 @@ def reset_user_2fa(matricola: str):
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
 
-        cursor.execute(
-            'UPDATE contatti SET "2FA_Secret" = NULL WHERE Matricola = ?', (matricola,)
-        )
+        cursor.execute('UPDATE contatti SET "2FA_Secret" = NULL WHERE Matricola = ?', (matricola,))
 
         if cursor.rowcount > 0:
             conn.commit()

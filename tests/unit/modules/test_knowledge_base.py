@@ -8,8 +8,10 @@ from unittest.mock import patch
 def mock_cache(func):
     def clear():
         pass
+
     func.clear = clear
     return func
+
 
 # Aggiungi 'src' al path
 root_dir = Path(__file__).parent.parent.parent.parent
@@ -24,7 +26,6 @@ from modules.knowledge_base import carica_knowledge_core
 
 
 class TestKnowledgeBase(unittest.TestCase):
-
     @patch("modules.knowledge_base.st")
     @patch("modules.knowledge_base.config")
     @patch("modules.knowledge_base.Path.exists")
@@ -72,10 +73,12 @@ class TestKnowledgeBase(unittest.TestCase):
     @patch("modules.knowledge_base.config")
     @patch("modules.knowledge_base.Path.exists")
     @patch("modules.knowledge_base.Path.read_text")
-    def test_carica_knowledge_core_invalid_json(self, mock_read_text, mock_exists, mock_config, mock_st):
+    def test_carica_knowledge_core_invalid_json(
+        self, mock_read_text, mock_exists, mock_config, mock_st
+    ):
         # Setup mock
         mock_exists.return_value = True
-        mock_read_text.return_value = '{invalid: json}'
+        mock_read_text.return_value = "{invalid: json}"
         mock_config.PATH_KNOWLEDGE_CORE = "invalid.json"
 
         # Saltiamo il decoratore cache_data se è presente
@@ -90,6 +93,7 @@ class TestKnowledgeBase(unittest.TestCase):
         self.assertIsNone(result)
         mock_st.error.assert_called_once()
         self.assertIn("non è un JSON valido", mock_st.error.call_args[0][0])
+
 
 if __name__ == "__main__":
     unittest.main()

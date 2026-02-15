@@ -10,13 +10,19 @@ from pages.gestione_turni import render_gestione_turni_tab
 
 def test_render_gestione_turni_tab(mocker):
     # Mock nested tabs
-    mock_tabs = mocker.patch("streamlit.tabs", side_effect=[
-        [mocker.MagicMock() for _ in range(3)], # Outer tabs
-        [mocker.MagicMock() for _ in range(3)]  # Inner tabs
-    ])
+    mock_tabs = mocker.patch(
+        "streamlit.tabs",
+        side_effect=[
+            [mocker.MagicMock() for _ in range(3)],  # Outer tabs
+            [mocker.MagicMock() for _ in range(3)],  # Inner tabs
+        ],
+    )
 
     mocker.patch("pages.gestione_turni.get_all_bookings", return_value=pd.DataFrame())
-    mocker.patch("pages.gestione_turni.get_all_users", return_value=pd.DataFrame([{"Matricola": "M1", "Nome Cognome": "T1"}]))
+    mocker.patch(
+        "pages.gestione_turni.get_all_users",
+        return_value=pd.DataFrame([{"Matricola": "M1", "Nome Cognome": "T1"}]),
+    )
     mocker.patch("pages.gestione_turni.get_all_bacheca_items", return_value=pd.DataFrame())
     mocker.patch("pages.gestione_turni.get_all_substitutions", return_value=pd.DataFrame())
     mocker.patch("pages.gestione_turni.get_shifts_by_type", return_value=pd.DataFrame())

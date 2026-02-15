@@ -11,7 +11,9 @@ def test_prompt_selection_logic(mocker):
 
     # Mock sicuro di genai senza importare il modulo reale
     mock_genai = mocker.MagicMock()
-    mocker.patch("sys.modules", {**mocker.patch.dict("sys.modules"), "google.generativeai": mock_genai})
+    mocker.patch(
+        "sys.modules", {**mocker.patch.dict("sys.modules"), "google.generativeai": mock_genai}
+    )
 
     # In questo ambiente locale, revisiona_con_ia potrebbe comunque fallire l'import
     # se non usiamo sys.modules. Usiamo un approccio basato sulla logica interna.
@@ -22,6 +24,7 @@ def test_prompt_selection_logic(mocker):
     assert "FCV301" in prompt
     assert "Direttore Tecnico" in prompt
 
+
 def test_standard_prompt_fallback(mocker):
     """Verifica che venga usato il prompt standard se non ci sono tag tecnici."""
 
@@ -30,6 +33,7 @@ def test_standard_prompt_fallback(mocker):
 
     assert "revisore esperto" in prompt
     assert testo in prompt
+
 
 def test_ai_revision_empty_text(mocker):
     """Verifica la gestione di testo vuoto."""

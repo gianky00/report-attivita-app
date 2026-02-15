@@ -11,6 +11,7 @@ def test_add_material_request(mocker):
     assert add_material_request({"Richiedente": "123", "Dettagli": "Test"}) is True
     assert "INSERT INTO richieste_materiali" in mock_exec.call_args[0][0]
 
+
 def test_salva_storico_materiali(mocker):
     """Verifica l'archiviazione nello storico."""
     mock_exec = mocker.patch("core.database.DatabaseEngine.execute", return_value=True)

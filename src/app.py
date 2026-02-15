@@ -16,15 +16,11 @@ from components.ui_components import (
     disegna_sezione_attivita,
     render_sidebar,
 )
+
+# Re-export per backward compatibility (usato dai test e da __main__)
+from login_handler import handle_login_and_navigation
 from modules.auth import (
-    authenticate_user,
-    create_user,
-    generate_2fa_secret,
-    get_provisioning_uri,
     get_user_by_matricola,
-    log_access_attempt,
-    update_user,
-    verify_2fa_code,
 )
 from modules.data_manager import (
     carica_knowledge_core,
@@ -35,15 +31,11 @@ from modules.db_manager import (
     get_validated_intervention_reports,
 )
 from modules.license_manager import check_pyarmor_license
-from modules.session_manager import load_session, save_session
 from modules.shift_management import sync_oncall_shifts
 from pages.admin import render_caposquadra_view, render_sistema_view
 from pages.gestione_turni import render_gestione_turni_tab
 from pages.guida import render_guida_tab
 from pages.richieste import render_richieste_tab
-
-# Re-export per backward compatibility (usato dai test e da __main__)
-from login_handler import handle_login_and_navigation  # noqa: F401, E402
 
 # --- ESEGUI CHECK LICENZA ALL'AVVIO ---
 check_pyarmor_license()

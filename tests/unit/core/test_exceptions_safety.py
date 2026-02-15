@@ -11,7 +11,7 @@ def test_safe_streamlit_run_catches_exception(mocker):
     mock_error = mocker.patch("streamlit.error")
     mock_stop = mocker.patch("streamlit.stop")
     mock_markdown = mocker.patch("streamlit.markdown")
-    mock_checkbox = mocker.patch("streamlit.checkbox", return_value=False)
+    mocker.patch("streamlit.checkbox", return_value=False)
 
     @safe_streamlit_run
     def crashing_func():
@@ -27,8 +27,10 @@ def test_safe_streamlit_run_catches_exception(mocker):
     # logger.critical è mockato implicitamente dal sistema di test se non patchato,
     # ma verifichiamo la UI che è l'effetto desiderato.
 
+
 def test_safe_streamlit_run_passes_return_value():
     """Verifica che il decoratore non alteri il valore di ritorno se non ci sono errori."""
+
     @safe_streamlit_run
     def healthy_func():
         return "Everything is fine"

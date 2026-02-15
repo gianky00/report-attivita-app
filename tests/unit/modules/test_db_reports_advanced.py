@@ -26,14 +26,19 @@ def setup_db(mocker, tmp_path):
 
     conn = get_test_conn()
     conn.execute("CREATE TABLE report_da_validare (id_report TEXT PRIMARY KEY, val TEXT)")
-    conn.execute("CREATE TABLE report_interventi (id_report TEXT PRIMARY KEY, val TEXT, timestamp_validazione TEXT)")
+    conn.execute(
+        "CREATE TABLE report_interventi (id_report TEXT PRIMARY KEY, val TEXT, timestamp_validazione TEXT)"
+    )
     conn.commit()
     conn.close()
     yield
 
+
 def test_move_report_atomically_success(setup_db, mocker):
     """Verifica che un report venga spostato correttamente tra tabelle in una transazione."""
-    DatabaseEngine.execute("INSERT INTO report_da_validare (id_report, val) VALUES (?, ?)", ("R1", "Data 1"))
+    DatabaseEngine.execute(
+        "INSERT INTO report_da_validare (id_report, val) VALUES (?, ?)", ("R1", "Data 1")
+    )
     success = dbr.move_report_atomically("R1", "report_da_validare", "report_interventi")
 
     assert success is True
@@ -41,10 +46,15 @@ def test_move_report_atomically_success(setup_db, mocker):
     assert dest is not None
     assert dest["val"] == "Data 1"
 
+
 def test_move_report_atomically_integrity_violation(setup_db):
     """Verifica che la transazione fallisca se c'è un conflitto di chiave primaria in destinazione."""
-    DatabaseEngine.execute("INSERT INTO report_da_validare (id_report, val) VALUES (?, ?)", ("R1", "New Data"))
-    DatabaseEngine.execute("INSERT INTO report_interventi (id_report, val) VALUES (?, ?)", ("R1", "Old Data"))
+    DatabaseEngine.execute(
+        "INSERT INTO report_da_validare (id_report, val) VALUES (?, ?)", ("R1", "New Data")
+    )
+    DatabaseEngine.execute(
+        "INSERT INTO report_interventi (id_report, val) VALUES (?, ?)", ("R1", "Old Data")
+    )
 
     success = dbr.move_report_atomically("R1", "report_da_validare", "report_interventi")
 

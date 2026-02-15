@@ -1,6 +1,7 @@
 """
 Test unitari per la configurazione dei destinatari email.
 """
+
 import config as config
 
 

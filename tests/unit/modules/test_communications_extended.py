@@ -23,15 +23,16 @@ def test_send_email_subprocess_error_handling(mocker):
     mock_logger.error.assert_called()
     assert "Fallimento subprocess email" in mock_logger.error.call_args[0][0]
 
+
 def test_generate_on_call_pdf_integrity(tmp_path, mocker):
     """Verifica che il PDF venga generato correttamente con i metadati attesi."""
     # Cambiamo directory di lavoro temporaneamente per evitare di scrivere nella cartella reale
-    mocker.patch("modules.pdf_utils.Path.mkdir") # Evitiamo creazione cartella reale
+    mocker.patch("modules.pdf_utils.Path.mkdir")  # Evitiamo creazione cartella reale
 
     # Prepariamo dati minimi
     data = [
         {"Data": "2025-01-01", "RuoloOccupato": "Tecnico", "Nome Cognome": "Mario Rossi"},
-        {"Data": "2025-01-01", "RuoloOccupato": "Aiutante", "Nome Cognome": "Luigi Bianchi"}
+        {"Data": "2025-01-01", "RuoloOccupato": "Aiutante", "Nome Cognome": "Luigi Bianchi"},
     ]
 
     # Mock dell'output per non scrivere file
@@ -43,12 +44,13 @@ def test_generate_on_call_pdf_integrity(tmp_path, mocker):
     assert "reperibilita_strumentale_gennaio_2025" in file_path
     assert mock_pdf_output.called
 
+
 def test_notifications_bulk_operations(mocker):
     """Testa la creazione di notifiche e la logica 'Segna tutte come lette'."""
     mock_add = mocker.patch("modules.notifications.add_notification", return_value=True)
     mock_db = mocker.patch("modules.notifications.get_db_connection")
     mock_cursor = mock_db.return_value.execute.return_value
-    mock_cursor.rowcount = 5 # Simula 5 righe aggiornate
+    mock_cursor.rowcount = 5  # Simula 5 righe aggiornate
 
     # 1. Creazione
     assert crea_notifica("12345", "Test messaggio") is True

@@ -18,6 +18,7 @@ def test_render_guida_tab_tecnico(mocker):
     assert st.write.called
     assert st.info.called
 
+
 def test_render_guida_tab_admin(mocker):
     mocker.patch("streamlit.write")
     mocker.patch("streamlit.info")

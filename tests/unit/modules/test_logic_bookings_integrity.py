@@ -13,13 +13,15 @@ from modules.shifts.logic_bookings import prenota_turno_logic
 def test_double_booking_prevention(mocker):
     """Verifica che un utente non possa prenotarsi due volte per lo stesso turno."""
     # 1. Mock turno valido con posti liberi
-    mocker.patch("modules.shifts.logic_bookings.get_shift_by_id",
-                 return_value={
-                     "ID_Turno": "T1",
-                     "PostiTecnico": 2,
-                     "PostiAiutante": 2,
-                     "Data": datetime.date.today().isoformat()
-                 })
+    mocker.patch(
+        "modules.shifts.logic_bookings.get_shift_by_id",
+        return_value={
+            "ID_Turno": "T1",
+            "PostiTecnico": 2,
+            "PostiAiutante": 2,
+            "Data": datetime.date.today().isoformat(),
+        },
+    )
 
     # 2. Mock DB
     mock_existing = pd.DataFrame([{"Matricola": "12345", "RuoloOccupato": "Tecnico"}])

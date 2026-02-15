@@ -21,6 +21,7 @@ def test_load_session_with_missing_keys(tmp_path, mocker, monkeypatch):
     # La funzione deve restituire False se mancano chiavi critiche come authenticated_user
     assert load_session(token) is False
 
+
 def test_load_session_with_wrong_data_types(tmp_path, mocker, monkeypatch):
     """Verifica la gestione di tipi dati errati nel JSON di sessione."""
     monkeypatch.chdir(tmp_path)
@@ -28,10 +29,15 @@ def test_load_session_with_wrong_data_types(tmp_path, mocker, monkeypatch):
 
     token = "wrong-type-token"
     session_file = tmp_path / "sessions" / f"session_{token}.json"
-    session_file.write_text(json.dumps({
-        "authenticated_user": 12345, # Dovrebbe essere str
-        "ruolo": "Tecnico"
-    }), encoding="utf-8")
+    session_file.write_text(
+        json.dumps(
+            {
+                "authenticated_user": 12345,  # Dovrebbe essere str
+                "ruolo": "Tecnico",
+            }
+        ),
+        encoding="utf-8",
+    )
 
     mocker.patch("modules.session_manager.SESSION_DIR", tmp_path / "sessions")
 

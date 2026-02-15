@@ -13,7 +13,6 @@ def test_email_rapid_fire_threading(mocker):
     mock_sub = mocker.patch("modules.email_sender._send_email_subprocess")
 
     # Lanciamo 10 email quasi simultaneamente
-    threads = []
     for i in range(10):
         invia_email_con_outlook_async(f"Subject {i}", f"Body {i}")
 

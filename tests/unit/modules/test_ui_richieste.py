@@ -40,6 +40,7 @@ def test_render_richieste_tab_materiali_success(mocker):
     render_richieste_tab("M1", "Tecnico", "User")
     assert mock_success.called
 
+
 def test_render_richieste_tab_assenze_success(mocker):
     mocker.patch("streamlit.header")
     mocker.patch("streamlit.subheader")

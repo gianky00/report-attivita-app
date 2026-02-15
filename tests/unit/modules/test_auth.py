@@ -29,9 +29,7 @@ def test_reset_user_password(mocker):
 
 def test_authenticate_user_fail(mocker):
     mocker.patch("modules.auth.get_db_connection")
-    mock_cursor = mocker.patch(
-        'modules.auth.get_db_connection'
-    ).return_value.cursor.return_value
+    mock_cursor = mocker.patch("modules.auth.get_db_connection").return_value.cursor.return_value
     mock_cursor.fetchone.return_value = [1]  # COUNT = 1
     mocker.patch("modules.auth.get_user_by_matricola", return_value=None)
     status, _ = authenticate_user("999", "pass")

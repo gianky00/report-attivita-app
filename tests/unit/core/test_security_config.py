@@ -13,6 +13,7 @@ def test_ai_revision_no_key(mocker):
     assert res["success"] is False
     assert any(term in res["error"] for term in ["incompleta", "non disponibile"])
 
+
 def test_config_defaults(mocker):
     """Verifica che validate_config non esca se le chiavi sono presenti."""
     # Mockiamo tutte le chiavi obbligatorie per evitare sys.exit
@@ -21,7 +22,7 @@ def test_config_defaults(mocker):
         "path_storico_db": "test.db",
         "path_gestionale": "test.db",
         "path_giornaliera_base": ".",
-        "path_attivita_programmate": "test.xlsx"
+        "path_attivita_programmate": "test.xlsx",
     }
     mocker.patch("streamlit.secrets", full_conf)
     # Non deve sollevare SystemExit

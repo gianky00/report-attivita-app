@@ -13,7 +13,7 @@ def test_excel_import_idempotency(mocker):
     report_data = {
         "id_report": "ST_2025_001",
         "descrizione": "Intervento manutenzione",
-        "data": "2025-01-01"
+        "data": "2025-01-01",
     }
 
     # 1. Primo inserimento (successo)

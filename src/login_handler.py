@@ -56,9 +56,7 @@ def _handle_password_login() -> None:
             res, data = authenticate_user(m_in, p_in)
             if res == "2FA_REQUIRED":
                 log_access_attempt(m_in, "2FA richiesta")
-                st.session_state.update(
-                    {"login_state": "verify_2fa", "temp_user_for_2fa": m_in}
-                )
+                st.session_state.update({"login_state": "verify_2fa", "temp_user_for_2fa": m_in})
                 st.rerun()
             elif res == "2FA_SETUP_REQUIRED":
                 log_access_attempt(m_in, "Setup 2FA richiesto")

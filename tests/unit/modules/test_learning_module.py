@@ -26,9 +26,7 @@ def test_integrate_knowledge_success(mocker, tmp_path):
     test_core_file = tmp_path / "knowledge_core.json"
     test_core_file.write_text("{}", encoding="utf-8")
 
-    mocker.patch(
-        'learning_module.load_unreviewed_knowledge', return_value=unreviewed
-    )
+    mocker.patch("learning_module.load_unreviewed_knowledge", return_value=unreviewed)
     mocker.patch("learning_module.save_unreviewed_knowledge")
     mocker.patch("learning_module.KNOWLEDGE_CORE_PATH", test_core_file)
 

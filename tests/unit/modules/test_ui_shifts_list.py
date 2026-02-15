@@ -13,12 +13,21 @@ def test_render_turni_list_empty(mocker):
     render_turni_list(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "M1", "Tecnico", "test")
     assert mock_info.called
 
+
 def test_render_turni_list_with_data(mocker):
-    df_turni = pd.DataFrame([{
-        "ID_Turno": "T1", "Descrizione": "Turno 1", "Data": "2025-01-01",
-        "OrarioInizio": "08:00", "OrarioFine": "17:00",
-        "PostiTecnico": 2, "PostiAiutante": 1
-    }])
+    df_turni = pd.DataFrame(
+        [
+            {
+                "ID_Turno": "T1",
+                "Descrizione": "Turno 1",
+                "Data": "2025-01-01",
+                "OrarioInizio": "08:00",
+                "OrarioFine": "17:00",
+                "PostiTecnico": 2,
+                "PostiAiutante": 1,
+            }
+        ]
+    )
     df_bookings = pd.DataFrame(columns=["ID_Turno", "Matricola", "RuoloOccupato"])
     df_users = pd.DataFrame([{"Matricola": "M1", "Nome Cognome": "User 1"}])
 
@@ -27,7 +36,7 @@ def test_render_turni_list_with_data(mocker):
     mocker.patch("streamlit.container", return_value=mocker.MagicMock())
     mocker.patch("streamlit.markdown")
     mocker.patch("streamlit.caption")
-    mock_success = mocker.patch("streamlit.success")
+    mocker.patch("streamlit.success")
     mocker.patch("streamlit.selectbox", return_value="Tecnico")
     mock_button = mocker.patch("streamlit.button", return_value=True)
     mocker.patch("streamlit.rerun")
@@ -39,12 +48,21 @@ def test_render_turni_list_with_data(mocker):
     render_turni_list(df_turni, df_bookings, df_users, "M1", "Tecnico", "test")
     assert mock_button.called
 
+
 def test_render_turni_list_already_booked(mocker):
-    df_turni = pd.DataFrame([{
-        "ID_Turno": "T1", "Descrizione": "Turno 1", "Data": "2025-01-01",
-        "OrarioInizio": "08:00", "OrarioFine": "17:00",
-        "PostiTecnico": 2, "PostiAiutante": 1
-    }])
+    df_turni = pd.DataFrame(
+        [
+            {
+                "ID_Turno": "T1",
+                "Descrizione": "Turno 1",
+                "Data": "2025-01-01",
+                "OrarioInizio": "08:00",
+                "OrarioFine": "17:00",
+                "PostiTecnico": 2,
+                "PostiAiutante": 1,
+            }
+        ]
+    )
     df_bookings = pd.DataFrame([{"ID_Turno": "T1", "Matricola": "M1", "RuoloOccupato": "Tecnico"}])
     df_users = pd.DataFrame([{"Matricola": "M1", "Nome Cognome": "User 1"}])
 

@@ -47,6 +47,7 @@ def setup_db_cascade(mocker, tmp_path):
     conn.close()
     yield
 
+
 def test_shift_deletion_cascade(setup_db_cascade):
     """Verifica che la cancellazione di un turno elimini le prenotazioni associate."""
     create_shift({"ID_Turno": "T1", "Descrizione": "Turno 1", "Data": "2025-01-01", "Tipo": "A"})
@@ -62,11 +63,14 @@ def test_shift_deletion_cascade(setup_db_cascade):
     bookings_after = get_bookings_for_shift("T1")
     assert len(bookings_after) == 0
 
+
 def test_booking_integrity_missing_shift(setup_db_cascade):
     """Verifica che non sia possibile creare una prenotazione per un turno inesistente."""
     with pytest.raises(sqlite3.IntegrityError):
         conn = DatabaseEngine.get_connection()
         # Inserimento diretto per catturare l'eccezione FK
-        conn.execute("INSERT INTO prenotazioni (ID_Prenotazione, ID_Turno, Matricola) VALUES (?, ?, ?)",
-                     ("P2", "NON_ESISTE", "M1"))
+        conn.execute(
+            "INSERT INTO prenotazioni (ID_Prenotazione, ID_Turno, Matricola) VALUES (?, ?, ?)",
+            ("P2", "NON_ESISTE", "M1"),
+        )
         conn.commit()

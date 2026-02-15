@@ -40,11 +40,11 @@ mock_get_shift = <MagicMock name='get_shift_by_id' id='2006871713424'>
         import pandas as pd
         mock_bookings.return_value = pd.DataFrame([])
         mock_add.return_value = False # DB failure
-    
+
 >       result = booking_logic.prenota_turno_logic("M1", "S1", "Tecnico")
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests\unit\modules\test_logic_bookings_deep_dive.py:101: 
+tests\unit\modules\test_logic_bookings_deep_dive.py:101:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 src\modules\shifts\logic_bookings.py:44: in prenota_turno_logic
     prenotazioni_per_turno[prenotazioni_per_turno["RuoloOccupato"] == "Tecnico"]
@@ -94,13 +94,13 @@ mock_get_shift = <MagicMock name='get_shift_by_id' id='2006872273312'>
         mock_conflict.return_value = False
         import pandas as pd
         mock_bookings.return_value = pd.DataFrame([]) # Empty bookings
-    
+
         mock_add.return_value = True
-    
+
 >       result = booking_logic.prenota_turno_logic("M1", "S1", "Tecnico")
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-tests\unit\modules\test_logic_bookings_deep_dive.py:80: 
+tests\unit\modules\test_logic_bookings_deep_dive.py:80:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 src\modules\shifts\logic_bookings.py:44: in prenota_turno_logic
     prenotazioni_per_turno[prenotazioni_per_turno["RuoloOccupato"] == "Tecnico"]

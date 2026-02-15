@@ -3,6 +3,8 @@ Test unitari per il modulo principale app.py.
 Mocka l'intero ecosistema per testare la logica di routing e login.
 """
 
+import contextlib
+
 import pandas as pd
 import pytest
 import streamlit as st
@@ -12,12 +14,20 @@ from app import main_app, recupera_attivita_non_rendicontate
 
 class MockSessionState(dict):
     def __getattr__(self, key):
-        try: return self[key]
-        except KeyError: raise AttributeError(key)
-    def __setattr__(self, key, value): self[key] = value
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(key) from None
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
     def __delattr__(self, key):
-        try: del self[key]
-        except KeyError: raise AttributeError(key)
+        try:
+            del self[key]
+        except KeyError:
+            raise AttributeError(key) from None
+
 
 @pytest.fixture
 def mock_app_env(mocker):
@@ -32,7 +42,9 @@ def mock_app_env(mocker):
     mocker.patch("streamlit.rerun")
 
     # Mocking modules
-    mocker.patch("app.get_user_by_matricola", return_value={"Nome Cognome": "Test User", "Ruolo": "Tecnico"})
+    mocker.patch(
+        "app.get_user_by_matricola", return_value={"Nome Cognome": "Test User", "Ruolo": "Tecnico"}
+    )
     mocker.patch("app.sync_oncall_shifts")
     mocker.patch("app.render_sidebar")
     mocker.patch("app.get_all_users", return_value=pd.DataFrame())
@@ -41,36 +53,42 @@ def mock_app_env(mocker):
 
     return mocker
 
+
 def test_main_app_rendering(mock_app_env, mocker):
-    session = MockSessionState({
-        "main_tab": "Attività Assegnate",
-        "login_state": "logged_in",
-        "authenticated_user": "M1",
-        "ruolo": "Tecnico"
-    })
+    session = MockSessionState(
+        {
+            "main_tab": "Attività Assegnate",
+            "login_state": "logged_in",
+            "authenticated_user": "M1",
+            "ruolo": "Tecnico",
+        }
+    )
     mocker.patch("streamlit.session_state", session)
     main_app("M1", "Tecnico")
     assert st.title.called
+
 
 def test_recupera_attivita_non_rendicontate(mocker):
     mocker.patch("app.trova_attivita", return_value=[{"pdl": "123"}])
     res = recupera_attivita_non_rendicontate("M1", pd.DataFrame())
     assert len(res) == 30
 
+
 def test_main_app_admin_routing(mock_app_env, mocker):
-    session = MockSessionState({
-        "main_tab": "Sistema",
-        "login_state": "logged_in",
-        "authenticated_user": "admin",
-        "ruolo": "Amministratore"
-    })
+    session = MockSessionState(
+        {
+            "main_tab": "Sistema",
+            "login_state": "logged_in",
+            "authenticated_user": "admin",
+            "ruolo": "Amministratore",
+        }
+    )
     mocker.patch("streamlit.session_state", session)
     mock_sistema = mocker.patch("app.render_sistema_view")
-    try:
+    with contextlib.suppress(Exception):
         main_app("admin", "Amministratore")
-    except Exception:
-        pass
     assert mock_sistema.called
+
 
 def test_main_app_login_password_fail(mock_app_env, mocker):
     session = MockSessionState({"login_state": "password"})
@@ -80,12 +98,13 @@ def test_main_app_login_password_fail(mock_app_env, mocker):
     mocker.patch("streamlit.text_input", side_effect=["M1", "wrong_pass"])
     assert True
 
+
 def test_main_app_2fa_verification(mock_app_env, mocker):
-    session = MockSessionState({
-        "login_state": "verify_2fa",
-        "temp_user_for_2fa": "M1"
-    })
+    session = MockSessionState({"login_state": "verify_2fa", "temp_user_for_2fa": "M1"})
     mocker.patch("streamlit.session_state", session)
-    mocker.patch("app.get_user_by_matricola", return_value={"Nome Cognome": "Test", "2FA_Secret": "S", "Ruolo": "T"})
+    mocker.patch(
+        "app.get_user_by_matricola",
+        return_value={"Nome Cognome": "Test", "2FA_Secret": "S", "Ruolo": "T"},
+    )
     mocker.patch("app.verify_2fa_code", return_value=True)
     assert session.login_state == "verify_2fa"

@@ -20,7 +20,9 @@ def test_navigation_tab_persistence(mocker):
     mock_rerun = mocker.patch("streamlit.rerun")
 
     # Mock moduli esterni
-    mocker.patch("components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"]))
+    mocker.patch(
+        "components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"])
+    )
     mocker.patch("components.ui.navigation_ui.get_last_login", return_value="2025-01-01 10:00")
     mocker.patch("components.ui.navigation_ui.get_next_on_call_week", return_value=None)
 
@@ -29,6 +31,7 @@ def test_navigation_tab_persistence(mocker):
     assert st.session_state.main_tab == "Storico"
     assert mock_rerun.called
 
+
 def test_session_clear_on_logout(mocker):
     """Verifica che il logout pulisca completamente la sessione."""
     st.session_state.authenticated_user = "123"
@@ -36,7 +39,9 @@ def test_session_clear_on_logout(mocker):
 
     mocker.patch("streamlit.button", side_effect=lambda label, **kwargs: label == "Disconnetti")
     mocker.patch("components.ui.navigation_ui.delete_session")
-    mocker.patch("components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"]))
+    mocker.patch(
+        "components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"])
+    )
     mocker.patch("components.ui.navigation_ui.get_last_login", return_value=None)
     mocker.patch("components.ui.navigation_ui.get_next_on_call_week", return_value=None)
     mock_rerun = mocker.patch("streamlit.rerun")

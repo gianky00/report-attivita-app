@@ -16,8 +16,10 @@ def test_render_caposquadra_view(mocker):
     mocker.patch("pages.admin.validation_view.render_relazioni_validation_tab")
 
     from pages.admin import render_caposquadra_view
+
     render_caposquadra_view("M1")
     assert st.tabs.called
+
 
 def test_render_sistema_view(mocker):
     mocker.patch("streamlit.markdown")
@@ -30,5 +32,6 @@ def test_render_sistema_view(mocker):
     mocker.patch("pages.gestione_dati.render_gestione_dati_tab")
 
     from pages.admin import render_sistema_view
+
     render_sistema_view()
     assert st.tabs.called

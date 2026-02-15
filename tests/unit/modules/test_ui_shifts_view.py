@@ -27,11 +27,14 @@ def test_render_new_shift_form_success(mocker):
 
     # Patch local references
     mocker.patch("pages.admin.shifts_view.create_shift", return_value=True)
-    mocker.patch("pages.admin.shifts_view.get_all_users", return_value=pd.DataFrame([{"Matricola": "123"}]))
+    mocker.patch(
+        "pages.admin.shifts_view.get_all_users", return_value=pd.DataFrame([{"Matricola": "123"}])
+    )
     mocker.patch("pages.admin.shifts_view.crea_notifica", return_value=True)
 
     render_new_shift_form()
     assert mock_success.called
+
 
 def test_render_new_shift_form_missing_desc(mocker):
     mock_form = mocker.MagicMock()

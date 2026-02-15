@@ -15,7 +15,7 @@ def test_login_failure_logging_privacy(mocker):
     mocker.patch("modules.auth.get_user_by_matricola", return_value=None)
 
     # 2. Mock del logger per catturare l'output
-    mock_log = mocker.patch("modules.auth.logger")
+    mocker.patch("modules.auth.logger")
 
     # Tentativo con password sensibile
     password_pericolosa = "Password123!"
@@ -37,7 +37,9 @@ def test_login_failure_logging_privacy(mocker):
             self.lineno = 50
             self.exc_info = None
             self.extra_data = extra or {}
-        def getMessage(self): return self.msg
+
+        def getMessage(self):  # noqa: N802
+            return self.msg
 
     formatter = JsonFormatter()
 

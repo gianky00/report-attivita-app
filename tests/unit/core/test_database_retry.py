@@ -22,6 +22,7 @@ def test_retry_on_lock_success_after_failure():
     assert result == "success"
     assert mock_func.call_count == 2
 
+
 def test_retry_on_lock_max_retries_exceeded():
     """Verifica che venga sollevata l'eccezione dopo aver esaurito i tentativi."""
     mock_func = MagicMock()
@@ -34,6 +35,7 @@ def test_retry_on_lock_max_retries_exceeded():
 
     assert "locked" in str(excinfo.value).lower()
     assert mock_func.call_count == 2
+
 
 def test_retry_on_lock_other_error_no_retry():
     """Verifica che errori diversi dal lock non attivino il retry."""

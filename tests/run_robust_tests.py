@@ -18,6 +18,7 @@ if str(SRC_DIR) not in sys.path:
 
 try:
     from core.logging import get_logger
+
     HAS_ENTERPRISE_LOGGING = True
 except ImportError:
     HAS_ENTERPRISE_LOGGING = False
@@ -30,6 +31,7 @@ if sys.platform == "win32":
 STATE_FILE = Path(__file__).parent / ".test_session_state.json"
 REPORT_FILE = Path(__file__).parent / "test_report.md"
 DEFAULT_TIMEOUT = 120
+
 
 class Console:
     HEADER = "\033[95m"
@@ -46,15 +48,25 @@ class Console:
         print(f"{color}{msg}{Console.ENDC}", end=end, flush=True)
 
     @staticmethod
-    def info(msg): Console.print(f"ℹ️  {msg}", Console.CYAN)
+    def info(msg):
+        Console.print(f"[i] {msg}", Console.CYAN)
+
     @staticmethod
-    def success(msg): Console.print(f"✅ {msg}", Console.GREEN)
+    def success(msg):
+        Console.print(f"✅ {msg}", Console.GREEN)
+
     @staticmethod
-    def warning(msg): Console.print(f"⚠️  {msg}", Console.WARNING)
+    def warning(msg):
+        Console.print(f"⚠️  {msg}", Console.WARNING)
+
     @staticmethod
-    def error(msg): Console.print(f"❌ {msg}", Console.FAIL)
+    def error(msg):
+        Console.print(f"❌ {msg}", Console.FAIL)
+
     @staticmethod
-    def header(msg): Console.print(f"\n{Console.BOLD}{msg}{Console.ENDC}", Console.HEADER)
+    def header(msg):
+        Console.print(f"\n{Console.BOLD}{msg}{Console.ENDC}", Console.HEADER)
+
 
 class TestRunner:
     def __init__(self):
@@ -102,7 +114,9 @@ class TestRunner:
         Console.header("🚀 AVVIO SUITE DI TEST ROBUSTA (STOP-ON-FAIL)")
 
         env = os.environ.copy()
-        env["PYTHONPATH"] = str(SRC_DIR) + (os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else "")
+        env["PYTHONPATH"] = str(SRC_DIR) + (
+            os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else ""
+        )
 
         state = self.load_state() if resume else None
 
@@ -113,7 +127,9 @@ class TestRunner:
             self.passed_tests = state.get("passed", 0)
         else:
             test_dir = ROOT_DIR / "tests"
-            self.queue_files = sorted([str(p.relative_to(ROOT_DIR)) for p in test_dir.rglob("test_*.py")])
+            self.queue_files = sorted(
+                [str(p.relative_to(ROOT_DIR)) for p in test_dir.rglob("test_*.py")]
+            )
             self.failed_tests = []
             self.passed_tests = 0
             Console.info(f"Rilevati {len(self.queue_files)} file di test.")
@@ -125,7 +141,9 @@ class TestRunner:
             current_total = self.passed_tests + len(self.failed_tests) + len(self.queue_files)
             current_progress = self.passed_tests + len(self.failed_tests) + 1
 
-            Console.print(f"[{current_progress}/{current_total}] Esecuzione: {test_file}...", end=" ")
+            Console.print(
+                f"[{current_progress}/{current_total}] Esecuzione: {test_file}...", end=" "
+            )
 
             cmd = [sys.executable, "-m", "pytest", test_file, "-q", "--no-header"]
 
@@ -137,7 +155,7 @@ class TestRunner:
                     stderr=subprocess.STDOUT,
                     text=True,
                     cwd=ROOT_DIR,
-                    timeout=DEFAULT_TIMEOUT
+                    timeout=DEFAULT_TIMEOUT,
                 )
 
                 if result.returncode == 0:
@@ -158,7 +176,9 @@ class TestRunner:
 
                     self.save_state()
                     self.generate_report(time.time() - self.start_time)
-                    Console.warning(f"\n🛑 Interruzione per fallimento. Risolvi l'errore in: {test_file}")
+                    Console.warning(
+                        f"\n🛑 Interruzione per fallimento. Risolvi l'errore in: {test_file}"
+                    )
                     Console.info("Usa --resume per ripartire dopo il fix.")
                     return
 
@@ -180,7 +200,7 @@ class TestRunner:
             STATE_FILE.unlink()
 
     def generate_report(self, duration):
-        total_executed = self.passed_tests + len(self.failed_tests)
+        self.passed_tests + len(self.failed_tests)
         total_remaining = len(self.queue_files)
 
         report = [
@@ -190,7 +210,7 @@ class TestRunner:
             f"**Test Passati:** {self.passed_tests}",
             f"**Test Falliti:** {len(self.failed_tests)}",
             f"**Test Rimanenti:** {total_remaining}",
-            "\n## Stato Fallimenti"
+            "\n## Stato Fallimenti",
         ]
 
         if not self.failed_tests:
@@ -204,6 +224,7 @@ class TestRunner:
             report.append(f"\n## Prossimo test in coda: `{self.queue_files[0]}`")
 
         REPORT_FILE.write_text("\n".join(report), encoding="utf-8")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

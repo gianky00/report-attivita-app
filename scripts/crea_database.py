@@ -225,13 +225,10 @@ def crea_tabelle_se_non_esistono():
 
         for nome_tabella, schema in tabelle_gestionali.items():
             cursor.execute(
-                "SELECT name FROM sqlite_master "
-                f"WHERE type='table' AND name='{nome_tabella}';"
+                f"SELECT name FROM sqlite_master WHERE type='table' AND name='{nome_tabella}';"
             )
             if cursor.fetchone() is None:
-                logger.info(
-                    f"Tabella '{nome_tabella}' non trovata. Creazione in corso..."
-                )
+                logger.info(f"Tabella '{nome_tabella}' non trovata. Creazione in corso...")
                 cursor.execute(f"CREATE TABLE {nome_tabella} {schema}")
                 logger.info(f"Tabella '{nome_tabella}' creata.")
 
@@ -239,9 +236,7 @@ def crea_tabelle_se_non_esistono():
         logger.info("Verifica e creazione tabelle completata.")
 
     except sqlite3.Error as e:
-        logger.error(
-            f"Errore durante la creazione/verifica delle tabelle: {e}", exc_info=True
-        )
+        logger.error(f"Errore durante la creazione/verifica delle tabelle: {e}", exc_info=True)
     finally:
         if conn:
             conn.close()

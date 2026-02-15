@@ -18,12 +18,11 @@ from modules.reports_manager import scrivi_o_aggiorna_risposta
 
 
 class TestReportsManager(unittest.TestCase):
-
     def setUp(self):
         self.dati_report = {
             "descrizione": "Lavoro su PdL 123456/C",
             "stato": "Completata",
-            "report": "Tutto ok"
+            "report": "Tutto ok",
         }
         self.matricola = "M123"
         self.data_rif = datetime.date(2025, 1, 1)
@@ -43,11 +42,17 @@ class TestReportsManager(unittest.TestCase):
 
         # Verify
         self.assertTrue(result)
-        mock_cursor.execute.assert_any_call('SELECT "Nome Cognome" FROM contatti WHERE Matricola = ?', (self.matricola,))
+        mock_cursor.execute.assert_any_call(
+            'SELECT "Nome Cognome" FROM contatti WHERE Matricola = ?', (self.matricola,)
+        )
         # Check if INSERT was called
-        insert_call = [call for call in mock_cursor.execute.call_args_list if "INSERT INTO report_da_validare" in call[0][0]]
+        insert_call = [
+            call
+            for call in mock_cursor.execute.call_args_list
+            if "INSERT INTO report_da_validare" in call[0][0]
+        ]
         self.assertEqual(len(insert_call), 1)
-        self.assertIn("123456/C", insert_call[0][0][1]) # Check if PDL was extracted
+        self.assertIn("123456/C", insert_call[0][0][1])  # Check if PDL was extracted
 
         mock_send_email.assert_called_once()
         mock_st.cache_data.clear.assert_called_once()
@@ -84,6 +89,7 @@ class TestReportsManager(unittest.TestCase):
         self.assertFalse(result)
         mock_st.error.assert_called_once()
         self.assertIn("Errore salvataggio report", mock_st.error.call_args[0][0])
+
 
 if __name__ == "__main__":
     unittest.main()

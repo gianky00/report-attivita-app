@@ -12,16 +12,23 @@ def test_json_formatter_serialization():
     """Verifica che il formatter generi un JSON valido per i campi standard."""
     formatter = JsonFormatter()
 
-    log_record = logging.makeLogRecord({
-        'msg': 'Test Message', 'levelname': 'INFO', 'name': 'test_logger',
-        'created': 1738700000, # Timestamp fisso
-        'module': 'test_mod', 'funcName': 'test_func', 'lineno': 10
-    })
+    log_record = logging.makeLogRecord(
+        {
+            "msg": "Test Message",
+            "levelname": "INFO",
+            "name": "test_logger",
+            "created": 1738700000,  # Timestamp fisso
+            "module": "test_mod",
+            "funcName": "test_func",
+            "lineno": 10,
+        }
+    )
 
     output = formatter.format(log_record)
     assert '"message": "Test Message"' in output
     assert '"level": "INFO"' in output
     assert '"logger": "test_logger"' in output
+
 
 def test_load_kb_resilience(mocker, tmp_path, monkeypatch):
     """Verifica che il caricamento KB ignori i file illeggibili."""

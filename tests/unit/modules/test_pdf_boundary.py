@@ -13,7 +13,7 @@ def test_generate_pdf_with_extremely_long_names(mocker):
 
     data = [
         {"Data": "2025-01-01", "RuoloOccupato": "Tecnico", "Nome Cognome": long_name_1},
-        {"Data": "2025-01-01", "RuoloOccupato": "Aiutante", "Nome Cognome": long_name_2}
+        {"Data": "2025-01-01", "RuoloOccupato": "Aiutante", "Nome Cognome": long_name_2},
     ]
 
     # Mocking output per non scrivere su disco

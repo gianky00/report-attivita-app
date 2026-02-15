@@ -8,13 +8,16 @@ class MockSessionState(dict):
         if item in self:
             return self[item]
         raise AttributeError(item)
+
     def __setattr__(self, key, value):
         self[key] = value
+
     def __delattr__(self, item):
         if item in self:
             del self[item]
         else:
             raise AttributeError(item)
+
 
 def test_handle_submit(mocker):
     session = MockSessionState()
@@ -28,6 +31,7 @@ def test_handle_submit(mocker):
 
     assert handle_submit("Test report", "TERMINATA", task, "M1", "2025-01-01") is True
     assert "debriefing_task" not in session
+
 
 def test_render_debriefing_ui(mocker):
     task = {"pdl": "P1", "attivita": "A1", "section_key": "today"}
