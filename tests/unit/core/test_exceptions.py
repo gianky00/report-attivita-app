@@ -3,6 +3,7 @@ Test unitari per la gestione globale delle eccezioni.
 """
 
 import pytest
+
 from core.exceptions import safe_streamlit_run
 
 

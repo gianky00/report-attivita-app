@@ -4,18 +4,18 @@ Copre src/pages/shifts/market_view.py.
 """
 
 import pandas as pd
-import pytest
-import streamlit as st
+
 from pages.shifts.market_view import render_bacheca_tab, render_sostituzioni_tab
+
 
 def test_render_bacheca_tab_success(mocker):
     df_b = pd.DataFrame([{
-        "ID_Bacheca": "B1", "ID_Turno": "T1", "Stato": "Disponibile", 
+        "ID_Bacheca": "B1", "ID_Turno": "T1", "Stato": "Disponibile",
         "Ruolo_Originale": "Tecnico", "Timestamp_Pubblicazione": "2025-01-01"
     }])
     df_u = pd.DataFrame([{"Matricola": "M1", "Nome Cognome": "User 1"}])
     m_to_n = {"M1": "User 1"}
-    
+
     mocker.patch("streamlit.subheader")
     mocker.patch("streamlit.info")
     mocker.patch("streamlit.container", return_value=mocker.MagicMock())
@@ -23,7 +23,7 @@ def test_render_bacheca_tab_success(mocker):
     mocker.patch("streamlit.caption")
     mock_button = mocker.patch("streamlit.button", return_value=True)
     mocker.patch("streamlit.rerun")
-    
+
     mocker.patch("pages.shifts.market_view.get_shift_by_id", return_value={
         "Descrizione": "Desc", "Data": "2025-01-01", "OrarioInizio": "08:00", "OrarioFine": "17:00"
     })
@@ -34,11 +34,11 @@ def test_render_bacheca_tab_success(mocker):
 
 def test_render_sostituzioni_tab(mocker):
     df_s = pd.DataFrame([{
-        "ID_Richiesta": "S1", "Ricevente_Matricola": "M1", 
+        "ID_Richiesta": "S1", "Ricevente_Matricola": "M1",
         "Richiedente_Matricola": "M2", "ID_Turno": "T1"
     }])
     m_to_n = {"M1": "User 1", "M2": "User 2"}
-    
+
     mocker.patch("streamlit.subheader")
     mocker.patch("streamlit.columns", return_value=[mocker.MagicMock(), mocker.MagicMock()])
     mocker.patch("streamlit.markdown")
@@ -46,7 +46,7 @@ def test_render_sostituzioni_tab(mocker):
     mocker.patch("streamlit.write")
     mock_button = mocker.patch("streamlit.button", return_value=True)
     mocker.patch("streamlit.rerun")
-    
+
     mocker.patch("pages.shifts.market_view.rispondi_sostituzione_logic", return_value=True)
 
     render_sostituzioni_tab(df_s, m_to_n, "M1")

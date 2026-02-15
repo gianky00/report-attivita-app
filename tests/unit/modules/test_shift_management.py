@@ -2,10 +2,12 @@
 Test unitari per la gestione dei turni e sottomoduli logici.
 """
 
-import pandas as pd
 import datetime
-from modules.shifts.logic_utils import find_matricola_by_surname, log_shift_change
+
+import pandas as pd
+
 from modules.shifts.logic_bookings import prenota_turno_logic
+from modules.shifts.logic_utils import find_matricola_by_surname, log_shift_change
 
 
 def test_prenota_turno_logic_success(mocker):
@@ -13,8 +15,8 @@ def test_prenota_turno_logic_success(mocker):
     mocker.patch(
         'modules.shifts.logic_bookings.get_shift_by_id',
         return_value={
-            "ID_Turno": "T1", 
-            "PostiTecnico": 2, 
+            "ID_Turno": "T1",
+            "PostiTecnico": 2,
             "PostiAiutante": 1,
             "Data": datetime.date.today().isoformat()
         },
@@ -27,7 +29,7 @@ def test_prenota_turno_logic_success(mocker):
     mocker.patch("modules.shifts.logic_bookings.log_shift_change")
     mocker.patch("modules.shifts.logic_bookings.st")
     mocker.patch("modules.shifts.logic_bookings.check_user_oncall_conflict", return_value=False)
-    
+
     assert prenota_turno_logic("123", "T1", "Tecnico") is True
 
 

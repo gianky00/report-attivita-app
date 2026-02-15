@@ -2,11 +2,12 @@
 Test per il parsing robusto dei file Excel Giornaliera.
 """
 
-import pytest
+
 import pandas as pd
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+import pytest
+
 from modules.importers.excel_giornaliera import trova_attivita
+
 
 @pytest.fixture
 def mock_df_contatti():
@@ -36,12 +37,12 @@ def test_trova_attivita_parsing_success(mocker, mock_df_contatti):
     # Riempie le colonne mancanti per evitare index out of range
     for i in range(15):
         if i not in df_sheet.columns: df_sheet[i] = ""
-        
+
     mocker.patch("modules.importers.excel_giornaliera._load_day_sheet", return_value=df_sheet)
     mocker.patch("modules.importers.excel_giornaliera.get_globally_excluded_activities", return_value=[])
-    
+
     res = trova_attivita("123", 1, 1, 2025, mock_df_contatti)
-    
+
     assert len(res) > 0
     assert res[0]["pdl"] == "123456"
     assert "Valvola" in res[0]["attivita"]
@@ -60,10 +61,10 @@ def test_trova_attivita_malformed_data(mocker, mock_df_contatti):
     df_sheet = pd.DataFrame(data)
     for i in range(15):
         if i not in df_sheet.columns: df_sheet[i] = ""
-        
+
     mocker.patch("modules.importers.excel_giornaliera._load_day_sheet", return_value=df_sheet)
     mocker.patch("modules.importers.excel_giornaliera.get_globally_excluded_activities", return_value=[])
-    
+
     res = trova_attivita("123", 1, 1, 2025, mock_df_contatti)
     # Deve comunque processare la riga valida
     assert any(a["pdl"] == "654321" for a in res)

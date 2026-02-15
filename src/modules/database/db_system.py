@@ -75,7 +75,7 @@ def get_table_data(table_name: str) -> pd.DataFrame:
     """Scarica il contenuto integrale di una tabella in un DataFrame."""
     conn = get_db_connection()
     try:
-        return pd.read_sql_query(f"SELECT * FROM {table_name}", conn)  # nosec B608
+        return pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)  # nosec B608
     finally:
         conn.close()
 

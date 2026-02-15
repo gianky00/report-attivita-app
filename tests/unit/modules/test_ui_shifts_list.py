@@ -4,9 +4,9 @@ Copre src/pages/shifts/shifts_list_view.py.
 """
 
 import pandas as pd
-import pytest
-import streamlit as st
+
 from pages.shifts.shifts_list_view import render_turni_list
+
 
 def test_render_turni_list_empty(mocker):
     mock_info = mocker.patch("streamlit.info")
@@ -21,7 +21,7 @@ def test_render_turni_list_with_data(mocker):
     }])
     df_bookings = pd.DataFrame(columns=["ID_Turno", "Matricola", "RuoloOccupato"])
     df_users = pd.DataFrame([{"Matricola": "M1", "Nome Cognome": "User 1"}])
-    
+
     mocker.patch("streamlit.checkbox", return_value=False)
     mocker.patch("streamlit.divider")
     mocker.patch("streamlit.container", return_value=mocker.MagicMock())
@@ -32,7 +32,7 @@ def test_render_turni_list_with_data(mocker):
     mock_button = mocker.patch("streamlit.button", return_value=True)
     mocker.patch("streamlit.rerun")
     mocker.patch("streamlit.session_state", {})
-    
+
     # Mocking logic
     mocker.patch("pages.shifts.shifts_list_view.prenota_turno_logic", return_value=True)
 
@@ -47,7 +47,7 @@ def test_render_turni_list_already_booked(mocker):
     }])
     df_bookings = pd.DataFrame([{"ID_Turno": "T1", "Matricola": "M1", "RuoloOccupato": "Tecnico"}])
     df_users = pd.DataFrame([{"Matricola": "M1", "Nome Cognome": "User 1"}])
-    
+
     mocker.patch("streamlit.checkbox", return_value=False)
     mocker.patch("streamlit.divider")
     mocker.patch("streamlit.container", return_value=mocker.MagicMock())
@@ -58,7 +58,7 @@ def test_render_turni_list_already_booked(mocker):
     mocker.patch("streamlit.button", return_value=True)
     mocker.patch("streamlit.rerun")
     mocker.patch("streamlit.session_state", {})
-    
+
     # Mocking logic
     mocker.patch("pages.shifts.shifts_list_view.cancella_prenotazione_logic", return_value=True)
 

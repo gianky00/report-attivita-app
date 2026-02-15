@@ -5,11 +5,13 @@ Copre casi limite come password errate, 2FA malformati e setup amministratore.
 
 import bcrypt
 import pytest
+
 from modules.auth import (
     authenticate_user,
     create_user,
     verify_2fa_code,
 )
+
 
 @pytest.fixture
 def mock_auth_db(mocker):
@@ -23,8 +25,8 @@ def test_authenticate_user_wrong_password(mocker, mock_auth_db):
     """Verifica che l'autenticazione fallisca con una password non corrispondente."""
     mock_cursor = mock_auth_db.cursor.return_value
     # Simula che ci siano utenti nel sistema
-    mock_cursor.fetchone.return_value = [10] 
-    
+    mock_cursor.fetchone.return_value = [10]
+
     mock_user = {
         "Matricola": "12345",
         "Nome Cognome": "Test User",
@@ -33,7 +35,7 @@ def test_authenticate_user_wrong_password(mocker, mock_auth_db):
         "2FA_Secret": "JBSWY3DPEHPK3PXP"
     }
     mocker.patch("modules.auth.get_user_by_matricola", return_value=mock_user)
-    
+
     # Password errata
     status, _ = authenticate_user("12345", "wrong_pass")
     assert status == "FAILED"
@@ -51,11 +53,11 @@ def test_create_first_admin_setup(mocker, mock_auth_db):
         "Ruolo": "Amministratore",
         "PasswordHash": "hash_fittizio"
     }
-    
+
     success = create_user(user_data)
     assert success is True
     assert mock_auth_db.execute.called
-    
+
     # Verifica che la query SQL contenga le colonne corrette
     args = mock_auth_db.execute.call_args[0]
     assert "INSERT INTO contatti" in args[0]

@@ -3,18 +3,19 @@ Test unitari per la gestione dei report.
 Copre src/modules/reports_manager.py.
 """
 
-import unittest
-from unittest.mock import patch, MagicMock
 import datetime
 import sqlite3
 import sys
+import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 # Aggiungi 'src' al path
 root_dir = Path(__file__).parent.parent.parent.parent
 sys.path.append(str(root_dir / "src"))
 
 from modules.reports_manager import scrivi_o_aggiorna_risposta
+
 
 class TestReportsManager(unittest.TestCase):
 
@@ -46,14 +47,14 @@ class TestReportsManager(unittest.TestCase):
         # Check if INSERT was called
         insert_call = [call for call in mock_cursor.execute.call_args_list if "INSERT INTO report_da_validare" in call[0][0]]
         self.assertEqual(len(insert_call), 1)
-        self.assertIn("123456/C", insert_call[0][0][1]) # Check if PDL was extracted      
+        self.assertIn("123456/C", insert_call[0][0][1]) # Check if PDL was extracted
 
         mock_send_email.assert_called_once()
         mock_st.cache_data.clear.assert_called_once()
 
     @patch("modules.reports_manager.get_db_connection")
     @patch("modules.reports_manager.st")
-    def test_scrivi_o_aggiorna_risposta_user_not_found(self, mock_st, mock_get_conn):     
+    def test_scrivi_o_aggiorna_risposta_user_not_found(self, mock_st, mock_get_conn):
         # Mock DB
         mock_conn = MagicMock()
         mock_cursor = mock_conn.cursor.return_value
@@ -65,7 +66,7 @@ class TestReportsManager(unittest.TestCase):
 
         # Verify
         self.assertFalse(result)
-        mock_st.error.assert_called_once_with(f"Utente {self.matricola} non trovato.")    
+        mock_st.error.assert_called_once_with(f"Utente {self.matricola} non trovato.")
 
     @patch("modules.reports_manager.get_db_connection")
     @patch("modules.reports_manager.st")

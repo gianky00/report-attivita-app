@@ -2,8 +2,9 @@
 Test unitari per il modulo notifiche utilizzando il mocking totale della connessione.
 """
 
-import pytest
 import pandas as pd
+import pytest
+
 from modules.notifications import (
     crea_notifica,
     leggi_notifiche,

@@ -4,27 +4,30 @@ Copre src/modules/database/db_shifts.py.
 """
 
 import sqlite3
+
 import pandas as pd
 import pytest
+
 from modules.database.db_shifts import (
-    get_shifts_by_type,
-    create_shift,
-    update_shift,
-    get_shift_by_id,
-    add_shift_log,
-    get_bookings_for_shift,
+    add_bacheca_item,
     add_booking,
+    add_shift_log,
+    check_user_oncall_conflict,
+    create_shift,
     delete_booking,
     delete_bookings_for_shift,
-    get_booking_by_user_and_shift,
-    check_user_oncall_conflict,
-    update_booking_user,
+    get_all_bacheca_items,
     get_all_bookings,
     get_bacheca_item_by_id,
+    get_booking_by_user_and_shift,
+    get_bookings_for_shift,
+    get_shift_by_id,
+    get_shifts_by_type,
     update_bacheca_item,
-    add_bacheca_item,
-    get_all_bacheca_items
+    update_booking_user,
+    update_shift,
 )
+
 
 @pytest.fixture
 def mock_db(mocker):

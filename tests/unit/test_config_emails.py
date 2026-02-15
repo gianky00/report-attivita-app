@@ -3,6 +3,7 @@ Test unitari per la configurazione dei destinatari email.
 """
 import config as config
 
+
 def test_default_email_recipients():
     """Verifica che i destinatari predefiniti siano corretti (solo Gianky, no CC)."""
     # Verifichiamo il destinatario principale predefinito

@@ -4,6 +4,7 @@ Test per le funzioni di sistema e blacklist assegnamenti.
 
 from modules.database.db_system import add_assignment_exclusion, get_globally_excluded_activities
 
+
 def test_add_assignment_exclusion(mocker):
     """Verifica l'inserimento di un'esclusione."""
     mock_exec = mocker.patch("core.database.DatabaseEngine.execute", return_value=True)

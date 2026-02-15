@@ -3,6 +3,7 @@ Test approfonditi per il modulo DB Manager utilizzando il mocking di DatabaseEng
 """
 
 import pytest
+
 from modules.db_manager import (
     add_assignment_exclusion,
     add_shift_log,
@@ -32,7 +33,7 @@ def test_add_shift_log_mock(mocker):
 
 def test_get_last_login_mock(mocker):
     mocker.patch(
-        'core.database.DatabaseEngine.fetch_one', 
+        'core.database.DatabaseEngine.fetch_one',
         return_value={"timestamp": "2025-01-01"}
     )
     assert get_last_login("admin") == "2025-01-01"
@@ -46,7 +47,7 @@ def test_delete_booking(mocker):
 
 def test_get_report_by_id(mocker):
     mocker.patch(
-        'core.database.DatabaseEngine.fetch_one', 
+        'core.database.DatabaseEngine.fetch_one',
         return_value={"id_report": "R1"}
     )
     res = get_report_by_id("R1", "report_interventi")
@@ -67,7 +68,7 @@ def test_add_assignment_exclusion(mocker):
 
 def test_get_globally_excluded_activities(mocker):
     mocker.patch(
-        'core.database.DatabaseEngine.fetch_all', 
+        'core.database.DatabaseEngine.fetch_all',
         return_value=[{"id_attivita": "id1"}]
     )
     assert "id1" in get_globally_excluded_activities()

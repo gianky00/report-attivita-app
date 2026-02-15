@@ -3,6 +3,7 @@ Test unitari per la configurazione dell'applicazione.
 """
 
 import pytest
+
 from config import validate_config
 
 

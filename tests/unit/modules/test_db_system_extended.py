@@ -4,18 +4,21 @@ Copre src/modules/database/db_system.py.
 """
 
 import sqlite3
+
 import pandas as pd
 import pytest
+
 from modules.database.db_system import (
     add_assignment_exclusion,
-    get_globally_excluded_activities,
-    get_notifications_for_user,
     add_notification,
     count_unread_notifications,
-    save_table_data,
+    get_globally_excluded_activities,
+    get_notifications_for_user,
     get_table_data,
-    get_table_names
+    get_table_names,
+    save_table_data,
 )
+
 
 @pytest.fixture
 def mock_db(mocker):

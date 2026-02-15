@@ -3,10 +3,12 @@ Test unitari per il modulo principale app.py.
 Mocka l'intero ecosistema per testare la logica di routing e login.
 """
 
+import pandas as pd
 import pytest
 import streamlit as st
-import pandas as pd
+
 from app import main_app, recupera_attivita_non_rendicontate
+
 
 class MockSessionState(dict):
     def __getattr__(self, key):
@@ -28,7 +30,7 @@ def mock_app_env(mocker):
     mocker.patch("streamlit.tabs", return_value=[mocker.MagicMock() for _ in range(4)])
     mocker.patch("streamlit.sidebar", return_value=mocker.MagicMock())
     mocker.patch("streamlit.rerun")
-    
+
     # Mocking modules
     mocker.patch("app.get_user_by_matricola", return_value={"Nome Cognome": "Test User", "Ruolo": "Tecnico"})
     mocker.patch("app.sync_oncall_shifts")
@@ -36,7 +38,7 @@ def mock_app_env(mocker):
     mocker.patch("app.get_all_users", return_value=pd.DataFrame())
     mocker.patch("app.trova_attivita", return_value=[])
     mocker.patch("app.get_validated_intervention_reports", return_value=pd.DataFrame())
-    
+
     return mocker
 
 def test_main_app_rendering(mock_app_env, mocker):

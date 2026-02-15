@@ -5,15 +5,17 @@ Copre src/modules/database/db_users.py.
 
 import pandas as pd
 import pytest
+
 from modules.database.db_users import (
+    add_substitution_request,
+    delete_substitution_request,
+    get_access_logs,
+    get_all_substitutions,
     get_all_users,
     get_last_login,
-    get_access_logs,
     get_substitution_request_by_id,
-    delete_substitution_request,
-    add_substitution_request,
-    get_all_substitutions
 )
+
 
 @pytest.fixture
 def mock_db_conn(mocker):

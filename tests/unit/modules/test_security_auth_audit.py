@@ -3,28 +3,28 @@ Audit di sicurezza per l'autenticazione e il logging.
 """
 
 import json
-import pytest
-from modules.auth import authenticate_user, log_access_attempt
+
 from core.logging import JsonFormatter
-import logging
+from modules.auth import authenticate_user
+
 
 def test_login_failure_logging_privacy(mocker):
     """Verifica che i tentativi falliti non logghino password o segreti."""
     # 1. Mock DB per fallimento login
     mocker.patch("modules.auth.get_db_connection")
     mocker.patch("modules.auth.get_user_by_matricola", return_value=None)
-    
+
     # 2. Mock del logger per catturare l'output
     mock_log = mocker.patch("modules.auth.logger")
-    
+
     # Tentativo con password sensibile
     password_pericolosa = "Password123!"
     authenticate_user("UTENTE_TEST", password_pericolosa)
-    
+
     # Verifichiamo che log_access_attempt sia stato chiamato
     # log_access_attempt registra nel DB, non necessariamente nel logger file
     # ma authenticate_user potrebbe loggare errori
-    
+
     # 3. Test diretto del Formatter su un log record malevolo
     class MockRecord:
         def __init__(self, msg, extra=None):
@@ -40,7 +40,7 @@ def test_login_failure_logging_privacy(mocker):
         def getMessage(self): return self.msg
 
     formatter = JsonFormatter()
-    
+
     # Caso: Messaggio con password nel testo
     rec1 = MockRecord(f"Fallimento login per utente con pass {password_pericolosa}")
     res1 = json.loads(formatter.format(rec1))

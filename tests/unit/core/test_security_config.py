@@ -2,14 +2,13 @@
 Test per sicurezza API e fallback di configurazione.
 """
 
-import streamlit as st
-import pytest
-from modules.ai_engine import revisiona_con_ia
 from config import validate_config
+from modules.ai_engine import revisiona_con_ia
+
 
 def test_ai_revision_no_key(mocker):
     """Verifica il graceful failure senza API Key."""
-    mocker.patch("streamlit.secrets", {}) 
+    mocker.patch("streamlit.secrets", {})
     res = revisiona_con_ia("test")
     assert res["success"] is False
     assert any(term in res["error"] for term in ["incompleta", "non disponibile"])

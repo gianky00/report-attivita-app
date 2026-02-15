@@ -3,6 +3,7 @@ Test per la facciata shift_management.
 """
 from modules.shift_management import __all__
 
+
 def test_shift_management_exports():
     """Verifica che tutte le funzioni attese siano esportate."""
     expected = [

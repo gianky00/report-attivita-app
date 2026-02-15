@@ -3,17 +3,18 @@ Test unitari per la gestione delle notifiche strumentali.
 Verifica src/modules/notifications.py e le integrazioni.
 """
 
-import unittest
-from unittest.mock import patch
 import sqlite3
 import sys
+import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # Aggiungi 'src' al path
 root_dir = Path(__file__).parent.parent.parent
 sys.path.append(str(root_dir / "src"))
 
 from modules import notifications
+
 
 class NonClosingConnection:
     def __init__(self, connection):
@@ -76,7 +77,7 @@ class TestInstrumentationNotifications(unittest.TestCase):
         """Test creazione notifica."""
         res = notifications.crea_notifica("USER123", "Test Message")
         self.assertTrue(res, "crea_notifica deve ritornare True")
-        
+
         row = self.cursor.execute("SELECT * FROM notifiche WHERE Destinatario_Matricola='USER123'").fetchone()
         self.assertIsNotNone(row)
         self.assertEqual(row["Messaggio"], "Test Message")

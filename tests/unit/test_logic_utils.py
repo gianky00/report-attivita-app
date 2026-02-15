@@ -1,16 +1,15 @@
-import unittest
-from unittest.mock import patch, MagicMock
 import datetime
 import sys
+import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 # Add src to path
 root_dir = Path(__file__).parent.parent.parent
 sys.path.append(str(root_dir / "src"))
 
-from modules import oncall_logic
-from modules import utils
-from modules import pdf_utils
+from modules import oncall_logic, pdf_utils, utils
+
 
 class TestLogicUtils(unittest.TestCase):
 
@@ -42,7 +41,7 @@ class TestLogicUtils(unittest.TestCase):
                 self.assertEqual(next_date.weekday(), 4) # Must be Friday
 
             # Test finding unknown
-            self.assertIsNone(oncall_logic.get_next_on_call_week("UNKNOWN", start_date))  
+            self.assertIsNone(oncall_logic.get_next_on_call_week("UNKNOWN", start_date))
 
     # --- Utils Tests ---
     def test_calculate_shift_duration_standard(self):
@@ -90,7 +89,7 @@ class TestLogicUtils(unittest.TestCase):
         mock_pdf_class.return_value = mock_pdf_instance
 
         data = [
-            {"Data": "2023-01-01", "RuoloOccupato": "Tecnico", "Nome Cognome": "Rossi"},  
+            {"Data": "2023-01-01", "RuoloOccupato": "Tecnico", "Nome Cognome": "Rossi"},
             {"Data": "2023-01-01", "RuoloOccupato": "Aiutante", "Nome Cognome": "Bianchi"}
         ]
 

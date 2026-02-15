@@ -70,6 +70,11 @@ def parse_instrument_tag(tag: str) -> dict[str, Any] | None:
     if key_letters in ISA_KB:
         instrument_type = ISA_KB[key_letters]["type"]
         base_name = ISA_KB[key_letters]["name"]
+    # 1a. Prova a saltare la prima lettera (variabile) e cercare il resto (es. F-CV)
+    elif len(key_letters) > 1 and key_letters[1:] in ISA_KB:
+        sub_letters = key_letters[1:]
+        instrument_type = ISA_KB[sub_letters]["type"]
+        base_name = ISA_KB[sub_letters]["name"]
     # 2. Analisi dell'ultima lettera per la funzione principale
     elif key_letters and key_letters[-1] in ISA_KB:
         last_char = key_letters[-1]

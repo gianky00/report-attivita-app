@@ -5,16 +5,18 @@ Copre src/modules/database/db_requests.py.
 
 import pandas as pd
 import pytest
+
 from modules.database.db_requests import (
-    add_material_request,
     add_leave_request,
-    get_material_requests,
+    add_material_request,
     get_leave_requests,
-    salva_storico_materiali,
-    salva_storico_assenze,
+    get_material_requests,
+    get_storico_richieste_assenze,
     get_storico_richieste_materiali,
-    get_storico_richieste_assenze
+    salva_storico_assenze,
+    salva_storico_materiali,
 )
+
 
 @pytest.fixture
 def mock_db_conn(mocker):

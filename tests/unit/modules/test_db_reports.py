@@ -4,24 +4,27 @@ Copre il modulo src/modules/database/db_reports.py.
 """
 
 import sqlite3
+
 import pandas as pd
 import pytest
+
 from modules.database.db_reports import (
-    move_report_atomically,
-    get_reports_to_validate,
-    delete_reports_by_ids,
-    process_and_commit_validated_reports,
-    get_unvalidated_relazioni,
-    process_and_commit_validated_relazioni,
-    salva_report_intervento,
-    salva_relazione,
-    get_validated_reports,
-    get_validated_intervention_reports,
-    get_report_by_id,
     delete_report_by_id,
+    delete_reports_by_ids,
+    get_report_by_id,
+    get_reports_to_validate,
+    get_unvalidated_relazioni,
+    get_unvalidated_reports_by_technician,
+    get_validated_intervention_reports,
+    get_validated_reports,
     insert_report,
-    get_unvalidated_reports_by_technician
+    move_report_atomically,
+    process_and_commit_validated_relazioni,
+    process_and_commit_validated_reports,
+    salva_relazione,
+    salva_report_intervento,
 )
+
 
 @pytest.fixture
 def mock_db(mocker):

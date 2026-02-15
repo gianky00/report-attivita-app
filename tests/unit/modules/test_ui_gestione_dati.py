@@ -4,9 +4,9 @@ Copre src/pages/gestione_dati.py.
 """
 
 import pandas as pd
-import pytest
-import streamlit as st
+
 from pages.gestione_dati import render_gestione_dati_tab
+
 
 def test_render_gestione_dati_tab_success(mocker):
     # Patching Streamlit
@@ -39,8 +39,8 @@ def test_render_gestione_dati_tab_no_tables(mocker):
     mocker.patch("streamlit.info")
     mock_warning = mocker.patch("streamlit.warning")
     mocker.patch("streamlit.session_state", {})
-    
+
     mocker.patch("pages.gestione_dati.get_table_names", return_value=[])
-    
+
     render_gestione_dati_tab()
     assert mock_warning.called
