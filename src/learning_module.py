@@ -4,7 +4,7 @@ Gestisce l'integrazione di nuove conoscenze e la creazione di indici vettoriali 
 """
 
 import json
-import pickle
+import pickle  # nosec B403 — required for scikit-learn TF-IDF serialization
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -158,7 +158,7 @@ def build_knowledge_base() -> dict[str, Any]:
             "matrix": tfidf_matrix,
             "sentences": sentences,
         }
-        Path("knowledge_base_index.pkl").write_bytes(pickle.dumps(index_data))
+        Path("knowledge_base_index.pkl").write_bytes(pickle.dumps(index_data))  # nosec B301
 
         return {
             "success": True,

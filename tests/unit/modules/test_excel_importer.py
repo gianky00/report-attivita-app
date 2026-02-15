@@ -25,7 +25,6 @@ def test_trova_attivita_no_sheet(mocker, mock_df_contatti):
 def test_trova_attivita_parsing_success(mocker, mock_df_contatti):
     """Verifica l'estrazione corretta dei dati da un DataFrame simulato."""
     # Creiamo un DataFrame che simula la struttura del foglio excel
-    # r[5] = Nome, r[9] = PdL, r[6] = Descrizione, r[10] = Inizio, r[11] = Fine
     data = {
         5: ["Rossi M.", "Bianchi L."],
         6: ["Sostituzione Valvola\nTest", "Sostituzione Valvola"],

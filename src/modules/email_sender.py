@@ -3,7 +3,7 @@ Modulo per l'invio asincrono di email tramite Outlook.
 Utilizza un subprocess per interfacciarsi con le API COM di Windows senza bloccare Streamlit.
 """
 
-import subprocess
+import subprocess  # nosec B404 — needed for COM-isolated email sending
 import sys
 import threading
 from pathlib import Path
@@ -28,7 +28,7 @@ def _send_email_subprocess(subject: str, html_body: str) -> None:
 
         command = [python_exe, str(script_path), subject, html_body]
 
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 — command built from trusted values only
             command,
             capture_output=True,
             text=True,
