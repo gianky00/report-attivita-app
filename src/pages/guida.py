@@ -4,6 +4,7 @@ from modules.utils import render_svg_icon
 
 
 def render_guida_tab(ruolo: str) -> None:
+    """Renderizza la sezione Guida dell'applicazione con istruzioni per utenti e admin."""
     st.write(
         "Benvenuto nel Gestionale. Questa guida fornisce una panoramica completa "
         "delle funzionalità dell'applicazione, con sezioni dedicate sia ai "

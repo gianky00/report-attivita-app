@@ -57,6 +57,7 @@ class JsonFormatter(logging.Formatter):
         return data
 
     def format(self, record: logging.LogRecord) -> str:
+        """Esegue la formattazione del record di log in una stringa JSON strutturata."""
         log_data: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created).isoformat(),
             "level": record.levelname,
