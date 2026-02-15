@@ -10,16 +10,12 @@ dependencies = [
     "gspread",
     "oauth2client",
     "google-auth",
-    "google-auth-oauthlib",
-    "google-auth-httplib2",
-    "google-api-python-client",
     "bcrypt",
     "pyotp",
     "qrcode",
     "fpdf2",
     "matplotlib",
     "python-docx",
-    "seaborn",
     "nltk",
     "scikit-learn",
     "google-generativeai",
@@ -258,12 +254,6 @@ DEP002 = [
     "pillow",         # PIL, usato indirettamente
     "passlib",        # hashing password in auth
     "pywin32",        # import condizionale win32com
-    # Google API auth (usati come backend da gspread/oauth2client)
-    "google-auth-oauthlib",
-    "google-auth-httplib2",
-    "google-api-python-client",
-    # Plotting backend
-    "seaborn",        # usato opzionalmente per grafici
 ]
 DEP003 = [
     # Import transitivi verificati come necessari
