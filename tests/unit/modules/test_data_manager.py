@@ -21,7 +21,8 @@ def test_scrivi_o_aggiorna_risposta_mock(mocker):
     mock_cursor = mock_db.return_value.cursor.return_value
     mock_cursor.fetchone.return_value = ["Tecnico Test"]  # Nome Cognome
 
-    mocker.patch("modules.reports_manager.st.cache_data.clear")
+    # Patch st.cache_data
+    mocker.patch("streamlit.cache_data")
     mocker.patch("modules.reports_manager._send_validation_email")
 
     dati = {"descrizione": "PdL 123456 - Test", "stato": "Completato", "report": "Ok"}

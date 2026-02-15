@@ -10,6 +10,9 @@ from pages.admin.ia_view import render_ia_management_tab
 from pages.admin.logs_view import render_access_logs_tab
 
 def test_render_ia_management_tab(mocker):
+    # Mock st.cache_data as a MagicMock so .clear() works
+    mocker.patch("streamlit.cache_data", new_callable=mocker.MagicMock)
+    
     mock_sub = mocker.patch("streamlit.subheader")
     mocker.patch("streamlit.tabs", return_value=[mocker.MagicMock(), mocker.MagicMock()])
     mocker.patch("pages.admin.ia_view.learning_module.load_unreviewed_knowledge", return_value=[
@@ -29,8 +32,8 @@ def test_render_access_logs_tab_empty(mocker):
     mocker.patch("streamlit.subheader")
     mocker.patch("streamlit.info")
     mock_warn = mocker.patch("streamlit.warning")
-    mocker.patch("pages.admin.logs_view.get_access_logs", return_value=pd.DataFrame())
-    
+    mocker.patch("pages.admin.logs_view.get_access_logs", return_value=pd.DataFrame())    
+
     render_access_logs_tab()
     assert mock_warn.called
 
@@ -42,9 +45,9 @@ def test_render_access_logs_tab_with_data(mocker):
     mocker.patch("streamlit.columns", return_value=[mocker.MagicMock(), mocker.MagicMock()])
     mocker.patch("streamlit.divider")
     mock_df_st = mocker.patch("streamlit.dataframe")
-    
+
     df = pd.DataFrame([{"timestamp": "2025-01-01 10:00:00", "username": "admin", "status": "success"}])
     mocker.patch("pages.admin.logs_view.get_access_logs", return_value=df)
-    
+
     render_access_logs_tab()
     assert mock_df_st.called

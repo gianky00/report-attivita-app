@@ -92,7 +92,7 @@ def segna_tutte_lette(matricola: str) -> bool:
             conn.close()
 
 
-def notify_success(messaggio: str):
+def notify_success(messaggio: str) -> None:
     """Visualizza una notifica di successo nell'interfaccia (Streamlit)."""
     try:
         import streamlit as st

@@ -1,8 +1,8 @@
-import unittest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-import json
 import sys
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
 
 # Mock streamlit cache_data before importing the module
 def mock_cache(func):
@@ -17,9 +17,11 @@ sys.path.append(str(root_dir / "src"))
 
 # Patch manuale di st.cache_data prima dell'import
 import streamlit as st
+
 st.cache_data = mock_cache
 
 from modules.knowledge_base import carica_knowledge_core
+
 
 class TestKnowledgeBase(unittest.TestCase):
 
@@ -37,7 +39,7 @@ class TestKnowledgeBase(unittest.TestCase):
         func = carica_knowledge_core
         if hasattr(func, "__wrapped__"):
             func = func.__wrapped__
-            
+
         # Execute
         result = func()
 
@@ -48,7 +50,7 @@ class TestKnowledgeBase(unittest.TestCase):
     @patch("modules.knowledge_base.st")
     @patch("modules.knowledge_base.config")
     @patch("modules.knowledge_base.Path.exists")
-    def test_carica_knowledge_core_not_found(self, mock_exists, mock_config, mock_st):    
+    def test_carica_knowledge_core_not_found(self, mock_exists, mock_config, mock_st):
         # Setup mock
         mock_exists.return_value = False
         mock_config.PATH_KNOWLEDGE_CORE = "missing.json"
