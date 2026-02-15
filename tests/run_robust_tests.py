@@ -7,7 +7,6 @@ import signal
 import subprocess
 import sys
 import time
-from collections import defaultdict
 from pathlib import Path
 
 # --- AGGIUNTA PATH PER ARCHITETTURA PROGETTO ---
@@ -64,7 +63,7 @@ class TestRunner:
         self.queue_files = []
         self.interrupted = False
         self.start_time = 0
-        
+
         if HAS_ENTERPRISE_LOGGING:
             self.logger = get_logger("test_runner")
         else:
@@ -93,7 +92,7 @@ class TestRunner:
     def load_state(self):
         if STATE_FILE.exists():
             try:
-                with open(STATE_FILE, "r") as f:
+                with open(STATE_FILE) as f:
                     return json.load(f)
             except Exception:
                 return None
@@ -101,12 +100,12 @@ class TestRunner:
 
     def run_tests(self, resume=False):
         Console.header("🚀 AVVIO SUITE DI TEST ROBUSTA (STOP-ON-FAIL)")
-        
+
         env = os.environ.copy()
         env["PYTHONPATH"] = str(SRC_DIR) + (os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else "")
 
         state = self.load_state() if resume else None
-        
+
         if state and state.get("queue"):
             Console.info(f"Ripresa sessione precedente ({len(state['queue'])} file rimanenti)")
             self.queue_files = state["queue"]
@@ -120,16 +119,16 @@ class TestRunner:
             Console.info(f"Rilevati {len(self.queue_files)} file di test.")
 
         self.start_time = time.time()
-        
+
         while self.queue_files:
             test_file = self.queue_files[0]
             current_total = self.passed_tests + len(self.failed_tests) + len(self.queue_files)
             current_progress = self.passed_tests + len(self.failed_tests) + 1
-            
+
             Console.print(f"[{current_progress}/{current_total}] Esecuzione: {test_file}...", end=" ")
-            
+
             cmd = [sys.executable, "-m", "pytest", test_file, "-q", "--no-header"]
-            
+
             try:
                 result = subprocess.run(
                     cmd,
@@ -140,7 +139,7 @@ class TestRunner:
                     cwd=ROOT_DIR,
                     timeout=DEFAULT_TIMEOUT
                 )
-                
+
                 if result.returncode == 0:
                     Console.success("PASS")
                     self.passed_tests += 1
@@ -156,7 +155,7 @@ class TestRunner:
                         existing["output"] = result.stdout
                     else:
                         self.failed_tests.append({"file": test_file, "output": result.stdout})
-                    
+
                     self.save_state()
                     self.generate_report(time.time() - self.start_time)
                     Console.warning(f"\n🛑 Interruzione per fallimento. Risolvi l'errore in: {test_file}")
@@ -183,7 +182,7 @@ class TestRunner:
     def generate_report(self, duration):
         total_executed = self.passed_tests + len(self.failed_tests)
         total_remaining = len(self.queue_files)
-        
+
         report = [
             "# Test Session Report (Stop-on-Fail Mode)",
             f"**Data:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -193,23 +192,23 @@ class TestRunner:
             f"**Test Rimanenti:** {total_remaining}",
             "\n## Stato Fallimenti"
         ]
-        
+
         if not self.failed_tests:
             report.append("✅ Nessun fallimento registrato nell'ultima esecuzione.")
         else:
             for fail in self.failed_tests:
                 report.append(f"### ❌ {fail['file']}")
                 report.append(f"```\n{fail['output']}\n```")
-        
+
         if total_remaining > 0:
             report.append(f"\n## Prossimo test in coda: `{self.queue_files[0]}`")
-            
+
         REPORT_FILE.write_text("\n".join(report), encoding="utf-8")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", action="store_true", help="Riprende dall'ultimo test fallito")
     args = parser.parse_args()
-    
+
     runner = TestRunner()
     runner.run_tests(resume=args.resume)

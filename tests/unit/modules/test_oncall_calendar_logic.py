@@ -79,5 +79,78 @@ class TestOncallCalendarLogic(unittest.TestCase):
             calendar._render_oncall_navigation()
             self.assertEqual(state.week_start_date, datetime.date(2023, 1, 2))
 
+    def test_oncall_admin_buttons(self):
+        state = MockSessionState({
+            "week_start_date": datetime.date(2023, 1, 2),
+            "user": {"Ruolo": "Amministratore", "Matricola": "ADM01"}
+        })
+        
+        # Mocking data to ensure we hit the cell rendering
+        with patch('streamlit.session_state', state), \
+             patch('streamlit.rerun') as mock_rerun, \
+             patch('streamlit.columns') as mock_cols, \
+             patch('pages.shifts.oncall_calendar_view.get_on_call_pair') as mock_get_pair, \
+             patch('pages.shifts.oncall_calendar_view.get_shift_by_id') as mock_get_shift, \
+             patch('pages.shifts.oncall_calendar_view.get_bookings_for_shift') as mock_get_bookings, \
+             patch('pages.shifts.oncall_calendar_view.get_all_users') as mock_get_users:
+
+            # Mock data setup
+            mock_pair = (
+                pd.DataFrame([{"Data": "2023-01-02", "ID_Turno": "S1"}]),
+                pd.DataFrame([{"ID_Turno": "S1", "Matricola": "U1", "RuoloOccupato": "Reperibile"}])
+            )
+            mock_get_pair.side_effect = [mock_pair] # Return for the week
+            
+            mock_users = pd.DataFrame([
+                {"Matricola": "U1", "Nome Cognome": "User One"},
+                {"Matricola": "ADM01", "Nome Cognome": "Admin User"}
+            ])
+            mock_get_users.return_value = mock_users
+
+            # Mock columns and buttons inside the cell loop
+            # _render_oncall_cell calls st.columns(2) at the end if conditions met
+            # We need to ensure that the button click is simulated.
+            
+            # Scenario: Admin clicks "pencil" (edit) button
+            # The code calls c2.button(..., key=f"e_{day}")
+            # We need to mock the button return value to be True for a specific call
+            
+            # Since _render_oncall_cell is called 7 times (for 7 days), and each time creates cols...
+            # This is hard to mock via side_effect efficiently without a complex structure.
+            # However, we can use the MockSessionState to verify if state was updated IF we can trigger it.
+            
+            # Easier approach: Unit test `_render_oncall_cell` directly if possible, but it's nested in main render?
+            # No, it's not a standalone function in the previous view, let me check the file content again.
+            # Ah, I don't see `_render_oncall_cell` in the previous `view_file` output (lines 270-322). 
+            # It seems the code from 270-322 *IS* inside `_render_oncall_rendering_logic` or similar.
+            # Actually, looking at lines 205-210, `_render_oncall_navigation` is a function.
+            # Lines 270+ seem to be part of the main loop in `render_reperibilita_tab`.
+            
+            # Let's import the module and check if `_render_oncall_cell` exists or if it's inline.
+            # I suspect it's inline or I missed the definition.
+            # Let's assume I can call `render_reperibilita_tab` and mock things.
+            
+            # To simulate a specific button click deep in the loop:
+            # We can use a custom side effect for the button mock that checks the 'key' argument.
+            
+            mock_c1 = MagicMock()
+            mock_c2 = MagicMock()
+            mock_cols.return_value = [mock_c1, mock_c2]
+            
+            def button_side_effect(*args, **kwargs):
+                key = kwargs.get('key', '')
+                # Simulate clicking the edit button for Jan 2nd
+                if key == "e_2023-01-02":
+                    return True
+                return False
+            
+            mock_c2.button.side_effect = button_side_effect
+            
+            calendar.render_reperibilita_tab()
+            
+            # Verification
+            self.assertEqual(state.editing_oncall_shift_id, "S1")
+            mock_rerun.assert_called()
+
 if __name__ == '__main__':
     unittest.main()
