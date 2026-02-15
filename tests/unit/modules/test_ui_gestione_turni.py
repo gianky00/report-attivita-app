@@ -9,9 +9,8 @@ import streamlit as st
 from pages.gestione_turni import render_gestione_turni_tab
 
 def test_render_gestione_turni_tab(mocker):
-    mock_sub = mocker.patch("streamlit.subheader")
     # Mock nested tabs
-    mocker.patch("streamlit.tabs", side_effect=[
+    mock_tabs = mocker.patch("streamlit.tabs", side_effect=[
         [mocker.MagicMock() for _ in range(3)], # Outer tabs
         [mocker.MagicMock() for _ in range(3)]  # Inner tabs
     ])
@@ -29,4 +28,4 @@ def test_render_gestione_turni_tab(mocker):
     mocker.patch("pages.gestione_turni.render_sostituzioni_tab")
 
     render_gestione_turni_tab("M1", "Tecnico")
-    assert mock_sub.called
+    assert mock_tabs.called

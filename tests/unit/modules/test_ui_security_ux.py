@@ -14,8 +14,8 @@ def test_navigation_tab_persistence(mocker):
         st.session_state.main_tab = "Attività Assegnate"
     
     mocker.patch("streamlit.sidebar")
-    # Mock dei bottoni per simulare il click su Storico
-    mocker.patch("streamlit.button", side_effect=lambda label, **kwargs: label == "🗂️ Storico")
+    # Mock dei bottoni per simulare il click su Storico.
+    mocker.patch("streamlit.button", side_effect=lambda label, **kwargs: label == "Storico")
     mock_rerun = mocker.patch("streamlit.rerun")
     
     # Mock moduli esterni
@@ -32,15 +32,15 @@ def test_session_clear_on_logout(mocker):
     """Verifica che il logout pulisca completamente la sessione."""
     st.session_state.authenticated_user = "123"
     st.session_state.session_token = "token-xyz"
-    
+
     mocker.patch("streamlit.button", side_effect=lambda label, **kwargs: label == "Disconnetti")
     mocker.patch("components.ui.navigation_ui.delete_session")
     mocker.patch("components.ui.navigation_ui.leggi_notifiche", return_value=pd.DataFrame(columns=["Stato"]))
     mocker.patch("components.ui.navigation_ui.get_last_login", return_value=None)
-    mocker.patch("components.ui.navigation_ui.get_next_on_call_week", return_value=None)
+    mocker.patch("components.ui.navigation_ui.get_next_on_call_week", return_value=None)  
     mock_rerun = mocker.patch("streamlit.rerun")
-    
+
     render_sidebar("123", "Mario Rossi", "Tecnico")
-    
+
     assert "authenticated_user" not in st.session_state
     assert mock_rerun.called

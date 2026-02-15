@@ -42,7 +42,7 @@ def crea_notifica(destinatario: str, messaggio: str, link_azione: str = "") -> b
     nuova_notifica = {
         "ID_Notifica": new_id,
         "Timestamp": timestamp,
-        "Destinatario": destinatario,
+        "Destinatario_Matricola": destinatario,
         "Messaggio": messaggio,
         "Stato": "non letta",
         "Link_Azione": link_azione,
@@ -90,3 +90,14 @@ def segna_tutte_lette(matricola: str) -> bool:
     finally:
         if conn:
             conn.close()
+
+
+def notify_success(messaggio: str):
+    """Visualizza una notifica di successo nell'interfaccia (Streamlit)."""
+    try:
+        import streamlit as st
+
+        st.toast(messaggio, icon="✅")
+    except (ImportError, Exception):
+        # In contesti non-Streamlit (es. test) ignora o logga
+        logger.debug(f"UI Notification (Success): {messaggio}")

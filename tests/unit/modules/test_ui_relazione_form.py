@@ -27,24 +27,27 @@ def test_render_relazione_reperibilita_ui_success(mocker):
     mock_form.__enter__.return_value = mock_form
     mocker.patch("streamlit.form", return_value=mock_form)
     
+    # Mock st.secrets
+    mocker.patch("streamlit.secrets", {"GEMINI_API_KEY": "fake-key"})
+
     # Smart mock for columns: returns 2 or 3 mocks depending on input
     mocker.patch("streamlit.columns", side_effect=lambda spec: [mocker.MagicMock() for _ in range(spec if isinstance(spec, int) else len(spec))])
-    
+
     mocker.patch("streamlit.text_input", return_value="User")
     mocker.patch("streamlit.selectbox", return_value="Nessuno")
     mocker.patch("streamlit.date_input", return_value=datetime.date.today())
     mocker.patch("streamlit.text_area", return_value="Contenuto")
-    
+
     # Simulate clicking "Invia"
-    mocker.patch("streamlit.form_submit_button", side_effect=[False, False, True])
+    mocker.patch("streamlit.form_submit_button", side_effect=[False, False, True])        
     mocker.patch("streamlit.success")
     mocker.patch("streamlit.rerun")
-    
+
     df_users = pd.DataFrame([{"Matricola": "M2", "Nome Cognome": "Partner"}])
     mocker.patch("components.forms.relazione_oncall_form.get_all_users", return_value=df_users)
     mocker.patch("components.forms.relazione_oncall_form.salva_relazione", return_value=True)
-    mocker.patch("components.forms.relazione_oncall_form.invia_email_con_outlook_async")
-    
+    mocker.patch("components.forms.relazione_oncall_form.invia_email_con_outlook_async")  
+
     render_relazione_reperibilita_ui("M1", "User")
     assert st.success.called
 
@@ -55,6 +58,6 @@ def test_handle_ai_correction(mocker):
     mocker.patch("streamlit.session_state", session)
     mocker.patch("components.forms.relazione_oncall_form.revisiona_con_ia", return_value={"success": True, "text": "Revised"})
     mocker.patch("streamlit.success")
-    
+
     _handle_ai_correction("Original")
     assert session.relazione_revisionata == "Revised"

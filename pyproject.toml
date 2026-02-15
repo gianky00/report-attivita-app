@@ -224,4 +224,6 @@ filterwarnings = [
     "ignore:Substituting font arial by core font helvetica:DeprecationWarning",
     "ignore:The parameter \"ln\" is deprecated:DeprecationWarning",
     "ignore:Exception ignored in atexit callback.*cleanup_numbered_dir:pytest.PytestWarning",
+    "ignore:pandas only supports SQLAlchemy connectable.*:UserWarning",
+    "ignore:Mocks returned by pytest-mock do not need to be used as context managers.*:pytest_mock.plugin.PytestMockWarning",
 ]

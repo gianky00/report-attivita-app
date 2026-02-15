@@ -83,13 +83,7 @@ class DatabaseEngine:
             rows = cursor.fetchall()
             if not rows:
                 return []
-            try:
-                return [{k: row[k] for k in row} for row in rows]
-            except AttributeError:
-                return [
-                    dict(row) if hasattr(row, "__iter__") and not isinstance(row, tuple) else {}
-                    for row in rows
-                ]
+            return [dict(row) for row in rows]
         except sqlite3.Error as e:
             logger.error(f"Errore fetch_all: {e} | Query: {query}")
             return []
@@ -106,12 +100,7 @@ class DatabaseEngine:
             row = cursor.fetchone()
             if not row:
                 return None
-            try:
-                return {k: row[k] for k in row}
-            except AttributeError:
-                return (
-                    dict(row) if hasattr(row, "__iter__") and not isinstance(row, tuple) else None
-                )
+            return dict(row)
         except sqlite3.Error as e:
             logger.error(f"Errore fetch_one: {e} | Query: {query}")
             return None
