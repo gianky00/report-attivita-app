@@ -20,13 +20,13 @@ def get_db_connection() -> sqlite3.Connection:
     return DatabaseEngine.get_connection()
 
 
-def add_assignment_exclusion(matricola_escludente: str, id_attivita: str) -> bool:
+def add_assignment_exclusion(matricola_tecnico: str, id_attivita: str) -> bool:
     """Registra un blocco per un determinato assegnamento di attività."""
     sql = (
         "INSERT INTO esclusioni_assegnamenti "
-        "(matricola_escludente, id_attivita, timestamp) VALUES (?, ?, ?)"
+        "(matricola_tecnico, id_attivita, timestamp) VALUES (?, ?, ?)"
     )
-    params = (matricola_escludente, id_attivita, datetime.datetime.now().isoformat())
+    params = (matricola_tecnico, id_attivita, datetime.datetime.now().isoformat())
     return DatabaseEngine.execute(sql, params)
 
 
@@ -39,7 +39,7 @@ def get_globally_excluded_activities() -> list[str]:
 
 def get_excluded_activities_for_user(matricola: str) -> list[str]:
     """Recupera l'elenco delle attività escluse da un utente specifico."""
-    query = "SELECT id_attivita FROM esclusioni_assegnamenti WHERE matricola_escludente = ?"
+    query = "SELECT id_attivita FROM esclusioni_assegnamenti WHERE matricola_tecnico = ?"
     rows = DatabaseEngine.fetch_all(query, (matricola,))
     return [row["id_attivita"] for row in rows]
 
