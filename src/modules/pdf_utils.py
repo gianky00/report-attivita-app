@@ -69,7 +69,7 @@ def generate_on_call_pdf(data: list[dict[str, Any]], month_name: str, year: int)
                     index="Data",
                     columns="RuoloOccupato",
                     values="Nome Cognome",
-                    aggfunc="first",
+                    aggfunc=lambda x: x.iloc[0] if not x.empty else "",
                 )
                 .reset_index()
                 .rename(columns={"Tecnico": "Persona 1", "Aiutante": "Persona 2"})

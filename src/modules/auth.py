@@ -108,6 +108,29 @@ def reset_user_2fa(matricola: str) -> bool:
     return update_user(matricola, {"2FA_Secret": None})
 
 
+def change_user_password(matricola: str, old_password: str, new_password: str) -> tuple[bool, str]:
+    """Cambia la password dell'utente verificando la vecchia."""
+    user = get_user_by_matricola(matricola)
+    if not user:
+        return False, "Utente non trovato."
+
+    password_hash = user.get("PasswordHash")
+    if not password_hash:
+        return False, "Password non impostata. Contatta l'amministratore."
+
+    try:
+        if not bcrypt.checkpw(old_password.encode("utf-8"), str(password_hash).encode("utf-8")):
+            return False, "La vecchia password non è corretta."
+
+        new_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        if update_user(matricola, {"PasswordHash": new_hash}):
+            return True, "Password aggiornata con successo."
+        return False, "Errore durante l'aggiornamento del database."
+    except Exception as e:
+        logger.error(f"Errore cambio password per {matricola}: {e}")
+        return False, f"Errore interno: {e}"
+
+
 def generate_2fa_secret() -> str:
     """Genera una nuova chiave segreta per la 2FA."""
     return pyotp.random_base32()
@@ -165,9 +188,11 @@ def authenticate_user(matricola: str, password: str) -> tuple[str, Any]:
         try:
             hashed_password_bytes = str(password_hash).encode("utf-8")
             if bcrypt.checkpw(password_bytes, hashed_password_bytes):
+                # Se l'utente ha la 2FA configurata, la richiediamo
                 if user_row.get("2FA_Secret"):
                     return "2FA_REQUIRED", nome_completo
-                return "2FA_SETUP_REQUIRED", (nome_completo, ruolo)
+                # Altrimenti, l'accesso è diretto (2FA facoltativa e non attiva)
+                return "SUCCESS", (nome_completo, ruolo)
             return "FAILED", None
         except (ValueError, TypeError):
             return "FIRST_LOGIN_SETUP", (nome_completo, ruolo, password)

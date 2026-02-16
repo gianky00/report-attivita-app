@@ -8,6 +8,7 @@ import sqlite3
 
 import pandas as pd
 
+from constants import ICONS
 from core.logging import get_logger
 from modules.db_manager import (
     add_notification,
@@ -97,7 +98,7 @@ def notify_success(messaggio: str) -> None:
     try:
         import streamlit as st
 
-        st.toast(messaggio, icon="✅")
+        st.toast(messaggio, icon=ICONS["CHECK"])
     except (ImportError, Exception):
         # In contesti non-Streamlit (es. test) ignora o logga
         logger.debug(f"UI Notification (Success): {messaggio}")

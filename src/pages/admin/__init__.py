@@ -35,10 +35,13 @@ def render_sistema_view() -> None:
 
     from .ia_view import render_ia_management_tab
     from .logs_view import render_access_logs_tab
+    from .system_status_view import render_system_status_tab
     from .users_view import render_gestione_account
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    tabs = st.tabs(["Gestione Account", "Cronologia Accessi", "Gestione Dati", "Gestione IA"])
+    tabs = st.tabs(
+        ["Gestione Account", "Cronologia Accessi", "Gestione Dati", "Gestione IA", "Stato Sistema"]
+    )
 
     with tabs[0]:
         render_gestione_account()
@@ -48,6 +51,8 @@ def render_sistema_view() -> None:
         render_gestione_dati_tab()
     with tabs[3]:
         render_ia_management_tab()
+    with tabs[4]:
+        render_system_status_tab()
     st.markdown("</div>", unsafe_allow_html=True)
 
 

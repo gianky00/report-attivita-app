@@ -3,22 +3,79 @@
 :root {
     --primary-color: #3366ff;
     --primary-hover: #254eda;
-    --bg-color: #f0f2f6;
+    --bg-color: #ffffff;
+    --secondary-bg: #f8f9fb;
     --card-bg: #ffffff;
-    --text-color: #333333;
-    --text-muted: #555555;
-    --border-color: #e0e6ed;
+    --text-color: #1e293b;
+    --text-muted: #64748b;
+    --border-color: #e2e8f0;
     --shadow-sm: 0 1px 3px rgba(0,0,0,0.03);
-    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 6px 8px rgba(0, 0, 0, 0.15);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* Mobile e Header Improvements */
+[data-testid="stHeader"] {
+    background-color: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Evidenzia il pulsante hamburger */
+button[data-testid="stSidebarCollapseIcon"] {
+    color: var(--primary-color) !important;
+}
+
+@media (max-width: 768px) {
+    .main-container { padding: 0.5rem; }
+    [data-testid="stSidebar"] { width: 80vw !important; }
+
+    /* Pulsanti affiancati su mobile: stessa riga, wrap solo se necessario */
+    div[data-testid="stHorizontalBlock"]:has(button) {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        display: flex !important;
+        gap: 0.5rem !important;
+        justify-content: flex-start !important;
+        width: 100% !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(button) > div[data-testid="column"] {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(button) > div[data-testid="column"] > div {
+        width: auto !important;
+        padding: 0 !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(button) button {
+        width: auto !important;
+        min-width: 0 !important;
+        padding: 0.4rem 1rem !important;
+    }
+
+    div[data-testid="stHorizontalBlock"] button p {
+        font-size: 0.85rem !important;
+        white-space: nowrap !important;
+    }
+
+    /* Tab scrollabili orizzontalmente */
+    [data-baseweb="tab-list"] {
+        overflow-x: auto !important;
+        display: flex !important;
+        white-space: nowrap !important;
+    }
 }
 
 /* Stile di base */
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-color);
-    transition: background-color 0.3s ease;
 }
 
 /* Layout */
@@ -36,20 +93,45 @@ body {
     opacity: 0;
 }
 
-/* Componenti: Card */
-.card, .task-card {
-    background-color: var(--card-bg);
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: var(--shadow-md);
-    transition: all 0.3s ease-in-out;
-    border: 1px solid var(--border-color);
+/* Sidebar Custom Styles */
+[data-testid="stSidebar"] {
+    background-color: var(--secondary-bg);
+    border-right: 1px solid var(--border-color);
 }
 
-.card:hover, .task-card:hover {
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-2px);
+[data-testid="stSidebar"] button {
+    background-color: transparent !important;
+    color: var(--text-color) !important;
+    border: none !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    padding: 0.5rem 1rem !important;
+    width: 100% !important;
+    transition: background-color 0.2s ease !important;
+}
+
+[data-testid="stSidebar"] button:hover {
+    background-color: #e2e8f0 !important;
+}
+
+[data-testid="stSidebar"] button:active {
+    background-color: #cbd5e1 !important;
+}
+
+/* Evidenzia il tab selezionato (approssimazione via CSS) */
+[data-testid="stSidebar"] button p {
+    font-size: 0.95rem;
+    font-weight: 400;
+}
+
+/* Stile Card e Contenitori */
+.card, .task-card {
+    background-color: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-color);
 }
 
 /* Streamlit Override */

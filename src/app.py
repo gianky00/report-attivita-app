@@ -16,6 +16,7 @@ from components.ui_components import (
     disegna_sezione_attivita,
     render_sidebar,
 )
+from constants import ICONS
 
 # Re-export per backward compatibility (usato dai test e da __main__)
 from login_handler import handle_login_and_navigation
@@ -85,7 +86,7 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
     Gestisce l'interfaccia utente principale dopo l'autenticazione.
     Include sidebar, notifiche, navigazione tra i tab e rendering dei moduli.
     """
-    st.set_page_config(layout="wide", page_title="Gestionale", initial_sidebar_state="collapsed")
+    st.set_page_config(layout="wide", page_title="Horizon - Technical Operations Platform", page_icon="assets/icons/settings.svg", initial_sidebar_state="auto")
 
     def load_css(file_name: str) -> None:
         with open(file_name) as f:
@@ -114,6 +115,17 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
             render_debriefing_ui(knowledge_core, matricola_utente, data_rif)
     else:
         render_sidebar(matricola_utente, nome_utente_autenticato, ruolo)
+
+        # Controllo connettività dati
+        from config import check_data_connectivity
+        status = check_data_connectivity()
+        if not all(status.values()):
+            with st.sidebar:
+                st.error(f"{ICONS['WARNING']} Errore Connessione Dati")
+                for name, available in status.items():
+                    color = "green" if available else "red"
+                    st.markdown(f"- {name}: <span style='color:{color}'>{'OK' if available else 'NON DISPONIBILE'}</span>", unsafe_allow_html=True)
+                st.warning("Alcune funzionalità (Recupero Attività) potrebbero non funzionare correttamente.")
 
         st.title(st.session_state.main_tab)
         st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -188,6 +200,9 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
             from pages.storico import render_storico_tab
 
             render_storico_tab()
+        elif selected_tab == "Impostazioni":
+            from pages.impostazioni import render_impostazioni_page
+            render_impostazioni_page(matricola_utente)
         elif selected_tab == "Guida":
             render_guida_tab(ruolo)
 

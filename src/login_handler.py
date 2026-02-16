@@ -58,15 +58,18 @@ def _handle_password_login() -> None:
                 log_access_attempt(m_in, "2FA richiesta")
                 st.session_state.update({"login_state": "verify_2fa", "temp_user_for_2fa": m_in})
                 st.rerun()
-            elif res == "2FA_SETUP_REQUIRED":
-                log_access_attempt(m_in, "Setup 2FA richiesto")
+            elif res == "SUCCESS":
+                log_access_attempt(m_in, "Login riuscito (senza 2FA)")
+                token = save_session(m_in, data[1])
                 st.session_state.update(
                     {
-                        "login_state": "setup_2fa",
+                        "login_state": "logged_in",
+                        "authenticated_user": m_in,
                         "ruolo": data[1],
-                        "temp_user_for_2fa": m_in,
+                        "session_token": token,
                     }
                 )
+                st.query_params["session_token"] = token
                 st.rerun()
             elif res == "FIRST_LOGIN_SETUP":
                 _handle_first_login(m_in, data)
@@ -75,7 +78,7 @@ def _handle_password_login() -> None:
 
 
 def _handle_first_login(matricola: str, data: Any) -> None:
-    """Gestisce il primo login con creazione utente e setup 2FA."""
+    """Gestisce il primo login impostando la password e loggando l'utente (2FA opzionale)."""
     h_p = bcrypt.hashpw(data[2].encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     if not get_user_by_matricola(matricola):
         create_user(
@@ -88,13 +91,20 @@ def _handle_first_login(matricola: str, data: Any) -> None:
         )
     else:
         update_user(matricola, {"PasswordHash": h_p})
+
+    log_access_attempt(matricola, "Primo accesso: password impostata")
+
+    # Invece di forzare il setup 2FA, logghiamo direttamente
+    token = save_session(matricola, data[1])
     st.session_state.update(
         {
-            "login_state": "setup_2fa",
-            "temp_user_for_2fa": matricola,
+            "login_state": "logged_in",
+            "authenticated_user": matricola,
             "ruolo": data[1],
+            "session_token": token,
         }
     )
+    st.query_params["session_token"] = token
     st.rerun()
 
 
@@ -160,21 +170,48 @@ def _handle_2fa_verification() -> None:
 
 
 def handle_login_and_navigation() -> None:
-    """Gestisce il flusso di login e il routing dell'applicazione."""
+    """Gestisce il flusso di login e il routing dell'applicazione con persistenza sessione."""
     from app import main_app  # import locale per evitare circular import
 
     _init_session_state()
-    _try_session_recovery()
+
+    # Se non siamo loggati in session_state, proviamo a recuperare dal token URL
+    if st.session_state.login_state != "logged_in":
+        _try_session_recovery()
 
     if st.session_state.login_state == "logged_in":
         main_app(st.session_state.authenticated_user, st.session_state.ruolo)
     else:
-        st.set_page_config(layout="centered", page_title="Login")
-        st.title("Accesso Area Gestionale")
+        st.set_page_config(layout="centered", page_title="Horizon - Technical Operations Platform", page_icon="assets/icons/settings.svg")
 
-        if st.session_state.login_state == "password":
-            _handle_password_login()
-        elif st.session_state.login_state == "setup_2fa":
-            _handle_2fa_setup()
-        elif st.session_state.login_state == "verify_2fa":
-            _handle_2fa_verification()
+        # CSS Enterprise per Login
+        st.markdown("""
+            <style>
+            [data-testid="stAppViewContainer"] {
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            }
+            .stButton > button {
+                width: 100%;
+                border-radius: 8px;
+                height: 3rem;
+                background-color: #4364F7 !important;
+                font-weight: bold;
+            }
+            .stTextInput > div > div > input {
+                border-radius: 8px;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        with st.container():
+            # Header Professionale con Logo
+            st.image("assets/logo.svg", use_container_width=True)
+
+            st.markdown("<p style='text-align: center; color: #64748b; letter-spacing: 2px; margin-bottom: 2rem; font-size: 0.8rem;'>TECHNICAL OPERATIONS ACCESS</p>", unsafe_allow_html=True)
+
+            if st.session_state.login_state == "password":
+                _handle_password_login()
+            elif st.session_state.login_state == "setup_2fa":
+                _handle_2fa_setup()
+            elif st.session_state.login_state == "verify_2fa":
+                _handle_2fa_verification()

@@ -94,6 +94,8 @@ ICONS = {
 }
 
 # --- CONFIGURAZIONE ---
+APP_VERSION = "3.1.0"
+VERSION_DATE = "Febbraio 2026"
 PATH_KNOWLEDGE_CORE = "knowledge_core.json"
 REQUIRED_CONFIG_KEYS = [
     "path_storico_db",

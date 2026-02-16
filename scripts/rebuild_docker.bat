@@ -114,9 +114,21 @@ if defined FREE_MB (
 echo.
 
 REM ===================================================================
-REM  FASE 1: RILEVAMENTO DOCKER COMPOSE
+REM  FASE 1: SINCRONIZZAZIONE DATI
 REM ===================================================================
-call :PHASE "1" "Rilevamento Docker Compose"
+call :PHASE "1" "Sincronizzazione dati Excel"
+python scripts\sync_data.py
+if !errorlevel! neq 0 (
+    call :WARN "Sincronizzazione fallita. L'app potrebbe usare dati obsoleti."
+) else (
+    call :OK "Dati sincronizzati"
+)
+echo.
+
+REM ===================================================================
+REM  FASE 2: RILEVAMENTO DOCKER COMPOSE
+REM ===================================================================
+call :PHASE "2" "Rilevamento Docker Compose"
 
 set "COMPOSE_CMD="
 

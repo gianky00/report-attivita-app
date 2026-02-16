@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horizon - Sistema in Avvio</title>
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: #1e293b;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            background: white;
+            padding: 3rem;
+            border-radius: 20px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            max-width: 450px;
+            border-top: 6px solid #4364F7;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4364F7;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h1 {
+            color: #1e293b;
+            margin-bottom: 1rem;
+            font-size: 22px;
+            letter-spacing: 1px;
+        }
+        p {
+            color: #64748b;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+        .brand {
+            font-weight: 200;
+            letter-spacing: 4px;
+            color: #4364F7;
+            margin-top: 2rem;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="loader"></div>
+        <h1>Inizializzazione Horizon</h1>
+        <p>La piattaforma tecnica si sta caricando.<br>Il tunnel sicuro sarà pronto tra pochi istanti.</p>
+        <div class="brand">HORIZON PLATFORM</div>
+    </div>
+    <script>
+        // Refresh automatico ogni 10 secondi
+        setTimeout(() => { location.reload(); }, 10000);
+    </script>
+</body>
+</html>

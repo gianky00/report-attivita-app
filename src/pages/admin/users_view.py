@@ -76,7 +76,7 @@ def _render_user_card(user: Any) -> None:
             st.button(
                 "Modifica",
                 icon=ICONS["EDIT"],
-                key=f"edit_{user_matricola}",
+                key=f"btn_edit_user_{user_matricola}",
                 on_click=start_edit,
             )
 
@@ -84,7 +84,7 @@ def _render_user_card(user: Any) -> None:
         b1.button(
             "Resetta Password",
             icon=":material/key:",
-            key=f"reset_pwd_{user_matricola}",
+            key=f"btn_reset_pwd_{user_matricola}",
             on_click=lambda m=user_matricola, n=user_name: (  # type: ignore[arg-type]
                 reset_user_password(m)
                 and st.success(f"Password per {n} resettata.", icon=ICONS["CHECK"])
@@ -93,7 +93,7 @@ def _render_user_card(user: Any) -> None:
         b2.button(
             "Resetta 2FA",
             icon=":material/smartphone:",
-            key=f"reset_2fa_{user_matricola}",
+            key=f"btn_reset_2fa_{user_matricola}",
             on_click=lambda m=user_matricola, n=user_name: (  # type: ignore[arg-type]
                 reset_user_2fa(m) and st.success(f"2FA per {n} resettata.", icon=ICONS["CHECK"])
             ),

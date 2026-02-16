@@ -1,11 +1,22 @@
 services:
   app:
     build: .
-    ports:
-      - "8501:8501"
     volumes:
       - .:/app
+      - ./data_sync:/mnt/network:ro
+    environment:
+      - IS_DOCKER=true
     command: sh -c "python scripts/crea_database.py && streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0"
+
+  proxy:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/manutenzione.html:/usr/share/nginx/html/manutenzione.html:ro
+    depends_on:
+      - app
 
   ngrok:
     image: ngrok/ngrok:latest
@@ -13,6 +24,6 @@ services:
       - "4040:4040"
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-    command: http --domain opencircuit-grimily-mirta.ngrok-free.app app:8501
+    command: http --domain opencircuit-grimily-mirta.ngrok-free.app proxy:80
     depends_on:
-      - app
+      - proxy

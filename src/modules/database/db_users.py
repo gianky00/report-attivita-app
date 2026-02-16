@@ -19,10 +19,14 @@ def get_db_connection() -> sqlite3.Connection:
 
 @measure_time
 def get_all_users() -> pd.DataFrame:
-    """Carica l'intero elenco utenti registrati nel sistema."""
+    """Carica l'intero elenco utenti registrati nel sistema, rimuovendo duplicati accidentali."""
     conn = get_db_connection()
     try:
-        return pd.read_sql_query("SELECT * FROM contatti", conn)
+        df = pd.read_sql_query("SELECT * FROM contatti", conn)
+        # Rimuove duplicati per Matricola mantenendo l'ultimo record inserito
+        if not df.empty:
+            df = df.drop_duplicates(subset=["Matricola"], keep="last")
+        return df
     finally:
         conn.close()
 

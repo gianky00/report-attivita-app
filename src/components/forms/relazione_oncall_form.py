@@ -20,7 +20,6 @@ from modules.instrumentation_logic import get_technical_suggestions
 
 def render_relazione_reperibilita_ui(matricola_utente: str, nome_utente_autenticato: str) -> None:
     """Renderizza l'interfaccia per la compilazione della relazione di reperibilità settimanale."""
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Compila Relazione di Reperibilità")
 
     kb_count = get_report_knowledge_base_count()
@@ -60,7 +59,6 @@ def render_relazione_reperibilita_ui(matricola_utente: str, nome_utente_autentic
         _handle_submission(dt, text, nome_utente_autenticato, partner, t_start, t_end)
 
     _render_ai_results_ui()
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _handle_ai_correction(text: str) -> None:
@@ -136,6 +134,6 @@ def _render_ai_results_ui() -> None:
             st.rerun()
 
     if st.session_state.get("technical_suggestions"):
-        st.subheader("💡 Suggerimenti")
+        st.subheader(f"{ICONS['LIGHTBULB']} Suggerimenti")
         for s in st.session_state.technical_suggestions:
             st.info(s)

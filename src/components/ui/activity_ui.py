@@ -50,12 +50,7 @@ def disegna_sezione_attivita(
     }
     attivita_da_fare = [task for task in lista_attivita if task["pdl"] not in completed_pdls]
 
-    from modules.utils import render_svg_icon
-
-    st.markdown(
-        render_svg_icon("report", 28) + "<h2 style='display:inline;'>Attività da Compilare</h2>",
-        unsafe_allow_html=True,
-    )
+    st.subheader(":material/edit_note: Attività da Compilare")
 
     if not attivita_da_fare:
         st.success("Tutte le attività per questa sezione sono state compilate.")

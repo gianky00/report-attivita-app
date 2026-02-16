@@ -4,89 +4,100 @@ from modules.utils import render_svg_icon
 
 
 def render_guida_tab(ruolo: str) -> None:
-    """Renderizza la sezione Guida dell'applicazione con istruzioni per utenti e admin."""
+    """Renderizza la sezione Guida dell'applicazione aggiornata per Horizon."""
+    st.title("Horizon Guide")
     st.write(
-        "Benvenuto nel Gestionale. Questa guida fornisce una panoramica completa "
-        "delle funzionalità dell'applicazione, con sezioni dedicate sia ai "
-        "**Tecnici** che agli **Amministratori**."
-    )
-    st.info(
-        "Utilizza i menù a tendina sottostanti per esplorare le diverse sezioni "
-        "e scoprire come utilizzare al meglio ogni strumento a tua disposizione."
+        "Benvenuto su Horizon, la piattaforma avanzata per la gestione delle operazioni tecniche. "
+        "Questa guida fornisce istruzioni dettagliate sull'uso delle funzionalità di sicurezza, gestione dati e rendicontazione."
     )
 
-    with st.expander("Attività Assegnate", expanded=True):
+    st.info(
+        "Esplora i moduli sottostanti per comprendere come gestire il tuo profilo, rendicontare le attività "
+        "e monitorare lo stato del sistema."
+    )
+
+    # --- SEZIONE PROFILO ---
+    with st.expander("Profilo e Impostazioni", expanded=True):
         st.markdown(
-            render_svg_icon("report", 20) + "**Attività Assegnate**", unsafe_allow_html=True
+            f"{render_svg_icon('user', 24)} **Gestione Account Personale**",
+            unsafe_allow_html=True
         )
         st.markdown("""
-        Questa sezione è il fulcro del tuo lavoro quotidiano. Qui puoi
-        visualizzare e rendicontare le attività a te assegnate.
-
-        - **Attività di Oggi:** Elenco delle attività per la giornata corrente.
-        - **Recupero Attività:** Attività non rendicontate degli ultimi 30 giorni.
-        - **Attività Validate:** Archivio di sola lettura dei report approvati.
-        - **Compila Relazione:** Strumento per la stesura di relazioni dettagliate
-          con il supporto dell'IA per la correzione.
-
-        **Come compilare un report:**
-        Per ogni attività, puoi compilare un report dettagliato.
-        Se un'attività è assegnata a un team, solo i **Tecnici** possono
-        compilare il report.
+        Attraverso il menu **'Impostazioni'** nella sidebar, puoi gestire la tua identità digitale:
+        
+        - **Profilo:** Visualizza i tuoi dati anagrafici, il ruolo assegnato e la matricola.
+        - **Password:** Cambia autonomamente la tua password di accesso.
+        - **Sicurezza (2FA):** Attiva o disattiva la protezione con codice temporaneo (OTP).
         """)
 
-    with st.expander("Gestione Turni"):
-        st.markdown(render_svg_icon("calendar", 20) + "**Gestione Turni**", unsafe_allow_html=True)
+    # --- SEZIONE ATTIVITÀ ---
+    with st.expander("Attività e Rendicontazione"):
+        st.markdown(
+            f"{render_svg_icon('report', 24)} **Rendicontazione Operativa**",
+            unsafe_allow_html=True
+        )
         st.markdown("""
-        Questa sezione ti permette di gestire la tua disponibilità per i turni
-        di assistenza, straordinario e reperibilità.
+        Gestione del flusso di lavoro giornaliero con dati sincronizzati:
 
-        - **Turni:** Visualizza i turni disponibili e prenota la partecipazione.
-        - **Bacheca:** Area dove i colleghi pubblicano i turni liberi.
-        - **Sostituzioni:** Richiedi una sostituzione a un collega specifico.
-
-        **Gestione della Reperibilità:**
-        Il calendario settimanale mostra i tuoi turni di reperibilità.
-        Se non puoi coprire un turno, puoi pubblicarlo in bacheca.
+        - **Attività di Oggi:** Elenco degli interventi assegnati per la data corrente.
+        - **Recupero Attività:** Visualizza e compila report per attività degli ultimi 30 giorni.
+        - **Compila Relazione:** Supporto IA per la stesura di testi tecnici professionali.
         """)
 
-    with st.expander("Richieste"):
-        st.markdown(render_svg_icon("request", 20) + "**Richieste**", unsafe_allow_html=True)
+    # --- SEZIONE TURNI ---
+    with st.expander("Gestione Turni e Reperibilità"):
+        st.markdown(
+            f"{render_svg_icon('calendar', 24)} **Turni e Disponibilità**",
+            unsafe_allow_html=True
+        )
         st.markdown("""
-        Utilizza questa sezione per inviare richieste formali di materiali
-        o assenze.
+        Pianificazione operativa del team:
 
-        - **Richiesta Materiali:** Richiesta per materiali o attrezzature.
-        - **Richiesta Assenze:** Richieste di ferie o permessi.
-          Lo storico è visibile solo agli **Amministratori**.
+        - **Turni Assistenza:** Prenotazione per turni extra e straordinari.
+        - **Bacheca Scambi:** Gestione autonoma delle sostituzioni in reperibilità.
+        - **Reperibilità:** Calendario dinamico della rotazione ufficiale.
         """)
 
+    # --- SEZIONE RICHIESTE ---
+    with st.expander("Richieste Materiali e Assenze"):
+        st.markdown(
+            f"{render_svg_icon('request', 24)} **Modulistica Digitale**",
+            unsafe_allow_html=True
+        )
+        st.markdown("""
+        Invio richieste formali:
+        - **Materiali:** Richiesta componenti per PdL specifici.
+        - **Assenze:** Richieste di Ferie o Permessi direttamente all'amministrazione.
+        """)
+
+    # --- SEZIONE AMMINISTRAZIONE ---
     if ruolo == "Amministratore":
-        with st.expander("Amministrazione"):
+        with st.expander("Strumenti Amministrativi"):
             st.markdown(
-                render_svg_icon("settings", 20) + "**Amministrazione**", unsafe_allow_html=True
+                f"{render_svg_icon('settings', 24)} **Area Sistema e Caposquadra**",
+                unsafe_allow_html=True
             )
             st.markdown("""
-            Strumenti avanzati per la gestione del sistema e del team.
+            Funzionalità riservate:
 
-            #### Caposquadra
-            - **Performance Team:** Analizza le metriche dei tecnici.
-            - **Crea Nuovo Turno:** Crea turni di assistenza o straordinario.
-            - **Gestione Dati:** Gestione DB e sincronizzazione manuale.
-            - **Validazione Report:** Revisiona e approva i report.
-
-            #### Sistema
-            - **Gestione Account:** Crea utenti, ruoli e resetta password/2FA.
-            - **Cronologia Accessi:** Monitora i tentativi di accesso.
-            - **Gestione IA:** Strumenti per la revisione e addestramento dell'IA.
+            - **Validazione:** Approvazione finale di report e relazioni.
+            - **Gestione Dati:** Manutenzione diretta del database SQLite.
+            - **Stato Sistema:** Diagnostica dei percorsi di rete e mount Docker.
+            - **Cronologia Accessi:** Audit log dei tentativi di login.
             """)
 
-    with st.expander("Sicurezza dell'Account"):
-        st.markdown(
-            render_svg_icon("security", 20) + "**Sicurezza dell'Account**", unsafe_allow_html=True
-        )
-        st.markdown("""
-        **Verifica in Due Passaggi (2FA):**
-        Al primo accesso, configura la 2FA per la sicurezza dell'account.
-        Se perdi l'accesso, contatta un amministratore.
-        """)
+    from constants import APP_VERSION, VERSION_DATE
+    # --- SEZIONE NOVITÀ ---
+    with st.expander("Novità e Aggiornamenti", expanded=False):
+        from modules.changelog import render_changelog_ui
+        st.markdown(f"{render_svg_icon('bulletin', 24)} **Cosa c'è di nuovo**", unsafe_allow_html=True)
+        render_changelog_ui()
+
+    st.divider()
+    footer_html = f"""
+    <div style='display: flex; align-items: center; gap: 10px; color: gray;'>
+        {render_svg_icon('info', 16)} 
+        <span>Horizon Platform v{APP_VERSION} ({VERSION_DATE}) - Technical Operations Hub</span>
+    </div>
+    """
+    st.markdown(footer_html, unsafe_allow_html=True)

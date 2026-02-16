@@ -42,7 +42,24 @@ def _carica_giornaliera_mese(path: Path) -> dict[str, pd.DataFrame] | None:
 
 def _load_day_sheet(giorno: int, mese: int, anno: int) -> pd.DataFrame | None:
     """Individua e carica la scheda corrispondente a un giorno specifico."""
-    path = Path(config.PATH_GIORNALIERA_BASE) / f"Giornaliera {mese:02d}-{anno}.xlsm"
+    # Otteniamo il percorso dinamico dall'anno tramite la nuova funzione root in config
+    base_path_str = config.get_giornaliera_path(anno)
+    base_path = Path(base_path_str)
+
+    from core.logging import get_logger
+    logger = get_logger(__name__)
+
+    if not base_path.exists():
+        logger.error(f"Directory base non accessibile: {base_path}")
+        return None
+
+    path = base_path / f"Giornaliera {mese:02d}-{anno}.xlsm"
+
+    if not path.exists():
+        logger.warning(f"File Excel non trovato: {path}")
+        return None
+
+    logger.info(f"Caricamento file giornaliera: {path}")
     sheets = _carica_giornaliera_mese(path)
     if not sheets:
         return None
@@ -141,7 +158,9 @@ def trova_attivita(
 
         excluded = get_globally_excluded_activities()
         return [t for t in final if f"{t['pdl']}-{t['attivita']}" not in excluded]
-    except Exception:
+    except Exception as e:
+        from core.logging import get_logger
+        get_logger(__name__).error(f"Errore in trova_attivita ({giorno}/{mese}/{anno}): {e}")
         return []
 
 
@@ -149,6 +168,13 @@ def get_all_assigned_activities(
     matricola: str, df_contatti: pd.DataFrame, days: int = 60
 ) -> list[dict[str, Any]]:
     """Recupera tutte le attività assegnate negli ultimi N giorni."""
+    # Controllo rapido accessibilità base prima del ciclo
+    base_path = Path(config.get_giornaliera_path())
+    if not base_path.exists():
+        from core.logging import get_logger
+        get_logger(__name__).error(f"Impossibile recuperare attività: directory {base_path} non accessibile.")
+        return []
+
     all_act = []
     today = datetime.date.today()
     for i in range(days):
