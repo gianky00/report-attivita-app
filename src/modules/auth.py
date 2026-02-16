@@ -38,6 +38,15 @@ def create_user(user_data: dict[str, Any]) -> bool:
     """Crea un nuovo utente nel database."""
     # Filtra solo le chiavi valide
     filtered_data = {k: v for k, v in user_data.items() if k in VALID_USER_COLUMNS}
+
+    # Auto-populate "Nome Cognome" if missing but separate fields exist
+    if (
+        "Nome" in filtered_data
+        and "Cognome" in filtered_data
+        and "Nome Cognome" not in filtered_data
+    ):
+        filtered_data["Nome Cognome"] = f"{filtered_data['Nome']} {filtered_data['Cognome']}"
+
     if not filtered_data:
         return False
 

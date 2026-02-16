@@ -18,8 +18,8 @@ def handle_submit(
     data_riferimento: Any,
 ) -> bool:
     """Gestisce il salvataggio dei dati del report attività."""
-    if not report_text.strip():
-        st.warning("Il report non può essere vuoto.")
+    if not report_text.strip() and stato != "IN CORSO":
+        st.warning("Il report non può essere vuoto (opzionale solo se 'IN CORSO').")
         return False
 
         # Estrazione nomi del team: gestisce sia lista (Excel) che stringa (DB)
@@ -30,7 +30,7 @@ def handle_submit(
             team_string = raw_team
         else:
             team_string = ""
-        
+
         desc = task.get("attivita") or task.get("descrizione_attivita") or "N/D"
     dati = {
         "descrizione": f"PdL {task['pdl']} - {desc}",
@@ -63,14 +63,16 @@ def render_debriefing_ui(
         render_svg_icon("report", 32) + "<h1 style='display:inline;'>Compila Report</h1>",
         unsafe_allow_html=True,
     )
-    
+
     # Gestione compatibilità nomi chiavi (Excel vs Database)
     desc = task.get("attivita") or task.get("descrizione_attivita") or "Descrizione non disponibile"
     pdl = task.get("pdl", "N/D")
-    
+
     st.subheader(f"PdL `{pdl}` - {desc}")
     report_text = st.text_area(
-        "Inserisci il tuo report qui:", value=task.get("report", "") or task.get("testo_report", ""), height=200
+        "Inserisci il tuo report qui:",
+        value=task.get("report", "") or task.get("testo_report", ""),
+        height=200,
     )
 
     c_ore, c_stato = st.columns(2)

@@ -27,9 +27,16 @@ def render_richieste_tab(matricola_utente: str, ruolo: str, nome_utente_autentic
             if submitted and dettagli_richiesta.strip():
                 now_iso = datetime.datetime.now().isoformat()
                 new_id = f"MAT_{int(datetime.datetime.now().timestamp())}"
+
+                parts = nome_utente_autenticato.split(" ", 1)
+                nome = parts[0]
+                cognome = parts[1] if len(parts) > 1 else ""
+
                 new_request_data = {
                     "ID_Richiesta": new_id,
                     "Richiedente_Matricola": matricola_utente,
+                    "richiedente_nome": nome,
+                    "richiedente_cognome": cognome,
                     "Timestamp": now_iso,
                     "Stato": "Inviata",
                     "Dettagli": dettagli_richiesta,
@@ -40,6 +47,8 @@ def render_richieste_tab(matricola_utente: str, ruolo: str, nome_utente_autentic
                         "id_richiesta": new_id,
                         "richiedente_matricola": matricola_utente,
                         "nome_richiedente": nome_utente_autenticato,
+                        "richiedente_nome": nome,
+                        "richiedente_cognome": cognome,
                         "timestamp_richiesta": now_iso,
                         "dettagli_richiesta": dettagli_richiesta,
                         "timestamp_approvazione": now_iso,
@@ -94,9 +103,16 @@ def render_richieste_tab(matricola_utente: str, ruolo: str, nome_utente_autentic
                 else:
                     now_iso = datetime.datetime.now().isoformat()
                     new_id = f"ASS_{int(datetime.datetime.now().timestamp())}"
+
+                    parts = nome_utente_autenticato.split(" ", 1)
+                    nome = parts[0]
+                    cognome = parts[1] if len(parts) > 1 else ""
+
                     new_leave_request = {
                         "ID_Richiesta": new_id,
                         "Richiedente_Matricola": matricola_utente,
+                        "richiedente_nome": nome,
+                        "richiedente_cognome": cognome,
                         "Timestamp": now_iso,
                         "Tipo_Assenza": tipo_assenza,
                         "Data_Inizio": data_inizio.isoformat(),
@@ -109,6 +125,8 @@ def render_richieste_tab(matricola_utente: str, ruolo: str, nome_utente_autentic
                             "id_richiesta": new_id,
                             "richiedente_matricola": matricola_utente,
                             "nome_richiedente": nome_utente_autenticato,
+                            "richiedente_nome": nome,
+                            "richiedente_cognome": cognome,
                             "timestamp_richiesta": now_iso,
                             "tipo_assenza": tipo_assenza,
                             "data_inizio": data_inizio.isoformat(),

@@ -41,8 +41,8 @@ def scrivi_o_aggiorna_risposta(
             "descrizione_attivita": dati_da_scrivere["descrizione"],
             "matricola_tecnico": matricola,
             "nome_tecnico": nome_completo,  # Mantenuto per compatibilità
-            "nome": nome,
-            "cognome": cognome,
+            "tecnico_nome": nome,
+            "tecnico_cognome": cognome,
             "team": dati_da_scrivere.get("team_completo", ""),
             "ore_lavoro": float(dati_da_scrivere.get("ore", 0.0)),
             "stato_attivita": dati_da_scrivere["stato"],

@@ -16,6 +16,8 @@ VALID_HISTORY_TABLES = {"relazioni", "report_interventi"}
 VALID_USER_COLUMNS = {
     "Matricola",
     "Nome Cognome",
+    "Nome",
+    "Cognome",
     "Ruolo",
     "PasswordHash",
     "2FA_Secret",

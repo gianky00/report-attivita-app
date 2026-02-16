@@ -23,7 +23,8 @@ def _render_user_edit_form(user_to_edit: Any) -> None:
     """Sotto-funzione per il form di modifica utente."""
     with st.form(key="edit_user_form"):
         st.subheader(f"Modifica Utente: {user_to_edit['Nome Cognome']}")
-        new_nome_cognome = st.text_input("Nome Cognome", value=user_to_edit["Nome Cognome"])
+        new_nome = st.text_input("Nome", value=user_to_edit.get("Nome", ""))
+        new_cognome = st.text_input("Cognome", value=user_to_edit.get("Cognome", ""))
         new_matricola = st.text_input("Matricola", value=user_to_edit["Matricola"])
         ruoli_disponibili = ["Tecnico", "Aiutante", "Amministratore"]
         try:
@@ -35,7 +36,9 @@ def _render_user_edit_form(user_to_edit: Any) -> None:
         col1, col2 = st.columns(2)
         if col1.form_submit_button("Salva Modifiche", type="primary", icon=ICONS["SAVE"]):
             update_data = {
-                "Nome Cognome": new_nome_cognome,
+                "Nome": new_nome,
+                "Cognome": new_cognome,
+                "Nome Cognome": f"{new_nome} {new_cognome}",
                 "Matricola": new_matricola,
                 "Ruolo": new_role,
             }
@@ -72,6 +75,8 @@ def _render_user_card(user: Any) -> None:
             st.markdown(
                 f"**{user_name}** (`{user_matricola}`) - *{user['Ruolo']}* - Stato: **{status}**"
             )
+            # Debug/Verify
+            # st.caption(f"Nome: {user.get('Nome')} | Cognome: {user.get('Cognome')}")
         with col2:
             st.button(
                 "Modifica",
@@ -157,6 +162,8 @@ def _render_new_user_expander(df_contatti: pd.DataFrame) -> None:
                         nome_completo = f"{new_nome.strip()} {new_cognome.strip()}"
                         new_user_data = {
                             "Matricola": new_matricola,
+                            "Nome": new_nome.strip(),
+                            "Cognome": new_cognome.strip(),
                             "Nome Cognome": nome_completo,
                             "Ruolo": new_ruolo,
                             "PasswordHash": None,
