@@ -101,7 +101,22 @@ def _collect_team_info(
             if member not in collezionate[key]["team"]:
                 role = _get_member_role(member, df_contatti)
                 collezionate[key]["team"][member] = {"ruolo": role, "orari": set()}
+            
+            # Calcolo ore per questo membro
+            try:
+                ora_in = str(r[10]).replace('.', ':')
+                ora_out = str(r[11]).replace('.', ':')
+                fmt = "%H:%M"
+                t1 = datetime.datetime.strptime(ora_in, fmt)
+                t2 = datetime.datetime.strptime(ora_out, fmt)
+                delta = t2 - t1
+                ore_membro = delta.total_seconds() / 3600.0
+            except Exception:
+                ore_membro = 0.0
+
             collezionate[key]["team"][member]["orari"].add(f"{r[10]}-{r[11]}")
+            # Sommiamo le ore totali per l'attività (totale ore-uomo)
+            collezionate[key]["ore_totali"] = collezionate[key].get("ore_totali", 0.0) + ore_membro
     return collezionate
 
 
@@ -155,6 +170,7 @@ def trova_attivita(
                 {"nome": k, "ruolo": t["ruolo"], "orari": sorted(t["orari"])}
                 for k, t in v["team"].items()
             ]
+            v["ore_lavoro"] = v.get("ore_totali", 0.0)
             final.append(v)
 
         excluded = get_excluded_activities_for_user(matricola)

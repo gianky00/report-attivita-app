@@ -13,7 +13,6 @@ from modules.data_manager import scrivi_o_aggiorna_risposta
 def handle_submit(
     report_text: str,
     stato: str,
-    ore: float,
     task: dict[str, Any],
     matricola_utente: str,
     data_riferimento: Any,
@@ -31,7 +30,7 @@ def handle_submit(
         "descrizione": f"PdL {task['pdl']} - {task['attivita']}",
         "report": report_text,
         "stato": stato,
-        "ore": str(ore),
+        "ore": str(task.get("ore_lavoro", 0.0)),
         "team_completo": team_string,
     }
 
@@ -64,7 +63,7 @@ def render_debriefing_ui(
     )
 
     c_ore, c_stato = st.columns(2)
-    ore = c_ore.number_input("Ore Lavoro", min_value=0.5, max_value=12.0, value=2.0, step=0.5)
+    c_ore.markdown(f"**Ore Lavoro (Auto):** {task.get('ore_lavoro', 0.0)}")
 
     opts = STATI_ATTIVITA
     current = task.get("stato")
@@ -73,7 +72,7 @@ def render_debriefing_ui(
 
     c1, c2 = st.columns(2)
     if c1.button("Invia Report", type="primary") and handle_submit(
-        report_text, stato, ore, task, matricola_utente, data_riferimento
+        report_text, stato, task, matricola_utente, data_riferimento
     ):
         st.rerun()
     if c2.button("Annulla"):
