@@ -64,3 +64,4 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
+        args: ["--ignore-words-list", "ned,ND,nd,ser,dati,attivita,richieste,ore,turni,storico,sur,fo,te,ist,alle,allo,classe,compilate,fase,impossibile,momento,nome,separato,sigle,stati,vai,validata,valide,visibile,limite,comando,amministrative,possibile,sensibile,ignora,accessibile,commando,registrate,rende"]

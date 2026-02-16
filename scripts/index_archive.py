@@ -15,7 +15,8 @@ DB_PATH = Path(__file__).parent.parent / "schedario.db"
 
 def index_archive():
     """Scansiona la cartella e popola il database con i metadati dei file."""
-    if not os.path.exists(ARCHIVE_ROOT):
+    archive_path = Path(ARCHIVE_ROOT)
+    if not archive_path.exists():
         print(f"ERRORE: Il percorso {ARCHIVE_ROOT} non esiste.")
         return
 
@@ -36,7 +37,7 @@ def index_archive():
             if file.endswith((".xls", ".xlsx", ".xlsm")) and not file.startswith("~$"):
                 full_path = os.path.join(root, file)
                 try:
-                    stats = os.stat(full_path)
+                    stats = Path(full_path).stat()
                     last_mod = datetime.fromtimestamp(stats.st_mtime).isoformat()
 
                     # Tentativo di estrarre anno e mese dal percorso
@@ -51,7 +52,7 @@ def index_archive():
                             year = part
                         if " - " in part and any(
                             m in part.upper()
-                            for m in [
+                            for m in (
                                 "GENNAIO",
                                 "FEBBRAIO",
                                 "MARZO",
@@ -64,7 +65,7 @@ def index_archive():
                                 "OTTOBRE",
                                 "NOVEMBRE",
                                 "DICEMBRE",
-                            ]
+                            )
                         ):
                             month = part
 

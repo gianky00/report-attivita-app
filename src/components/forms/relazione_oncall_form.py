@@ -65,6 +65,7 @@ def _handle_ai_correction(text: str) -> None:
     if not text.strip():
         st.warning("Scrivi il testo.")
         return
+
     with st.spinner("L'IA sta analizzando..."):
         res = revisiona_con_ia(text)
         if res.get("success"):
@@ -95,11 +96,11 @@ def _handle_submission(
 
     # Divisione Nome e Cognome Compilatore
     parts = user.split(maxsplit=1)
-    nome = parts[0] if len(parts) > 0 else ""
+    nome = parts[0] if parts else ""
     cognome = parts[1] if len(parts) > 1 else ""
 
     # Team: Compilatore + Partner
-    team_string = f"{user}" + (f", {partner}" if partner != "Nessuno" else "")
+    team_string = user + (f", {partner}" if partner != "Nessuno" else "")
 
     # Calcolo approssimativo ore (se orari validi)
     ore_effettive = 0.0

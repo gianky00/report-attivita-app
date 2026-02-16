@@ -1,5 +1,4 @@
 import datetime
-import os
 import shutil
 from pathlib import Path
 
@@ -14,20 +13,21 @@ def sync():
     print(f"Server Rete: {NETWORK_ROOT}")
     print(f"Cartella Locale: {LOCAL_SYNC_DIR}")
 
-    if not os.path.exists(NETWORK_ROOT):
+    network_path = Path(NETWORK_ROOT)
+    if not network_path.exists():
         print(f"CRITICO: Il server di rete {NETWORK_ROOT} non e' raggiungibile da questo PC.")
         return False
 
-    os.makedirs(LOCAL_SYNC_DIR, exist_ok=True)
+    LOCAL_SYNC_DIR.mkdir(parents=True, exist_ok=True)
 
     # Percorso specifico richiesto dall'utente
-    net_giornaliere = Path(NETWORK_ROOT) / "Giornaliere" / f"Giornaliere {CURRENT_YEAR}"
+    net_giornaliere = network_path / "Giornaliere" / f"Giornaliere {CURRENT_YEAR}"
     loc_giornaliere = LOCAL_SYNC_DIR / "Giornaliere" / f"Giornaliere {CURRENT_YEAR}"
 
     print(f"Controllo sorgente: {net_giornaliere}")
 
     if net_giornaliere.exists():
-        os.makedirs(loc_giornaliere, exist_ok=True)
+        loc_giornaliere.mkdir(parents=True, exist_ok=True)
         files = list(net_giornaliere.glob("*.xlsm"))
         print(f"Trovati {len(files)} file Excel.")
 
@@ -47,11 +47,11 @@ def sync():
 
     # Altri file critici
     print("Sincronizzazione file radice...")
-    for f in ["Database_Report_Attivita.xlsm", "ATTIVITA_PROGRAMMATE.xlsm"]:
+    for f in ("Database_Report_Attivita.xlsm", "ATTIVITA_PROGRAMMATE.xlsm"):
         # Cerchiamo in piu' posti comuni sul server
         paths = [
-            Path(NETWORK_ROOT) / "cartella strumentale condivisa" / "ALLEGRETTI" / f,
-            Path(NETWORK_ROOT) / f,
+            network_path / "cartella strumentale condivisa" / "ALLEGRETTI" / f,
+            network_path / f,
         ]
         for p in paths:
             if p.exists():

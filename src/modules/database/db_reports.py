@@ -77,7 +77,7 @@ def process_and_commit_validated_reports(reports: list[dict[str, Any]]) -> bool:
                 cols_n = ", ".join(f'"{k}"' for k in notifica)
                 placeholders_n = ", ".join("?" for _ in notifica)
                 conn.execute(
-                    f"INSERT INTO notifiche ({cols_n}) VALUES ({placeholders_n})",
+                    f"INSERT INTO notifiche ({cols_n}) VALUES ({placeholders_n})",  # nosec B608
                     tuple(notifica.values()),
                 )
         return True

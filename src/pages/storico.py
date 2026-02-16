@@ -103,7 +103,6 @@ def render_storico_tab() -> None:
                 )
 
                 t_comp = row.get("tecnico_compilatore", "N/D")
-                t_part = row.get("partner", "N/D")
                 pdl_rel = row.get("pdl", "N/D")
                 expander_title = (
                     f"**{data_intervento_str}** - PdL: **{pdl_rel}** - Tecnico: **{t_comp}**"
