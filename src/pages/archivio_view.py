@@ -36,12 +36,10 @@ def render_archivio_page():
     
     # Statistiche in alto con design Horizon (più compatto)
     stats = get_archive_stats()
-    s1, s2, s3 = st.columns(3)
+    s1, s2 = st.columns(2)
     with s1:
-        st.markdown(f"<div style='text-align: center;'><small>TOTALE</small><br><b style='font-size: 1.1rem;'>{stats['total_files']:,}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center;'><small>TOTALE SCHEDE</small><br><b style='font-size: 1.1rem;'>{stats['total_files']:,}</b></div>", unsafe_allow_html=True)
     with s2:
-        st.markdown(f"<div style='text-align: center;'><small>ANNI</small><br><b style='font-size: 1.1rem;'>{stats['year_range']}</b></div>", unsafe_allow_html=True)
-    with s3:
         st.markdown(f"<div style='text-align: center;'><small>STATO</small><br><b style='font-size: 1.1rem; color: #059669;'>● ONLINE</b></div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
