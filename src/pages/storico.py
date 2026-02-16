@@ -8,17 +8,19 @@ from modules.db_manager import (
     get_validated_intervention_reports,
     get_validated_reports,
 )
+from pages.archivio_view import render_archivio_page
 
 
 def render_storico_tab() -> None:
     """
-    Renderizza la sezione "Storico" con le sottoschede per le attività
-    e le relazioni validate.
+    Renderizza la sezione "Storico" con le sottoschede per le attività,
+    le relazioni validate e le schede tecniche.
     """
-    tab1, tab2, tab3, tab4 = st.tabs(
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
         [
             f"{ICONS['STORICO']} Attività",
             f"{ICONS['RELATION']} Relazioni",
+            f"{ICONS['ARCHIVIO']} Schede",
             f"{ICONS['MATERIAL']} Materiali",
             f"{ICONS['LEAVE']} Assenze",
         ]
@@ -123,6 +125,9 @@ def render_storico_tab() -> None:
             st.success("Non ci sono relazioni validate nell'archivio.")
 
     with tab3:
+        render_archivio_page()
+
+    with tab4:
         st.subheader("Archivio Richieste Materiali Approvate")
         df_materiali = get_storico_richieste_materiali()
         if not df_materiali.empty:
@@ -142,7 +147,7 @@ def render_storico_tab() -> None:
         else:
             st.success("Nessuna richiesta di materiali nello storico.")
 
-    with tab4:
+    with tab5:
         st.subheader("Archivio Richieste Assenze Approvate")
         df_assenze = get_storico_richieste_assenze()
         if not df_assenze.empty:

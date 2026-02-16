@@ -32,26 +32,26 @@ def render_archivio_page():
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("📂 Archivio Tecnico")
-    st.markdown("Consulta rapidamente lo storico delle schede di manutenzione elaborate.")
+    st.subheader("Archivio Storico Schede")
     
     # Statistiche in alto con design Horizon (più compatto)
     stats = get_archive_stats()
     s1, s2, s3 = st.columns(3)
     with s1:
-        st.markdown(f"<div style='text-align: center;'><small>TOTALE SCHEDE</small><br><b style='font-size: 1.2rem;'>{stats['total_files']:,}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center;'><small>TOTALE</small><br><b style='font-size: 1.1rem;'>{stats['total_files']:,}</b></div>", unsafe_allow_html=True)
     with s2:
-        st.markdown(f"<div style='text-align: center;'><small>PERIODO</small><br><b style='font-size: 1.2rem;'>{stats['year_range']}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center;'><small>ANNI</small><br><b style='font-size: 1.1rem;'>{stats['year_range']}</b></div>", unsafe_allow_html=True)
     with s3:
-        st.markdown(f"<div style='text-align: center;'><small>STATO</small><br><b style='font-size: 1.2rem; color: #059669;'>● ONLINE</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center;'><small>STATO</small><br><b style='font-size: 1.1rem; color: #059669;'>● ONLINE</b></div>", unsafe_allow_html=True)
 
-    st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # Ricerca con icona integrata
     search_query = st.text_input(
         "🔍 Cerca per Tag o nome file", 
-        placeholder="Es: PT-101, 01F015, 2024...",
-        help="Inserisci almeno 2 caratteri per iniziare la ricerca"
+        placeholder="Es: PT-101, 01F015...",
+        help="Inserisci almeno 2 caratteri per iniziare la ricerca",
+        key="archive_search_input"
     )
 
     if len(search_query) >= 2:
@@ -69,7 +69,7 @@ def render_archivio_page():
                 except Exception:
                     display_date = row['last_modified']
 
-                # Estrazione Tag (parte iniziale del nome file prima dello spazio o parentesi)
+                # Estrazione Tag
                 fname = row['filename']
                 tag_part = fname.split(' ')[0].split('(')[0].replace('.xls', '').replace('.xlsm', '')
 

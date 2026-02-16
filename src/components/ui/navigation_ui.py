@@ -83,9 +83,6 @@ def _render_nav_buttons() -> None:
     if st.button("Storico", icon=ICONS["STORICO"], use_container_width=True, key="nav_history"):
         st.session_state.main_tab = "Storico"
         st.rerun()
-    if st.button("Archivio Tecnico", icon=ICONS["ARCHIVIO"], use_container_width=True, key="nav_archive"):
-        st.session_state.main_tab = "Archivio Tecnico"
-        st.rerun()
     st.divider()
     if st.button("Gestione Turni", icon=ICONS["TURNI"], use_container_width=True, key="nav_shifts"):
         st.session_state.main_tab = "Gestione Turni"

@@ -201,8 +201,6 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
             from pages.storico import render_storico_tab
 
             render_storico_tab()
-        elif selected_tab == "Archivio Tecnico":
-            render_archivio_page()
         elif selected_tab == "Impostazioni":
             from pages.impostazioni import render_impostazioni_page
             render_impostazioni_page(matricola_utente)
