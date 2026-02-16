@@ -22,12 +22,16 @@ def handle_submit(
         st.warning("Il report non può essere vuoto.")
         return False
 
-    # Estrazione nomi del team in una stringa separata da virgole
-    team_members = [m["nome"] for m in task.get("team", [])]
-    team_string = ", ".join(team_members)
-    
-    desc = task.get("attivita") or task.get("descrizione_attivita") or "N/D"
-
+        # Estrazione nomi del team: gestisce sia lista (Excel) che stringa (DB)
+        raw_team = task.get("team")
+        if isinstance(raw_team, list):
+            team_string = ", ".join([m["nome"] for m in raw_team])
+        elif isinstance(raw_team, str):
+            team_string = raw_team
+        else:
+            team_string = ""
+        
+        desc = task.get("attivita") or task.get("descrizione_attivita") or "N/D"
     dati = {
         "descrizione": f"PdL {task['pdl']} - {desc}",
         "report": report_text,
