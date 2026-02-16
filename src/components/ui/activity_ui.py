@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from modules.db_manager import get_unvalidated_reports_by_technician
+from modules.db_manager import add_assignment_exclusion, get_unvalidated_reports_by_technician
 from modules.utils import merge_time_slots
 
 
@@ -85,15 +85,34 @@ def _render_attivita_card(
                 "\N{INFORMATION SOURCE}\ufe0f Solo i tecnici possono compilare il report per attività di team."
             )
         else:
-            if st.button(
-                "Compila Report",
-                icon=":material/edit:",
-                key=f"manual_{section_key}_{idx}",
-                type="primary",
-            ):
-                st.session_state.debriefing_task = task | {"section_key": section_key}
-                st.session_state.report_mode = "manual"
-                st.rerun()
+            col_b1, col_b2 = st.columns([1, 1])
+            with col_b1:
+                if st.button(
+                    "Compila Report",
+                    icon=":material/edit:",
+                    key=f"manual_{section_key}_{idx}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    st.session_state.debriefing_task = task | {"section_key": section_key}
+                    st.session_state.report_mode = "manual"
+                    st.rerun()
+
+            with col_b2:
+                if st.button(
+                    "Escludi",
+                    icon=":material/block:",
+                    key=f"exclude_{section_key}_{idx}",
+                    use_container_width=True,
+                    help="Nascondi questa attività per sempre.",
+                ):
+                    matricola = st.session_state.get("authenticated_user", "")
+                    id_attivita = f"{task['pdl']}-{task['attivita']}"
+                    if add_assignment_exclusion(matricola, id_attivita):
+                        st.toast(f"Attività {task['pdl']} esclusa correttamente.")
+                        st.rerun()
+                    else:
+                        st.error("Errore durante l'esclusione.")
 
 
 def _render_team_info(team: list[dict[str, Any]]) -> None:

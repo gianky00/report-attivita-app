@@ -37,6 +37,13 @@ def get_globally_excluded_activities() -> list[str]:
     return [row["id_attivita"] for row in rows]
 
 
+def get_excluded_activities_for_user(matricola: str) -> list[str]:
+    """Recupera l'elenco delle attività escluse da un utente specifico."""
+    query = "SELECT id_attivita FROM esclusioni_assegnamenti WHERE matricola_escludente = ?"
+    rows = DatabaseEngine.fetch_all(query, (matricola,))
+    return [row["id_attivita"] for row in rows]
+
+
 def get_notifications_for_user(utente: str) -> list[dict[str, Any]]:
     """Recupera la cronologia delle notifiche per un determinato utente."""
     query = "SELECT * FROM notifiche WHERE Destinatario_Matricola = ? ORDER BY Timestamp DESC"

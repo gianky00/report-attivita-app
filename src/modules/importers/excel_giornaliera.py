@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 
 import config
-from modules.db_manager import get_globally_excluded_activities
+from modules.db_manager import get_excluded_activities_for_user
 
 
 def _match_partial_name(partial_name: str, full_name: str) -> bool:
@@ -157,7 +157,7 @@ def trova_attivita(
             ]
             final.append(v)
 
-        excluded = get_globally_excluded_activities()
+        excluded = get_excluded_activities_for_user(matricola)
         return [t for t in final if f"{t['pdl']}-{t['attivita']}" not in excluded]
     except Exception as e:
         from core.logging import get_logger

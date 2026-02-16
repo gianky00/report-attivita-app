@@ -5,6 +5,7 @@ Gestisce il flusso di validazione e la persistenza dei report finali.
 
 import datetime
 import sqlite3
+import uuid
 from typing import Any
 
 import pandas as pd
@@ -55,6 +56,29 @@ def process_and_commit_validated_reports(reports: list[dict[str, Any]]) -> bool:
                 conn.execute(
                     "DELETE FROM report_da_validare WHERE id_report = ?",
                     (r["id_report"],),
+                )
+
+                # --- AGGIUNTA NOTIFICA PER IL TECNICO ---
+                pdl = r.get("pdl", "N/D")
+                data_rif_raw = r.get("data_riferimento_attivita", "")
+                try:
+                    data_rif = datetime.datetime.fromisoformat(data_rif_raw).strftime("%d/%m/%Y")
+                except Exception:
+                    data_rif = data_rif_raw
+
+                notifica = {
+                    "ID_Notifica": str(uuid.uuid4()),
+                    "Timestamp": now,
+                    "Destinatario_Matricola": r.get("matricola_tecnico"),
+                    "Messaggio": f"✅ Il tuo report per il PdL {pdl} del {data_rif} è stato validato.",
+                    "Stato": "non letta",
+                    "Link_Azione": "/?tab=Storico",  # Porta l'utente allo storico per vedere il report validato
+                }
+                cols_n = ", ".join(f'"{k}"' for k in notifica)
+                placeholders_n = ", ".join("?" for _ in notifica)
+                conn.execute(
+                    f"INSERT INTO notifiche ({cols_n}) VALUES ({placeholders_n})",
+                    tuple(notifica.values()),
                 )
         return True
     except sqlite3.Error as e:
