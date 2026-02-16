@@ -25,9 +25,11 @@ def handle_submit(
     # Estrazione nomi del team in una stringa separata da virgole
     team_members = [m["nome"] for m in task.get("team", [])]
     team_string = ", ".join(team_members)
+    
+    desc = task.get("attivita") or task.get("descrizione_attivita") or "N/D"
 
     dati = {
-        "descrizione": f"PdL {task['pdl']} - {task['attivita']}",
+        "descrizione": f"PdL {task['pdl']} - {desc}",
         "report": report_text,
         "stato": stato,
         "ore": str(task.get("ore_lavoro", 0.0)),
@@ -57,16 +59,23 @@ def render_debriefing_ui(
         render_svg_icon("report", 32) + "<h1 style='display:inline;'>Compila Report</h1>",
         unsafe_allow_html=True,
     )
-    st.subheader(f"PdL `{task['pdl']}` - {task['attivita']}")
+    
+    # Gestione compatibilità nomi chiavi (Excel vs Database)
+    desc = task.get("attivita") or task.get("descrizione_attivita") or "Descrizione non disponibile"
+    pdl = task.get("pdl", "N/D")
+    
+    st.subheader(f"PdL `{pdl}` - {desc}")
     report_text = st.text_area(
-        "Inserisci il tuo report qui:", value=task.get("report", ""), height=200
+        "Inserisci il tuo report qui:", value=task.get("report", "") or task.get("testo_report", ""), height=200
     )
 
     c_ore, c_stato = st.columns(2)
-    c_ore.markdown(f"**Ore Lavoro (Auto):** {task.get('ore_lavoro', 0.0)}")
+    # Gestione ore (possono venire da 'ore_lavoro' di Excel o 'ore_lavoro' del DB)
+    ore_val = task.get("ore_lavoro", 0.0)
+    c_ore.markdown(f"**Ore Lavoro (Auto):** {ore_val}")
 
     opts = STATI_ATTIVITA
-    current = task.get("stato")
+    current = task.get("stato") or task.get("stato_attivita")
     idx = opts.index(current) if current in opts else 0
     stato = c_stato.selectbox("Stato Finale", opts, index=idx, key="manual_stato")
 
