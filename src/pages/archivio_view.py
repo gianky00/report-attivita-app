@@ -39,10 +39,17 @@ def render_archivio_page():
                 with st.expander(f"📄 {row['filename']} ({row['month']} {row['year']})"):
                     # Verifica esistenza file fisica
                     file_path = row['full_path']
-                    # Patch per Docker: se il percorso inizia con D:\ ma siamo in Linux, non lo troverà mai.
-                    # Ma qui l'utente è su Win32 e l'app gira su Win32 (ngrok punta al locale).
                     
-                    st.markdown(f"**Percorso completo:** `{file_path}`")
+                    # Gestione Path per Docker
+                    if os.environ.get("IS_DOCKER") == "true":
+                        # Mappatura hardcoded basata su docker-compose.yml
+                        windows_prefix = r"D:\PC ALLEGRETTI COEMI\STORICO SCHEDE\Archivio Schede Elaborate"
+                        docker_prefix = "/mnt/archivio_storico"
+                        
+                        if windows_prefix in file_path:
+                            file_path = file_path.replace(windows_prefix, docker_prefix).replace("\\", "/")
+                    
+                    st.markdown(f"**Percorso:** `{file_path}`")
                     st.markdown(f"**Ultima Modifica:** {display_date}")
                     
                     # Debug info se il file non viene trovato
