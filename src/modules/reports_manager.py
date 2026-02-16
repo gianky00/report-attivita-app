@@ -27,6 +27,11 @@ def scrivi_o_aggiorna_risposta(
             return False
         nome_completo = user_result[0]
 
+        # Divisione Nome e Cognome
+        parts = nome_completo.split(maxsplit=1)
+        nome = parts[0] if len(parts) > 0 else ""
+        cognome = parts[1] if len(parts) > 1 else ""
+
         pdl_match = re.search(r"PdL (\d{6}/[CS]|\d{6})", dati_da_scrivere["descrizione"])
         pdl = pdl_match.group(1) if pdl_match else "N/D"
 
@@ -35,7 +40,11 @@ def scrivi_o_aggiorna_risposta(
             "pdl": pdl,
             "descrizione_attivita": dati_da_scrivere["descrizione"],
             "matricola_tecnico": matricola,
-            "nome_tecnico": nome_completo,
+            "nome_tecnico": nome_completo,  # Mantenuto per compatibilità
+            "nome": nome,
+            "cognome": cognome,
+            "team": dati_da_scrivere.get("team_completo", ""),
+            "ore_lavoro": float(dati_da_scrivere.get("ore", 0.0)),
             "stato_attivita": dati_da_scrivere["stato"],
             "testo_report": dati_da_scrivere["report"],
             "data_compilazione": timestamp_compilazione.isoformat(),

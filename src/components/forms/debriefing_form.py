@@ -11,17 +11,28 @@ from modules.data_manager import scrivi_o_aggiorna_risposta
 
 
 def handle_submit(
-    report_text: str, stato: str, task: dict[str, Any], matricola_utente: str, data_riferimento: Any
+    report_text: str,
+    stato: str,
+    ore: float,
+    task: dict[str, Any],
+    matricola_utente: str,
+    data_riferimento: Any,
 ) -> bool:
     """Gestisce il salvataggio dei dati del report attività."""
     if not report_text.strip():
         st.warning("Il report non può essere vuoto.")
         return False
 
+    # Estrazione nomi del team in una stringa separata da virgole
+    team_members = [m["nome"] for m in task.get("team", [])]
+    team_string = ", ".join(team_members)
+
     dati = {
         "descrizione": f"PdL {task['pdl']} - {task['attivita']}",
         "report": report_text,
         "stato": stato,
+        "ore": str(ore),
+        "team_completo": team_string,
     }
 
     if scrivi_o_aggiorna_risposta(dati, matricola_utente, data_riferimento):
@@ -52,14 +63,17 @@ def render_debriefing_ui(
         "Inserisci il tuo report qui:", value=task.get("report", ""), height=200
     )
 
+    c_ore, c_stato = st.columns(2)
+    ore = c_ore.number_input("Ore Lavoro", min_value=0.5, max_value=12.0, value=2.0, step=0.5)
+
     opts = STATI_ATTIVITA
     current = task.get("stato")
     idx = opts.index(current) if current in opts else 0
-    stato = st.selectbox("Stato Finale", opts, index=idx, key="manual_stato")
+    stato = c_stato.selectbox("Stato Finale", opts, index=idx, key="manual_stato")
 
     c1, c2 = st.columns(2)
     if c1.button("Invia Report", type="primary") and handle_submit(
-        report_text, stato, task, matricola_utente, data_riferimento
+        report_text, stato, ore, task, matricola_utente, data_riferimento
     ):
         st.rerun()
     if c2.button("Annulla"):

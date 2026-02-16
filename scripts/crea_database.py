@@ -168,6 +168,7 @@ def crea_tabelle_se_non_esistono():
             )""",
             "relazioni": """(
                 id_relazione TEXT PRIMARY KEY NOT NULL,
+                pdl TEXT,
                 data_intervento TEXT,
                 tecnico_compilatore TEXT,
                 partner TEXT,

@@ -39,7 +39,8 @@ def render_relazione_reperibilita_ui(matricola_utente: str, nome_utente_autentic
         c1.text_input("Tecnico", value=nome_utente_autenticato, disabled=True)
         partner = c2.selectbox("Partner", ["Nessuno", *sorted(partners)])
 
-        c3, c4, c5 = st.columns(3)
+        c_pdl, c3, c4, c5 = st.columns([1.5, 1, 1, 1])
+        pdl = c_pdl.text_input("Codice PdL*", placeholder="Es: 567890/C")
         dt = c3.date_input("Data*")
         t_start = c4.text_input("Ora Inizio")
         t_end = c5.text_input("Ora Fine")
@@ -56,9 +57,7 @@ def render_relazione_reperibilita_ui(matricola_utente: str, nome_utente_autentic
     if do_sugg:
         _handle_suggestions(text)
     if do_save:
-        _handle_submission(dt, text, nome_utente_autenticato, partner, t_start, t_end)
-
-    _render_ai_results_ui()
+        _handle_submission(dt, text, nome_utente_autenticato, partner, t_start, t_end, pdl)
 
 
 def _handle_ai_correction(text: str) -> None:
@@ -87,21 +86,46 @@ def _handle_suggestions(text: str) -> None:
 
 
 def _handle_submission(
-    dt: Any, text: str, user: str, partner: str, t_start: str, t_end: str
+    dt: Any, text: str, user: str, partner: str, t_start: str, t_end: str, pdl: str
 ) -> None:
     """Invia la relazione definitiva, salvandola nel DB e inviando l'email."""
-    if not dt or not text.strip():
-        st.error("Dati mancanti.")
+    if not dt or not text.strip() or not pdl.strip():
+        st.error("Dati obbligatori mancanti (PdL, Data e Testo sono necessari).")
         return
+
+    # Divisione Nome e Cognome Compilatore
+    parts = user.split(maxsplit=1)
+    nome = parts[0] if len(parts) > 0 else ""
+    cognome = parts[1] if len(parts) > 1 else ""
+
+    # Team: Compilatore + Partner
+    team_string = f"{user}" + (f", {partner}" if partner != "Nessuno" else "")
+
+    # Calcolo approssimativo ore (se orari validi)
+    ore_effettive = 0.0
+    try:
+        if t_start and t_end:
+            fmt = "%H:%M"
+            t1 = datetime.datetime.strptime(t_start.replace(".", ":"), fmt)
+            t2 = datetime.datetime.strptime(t_end.replace(".", ":"), fmt)
+            delta = t2 - t1
+            ore_effettive = max(0.5, delta.total_seconds() / 3600.0)
+    except Exception:
+        ore_effettive = 2.0  # Fallback standard reperibilità
 
     pid = f"REL_{int(datetime.datetime.now().timestamp())}"
     data = {
         "id_relazione": pid,
+        "pdl": pdl.strip().upper(),
         "data_intervento": dt.isoformat(),
         "tecnico_compilatore": user,
+        "nome_compilatore": nome,
+        "cognome_compilatore": cognome,
         "partner": partner if partner != "Nessuno" else None,
+        "team": team_string,
         "ora_inizio": t_start,
         "ora_fine": t_end,
+        "ore_lavoro": ore_effettive,
         "corpo_relazione": text,
         "stato": "Inviata",
         "timestamp_invio": datetime.datetime.now().isoformat(),
@@ -109,17 +133,17 @@ def _handle_submission(
 
     if salva_relazione(data):
         st.success("Inviata!")
-        _send_relazione_email(dt, user, partner, text)
+        _send_relazione_email(dt, user, partner, text, pdl)
         st.session_state.relazione_testo = ""
         st.rerun()
 
 
-def _send_relazione_email(dt: Any, user: str, partner: str, text: str) -> None:
+def _send_relazione_email(dt: Any, user: str, partner: str, text: str, pdl: str) -> None:
     """Invia la notifica email automatica della nuova relazione via Outlook."""
     p_txt = f" con {partner}" if partner != "Nessuno" else ""
     d_str = dt.strftime("%d/%m/%Y")
-    subj = f"Relazione Reperibilità {d_str} - {user}"
-    body = f"<html><body><h3>Relazione</h3><p><b>Data:</b> {d_str}</p><p><b>Tecnico:</b> {user}{p_txt}</p><hr><p>{text.replace(chr(10), '<br>')}</p></body></html>"
+    subj = f"Relazione Reperibilità {d_str} - PdL {pdl} - {user}"
+    body = f"<html><body><h3>Relazione di Reperibilità</h3><p><b>Data:</b> {d_str}</p><p><b>PdL:</b> {pdl}</p><p><b>Tecnico:</b> {user}{p_txt}</p><hr><p>{text.replace(chr(10), '<br>')}</p></body></html>"
     invia_email_con_outlook_async(subj, body)
 
 
