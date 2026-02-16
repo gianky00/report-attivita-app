@@ -4,25 +4,25 @@ FROM python:3.11-slim
 # Imposta la directory di lavoro nel container
 WORKDIR /app
 
-# Copia il file delle dipendenze e installale
-# Questo passaggio viene eseguito separatamente per sfruttare la cache di Docker
+# Copia il file delle dipendenze
 COPY requirements.txt .
 
-# Installa le dipendenze, ignorando l'errore se pywin32 non è disponibile
-# RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt || (grep -v "pywin32" requirements.txt > requirements_no_win.txt && pip install --no-cache-dir -r requirements_no_win.txt)
+# Installa le dipendenze:
+# 1. Rimuove pywin32 (solo Windows)
+# 2. Installa tutto il resto
+# 3. Forza l'installazione di streamlit per sicurezza
+RUN sed -i '/pywin32/d' requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir streamlit==1.49.1
 
-
-# Copia tutto il codice dell'applicazione nella directory di lavoro
+# Copia tutto il codice dell'applicazione
 COPY . .
 
 # Scarica i pacchetti NLTK necessari
 RUN python -m nltk.downloader punkt stopwords punkt_tab
 
-# Espone la porta su cui Streamlit verrà eseguito
+# Espone la porta
 EXPOSE 8501
 
-# Comando per avviare l'applicazione
-# 1. Esegue lo script per creare il database
-# 2. Avvia l'applicazione Streamlit
-CMD ["sh", "-c", "python scripts/crea_database.py && streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0"]
+# Avvio diretto (il database viene gestito dal comando nel docker-compose)
+CMD ["python", "-m", "streamlit", "run", "src/app.py", "--server.port=8501", "--server.address=0.0.0.0"]

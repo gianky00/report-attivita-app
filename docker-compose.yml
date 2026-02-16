@@ -7,7 +7,7 @@ services:
       - "D:/PC ALLEGRETTI COEMI/STORICO SCHEDE/Archivio Schede Elaborate:/mnt/archivio_storico:ro"
     environment:
       - IS_DOCKER=true
-    command: sh -c "python scripts/crea_database.py && streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0"
+    command: sh -c "python scripts/crea_database.py && python -m streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0"
 
   proxy:
     image: nginx:alpine
