@@ -44,6 +44,21 @@ def get_excluded_activities_for_user(matricola: str) -> list[str]:
     return [row["id_attivita"] for row in rows]
 
 
+def get_all_exclusions() -> pd.DataFrame:
+    """Recupera tutte le esclusioni registrate nel sistema con i nomi dei tecnici."""
+    query = """
+        SELECT e.id_attivita, e.timestamp, c."Nome Cognome" as tecnico, e.matricola_tecnico
+        FROM esclusioni_assegnamenti e
+        JOIN contatti c ON e.matricola_tecnico = c.Matricola
+        ORDER BY e.timestamp DESC
+    """
+    conn = get_db_connection()
+    try:
+        return pd.read_sql_query(query, conn)
+    finally:
+        conn.close()
+
+
 def get_notifications_for_user(utente: str) -> list[dict[str, Any]]:
     """Recupera la cronologia delle notifiche per un determinato utente."""
     query = "SELECT * FROM notifiche WHERE Destinatario_Matricola = ? ORDER BY Timestamp DESC"

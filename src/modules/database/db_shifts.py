@@ -63,6 +63,16 @@ def add_shift_log(log_data: dict[str, Any]) -> bool:
     return DatabaseEngine.execute(sql, tuple(log_data.values()))
 
 
+def get_all_shift_logs() -> pd.DataFrame:
+    """Recupera la cronologia completa delle modifiche ai turni."""
+    conn = get_db_connection()
+    try:
+        query = "SELECT * FROM shift_logs ORDER BY Timestamp DESC"
+        return pd.read_sql_query(query, conn)
+    finally:
+        conn.close()
+
+
 def get_bookings_for_shift(shift_id: str) -> pd.DataFrame:
     """Recupera tutte le prenotazioni del personale associate a un turno."""
     conn = get_db_connection()

@@ -33,6 +33,7 @@ def render_sistema_view() -> None:
     """Renderizza la vista 'Sistema' suddivisa in tab operative."""
     from pages.gestione_dati import render_gestione_dati_tab
 
+    from .audit_view import render_audit_tab
     from .ia_view import render_ia_management_tab
     from .logs_view import render_access_logs_tab
     from .system_status_view import render_system_status_tab
@@ -40,18 +41,27 @@ def render_sistema_view() -> None:
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
     tabs = st.tabs(
-        ["Gestione Account", "Cronologia Accessi", "Gestione Dati", "Gestione IA", "Stato Sistema"]
+        [
+            "Gestione Account",
+            "Audit Operazioni",
+            "Cronologia Accessi",
+            "Gestione Dati",
+            "Gestione IA",
+            "Stato Sistema",
+        ]
     )
 
     with tabs[0]:
         render_gestione_account()
     with tabs[1]:
-        render_access_logs_tab()
+        render_audit_tab()
     with tabs[2]:
-        render_gestione_dati_tab()
+        render_access_logs_tab()
     with tabs[3]:
-        render_ia_management_tab()
+        render_gestione_dati_tab()
     with tabs[4]:
+        render_ia_management_tab()
+    with tabs[5]:
         render_system_status_tab()
     st.markdown("</div>", unsafe_allow_html=True)
 
