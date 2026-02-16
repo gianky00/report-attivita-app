@@ -10,7 +10,7 @@ from modules.archive_manager import search_archive, get_archive_stats
 from constants import ICONS
 
 def render_archivio_page():
-    # Stile CSS aggiuntivo per rendere i risultati più compatti e professionali
+    # Stile CSS aggiuntivo per forzare le colonne affiancate su mobile
     st.markdown("""
         <style>
         .archive-card {
@@ -29,6 +29,12 @@ def render_archivio_page():
             color: #4364f7;
             font-weight: 600;
         }
+        /* Forza il layout a due colonne anche su schermi piccoli */
+        [data-testid="column"] {
+            width: 50% !important;
+            flex: 1 1 50% !important;
+            min-width: 50% !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -36,13 +42,21 @@ def render_archivio_page():
     
     # Statistiche in alto con design Horizon (più compatto)
     stats = get_archive_stats()
-    s1, s2 = st.columns(2)
-    with s1:
-        st.markdown(f"<div style='text-align: center;'><small>TOTALE SCHEDE</small><br><b style='font-size: 1.1rem;'>{stats['total_files']:,}</b></div>", unsafe_allow_html=True)
-    with s2:
-        st.markdown(f"<div style='text-align: center;'><small>STATO</small><br><b style='font-size: 1.1rem; color: #059669;'>● ONLINE</b></div>", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Uso un container HTML personalizzato per essere sicuro che rimangano affiancati
+    st.markdown(f"""
+        <div style="display: flex; justify-content: space-around; align-items: center; background-color: #f1f5f9; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <div style="text-align: center;">
+                <small style="color: #64748b; font-weight: 600; font-size: 0.7rem; text-transform: uppercase;">Totale Schede</small><br>
+                <b style="font-size: 1.2rem; color: #1e293b;">{stats['total_files']:,}</b>
+            </div>
+            <div style="width: 1px; height: 30px; background-color: #cbd5e1;"></div>
+            <div style="text-align: center;">
+                <small style="color: #64748b; font-weight: 600; font-size: 0.7rem; text-transform: uppercase;">Stato</small><br>
+                <b style="font-size: 1.2rem; color: #059669;">● ONLINE</b>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
     # Ricerca con icona integrata
     search_query = st.text_input(
