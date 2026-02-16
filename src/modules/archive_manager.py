@@ -10,14 +10,14 @@ from typing import List, Dict, Any
 DB_PATH = Path(__file__).parent.parent.parent / "schedario.db"
 
 def search_archive(query: str, limit: int = 50) -> pd.DataFrame:
-    """Cerca file nell'archivio per nome."""
+    """Cerca file nell'archivio per nome (case-insensitive)."""
     conn = sqlite3.connect(DB_PATH)
     try:
-        # Usa LIKE per una ricerca parziale (case-insensitive in SQLite per ASCII)
+        # LOWER() rende la ricerca insensibile alle maiuscole/minuscole
         sql = """
             SELECT filename, year, month, last_modified, full_path 
             FROM maintenance_archive 
-            WHERE filename LIKE ? 
+            WHERE LOWER(filename) LIKE LOWER(?) 
             ORDER BY year DESC, month DESC, filename ASC 
             LIMIT ?
         """

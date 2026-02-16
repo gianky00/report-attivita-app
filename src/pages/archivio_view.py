@@ -20,9 +20,9 @@ def render_archivio_page():
     st.markdown("---")
 
     # Ricerca
-    search_query = st.text_input("🔍 Cerca per Tag o nome file (es. PT-101 o 01F015)", placeholder="Inserisci almeno 3 caratteri...")
+    search_query = st.text_input("🔍 Cerca per Tag o nome file (es. PT-101 o 01F015)", placeholder="Inserisci almeno 2 caratteri...")
 
-    if len(search_query) >= 3:
+    if len(search_query) >= 2:
         results = search_archive(search_query)
         
         if not results.empty:
@@ -30,29 +30,39 @@ def render_archivio_page():
             
             # Tabella dei risultati
             for _, row in results.iterrows():
-                with st.expander(f"📄 {row['filename']}"):
-                    c1, c2 = st.columns([3, 1])
-                    with c1:
-                        st.markdown(f"**Percorso:** `{row['full_path']}`")
-                        st.markdown(f"**Periodo:** {row['month']} {row['year']}")
-                        st.markdown(f"**Ultima Modifica:** {row['last_modified']}")
+                # Formattazione data più leggibile
+                try:
+                    display_date = row['last_modified'].split('T')[0]
+                except:
+                    display_date = row['last_modified']
+
+                with st.expander(f"📄 {row['filename']} ({row['month']} {row['year']})"):
+                    # Verifica esistenza file fisica
+                    file_path = row['full_path']
+                    # Patch per Docker: se il percorso inizia con D:\ ma siamo in Linux, non lo troverà mai.
+                    # Ma qui l'utente è su Win32 e l'app gira su Win32 (ngrok punta al locale).
                     
-                    with c2:
-                        # Bottone per scaricare il file
-                        if os.path.exists(row['full_path']):
-                            with open(row['full_path'], "rb") as f:
-                                st.download_button(
-                                    label="📥 Scarica Excel",
-                                    data=f,
-                                    file_name=row['filename'],
-                                    mime="application/vnd.ms-excel",
-                                    key=f"dl_{row['filename']}"
-                                )
-                        else:
-                            st.error("File non trovato sul disco.")
+                    st.markdown(f"**Percorso completo:** `{file_path}`")
+                    st.markdown(f"**Ultima Modifica:** {display_date}")
+                    
+                    # Debug info se il file non viene trovato
+                    file_exists = os.path.exists(file_path)
+                    
+                    if file_exists:
+                        with open(file_path, "rb") as f:
+                            st.download_button(
+                                label="📥 Scarica Excel",
+                                data=f,
+                                file_name=row['filename'],
+                                mime="application/vnd.ms-excel",
+                                key=f"dl_{row['filename']}_{row['year']}"
+                            )
+                    else:
+                        st.error(f"⚠️ File non accessibile. Verifica che il disco D: sia collegato e che il percorso sia corretto.")
+                        st.info(f"Tentativo di accesso a: {file_path}")
         else:
             st.warning("Nessun file trovato con questo nome.")
     elif search_query:
-        st.info("Inserisci almeno 3 caratteri per iniziare la ricerca.")
+        st.info("Inserisci almeno 2 caratteri per iniziare la ricerca.")
     else:
         st.info("Digita il tag di uno strumento o parte del nome del file per visualizzare lo storico.")
