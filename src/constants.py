@@ -65,6 +65,7 @@ STATI_ATTIVITA = ["TERMINATA", "SOSPESA", "IN CORSO", "NON SVOLTA"]
 ICONS = {
     "ATTIVITA": ":material/edit_note:",
     "STORICO": ":material/history:",
+    "ARCHIVIO": ":material/archive:",
     "TURNI": ":material/calendar_month:",
     "RICHIESTE": ":material/list_alt:",
     "ADMIN": ":material/settings:",

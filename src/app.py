@@ -37,6 +37,7 @@ from pages.admin import render_caposquadra_view, render_sistema_view
 from pages.gestione_turni import render_gestione_turni_tab
 from pages.guida import render_guida_tab
 from pages.richieste import render_richieste_tab
+from pages.archivio_view import render_archivio_page
 
 # --- ESEGUI CHECK LICENZA ALL'AVVIO ---
 check_pyarmor_license()
@@ -200,6 +201,8 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
             from pages.storico import render_storico_tab
 
             render_storico_tab()
+        elif selected_tab == "Archivio Tecnico":
+            render_archivio_page()
         elif selected_tab == "Impostazioni":
             from pages.impostazioni import render_impostazioni_page
             render_impostazioni_page(matricola_utente)
