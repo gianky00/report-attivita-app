@@ -1,75 +1,117 @@
 """
 Pagina per la consultazione dell'archivio storico delle schede di manutenzione.
+Versione ottimizzata per mobile con design Horizon.
 """
 
 import streamlit as st
 import os
+import datetime
 from modules.archive_manager import search_archive, get_archive_stats
 from constants import ICONS
 
 def render_archivio_page():
-    st.header("📂 Archivio Storico Schede")
+    # Stile CSS aggiuntivo per rendere i risultati più compatti e professionali
+    st.markdown("""
+        <style>
+        .archive-card {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 10px;
+        }
+        .file-info {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-top: 5px;
+        }
+        .tag-highlight {
+            color: #4364f7;
+            font-weight: 600;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.title("📂 Archivio Tecnico")
+    st.markdown("Consulta rapidamente lo storico delle schede di manutenzione elaborate.")
     
-    # Statistiche in alto
+    # Statistiche in alto con design Horizon (più compatto)
     stats = get_archive_stats()
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Totale Schede", f"{stats['total_files']:,}")
-    col2.metric("Periodo", stats['year_range'])
-    col3.metric("Stato", "Disponibile")
+    s1, s2, s3 = st.columns(3)
+    with s1:
+        st.markdown(f"<div style='text-align: center;'><small>TOTALE SCHEDE</small><br><b style='font-size: 1.2rem;'>{stats['total_files']:,}</b></div>", unsafe_allow_html=True)
+    with s2:
+        st.markdown(f"<div style='text-align: center;'><small>PERIODO</small><br><b style='font-size: 1.2rem;'>{stats['year_range']}</b></div>", unsafe_allow_html=True)
+    with s3:
+        st.markdown(f"<div style='text-align: center;'><small>STATO</small><br><b style='font-size: 1.2rem; color: #059669;'>● ONLINE</b></div>", unsafe_allow_html=True)
 
-    st.markdown("---")
+    st.divider()
 
-    # Ricerca
-    search_query = st.text_input("🔍 Cerca per Tag o nome file (es. PT-101 o 01F015)", placeholder="Inserisci almeno 2 caratteri...")
+    # Ricerca con icona integrata
+    search_query = st.text_input(
+        "🔍 Cerca per Tag o nome file", 
+        placeholder="Es: PT-101, 01F015, 2024...",
+        help="Inserisci almeno 2 caratteri per iniziare la ricerca"
+    )
 
     if len(search_query) >= 2:
         results = search_archive(search_query)
         
         if not results.empty:
-            st.success(f"Trovate {len(results)} corrispondenze (mostrate le prime 50)")
+            st.markdown(f"<p style='color: #64748b; font-size: 0.9rem;'>Trovate {len(results)} corrispondenze</p>", unsafe_allow_html=True)
             
-            # Tabella dei risultati
             for _, row in results.iterrows():
-                # Formattazione data più leggibile
+                # Formattazione data GG/MM/AAAA
                 try:
-                    display_date = row['last_modified'].split('T')[0]
-                except:
+                    raw_date = row['last_modified'].split('T')[0]
+                    dt = datetime.datetime.strptime(raw_date, '%Y-%m-%d')
+                    display_date = dt.strftime('%d/%m/%Y')
+                except Exception:
                     display_date = row['last_modified']
 
-                with st.expander(f"📄 {row['filename']} ({row['month']} {row['year']})"):
-                    # Verifica esistenza file fisica
-                    file_path = row['full_path']
+                # Estrazione Tag (parte iniziale del nome file prima dello spazio o parentesi)
+                fname = row['filename']
+                tag_part = fname.split(' ')[0].split('(')[0].replace('.xls', '').replace('.xlsm', '')
+
+                with st.expander(f"📄 {fname}"):
+                    # Layout pulito
+                    st.markdown(f"""
+                        <div style='margin-bottom: 10px;'>
+                            <div style='font-size: 0.9rem;'><b>Tag:</b> <span class='tag-highlight'>{tag_part}</span></div>
+                            <div style='font-size: 0.85rem; color: #64748b;'><b>Periodo:</b> {row['month']} {row['year']}</div>
+                            <div style='font-size: 0.85rem; color: #64748b;'><b>Ultima Modifica:</b> {display_date}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
                     
                     # Gestione Path per Docker
+                    file_path = row['full_path']
                     if os.environ.get("IS_DOCKER") == "true":
-                        # Mappatura hardcoded basata su docker-compose.yml
                         windows_prefix = r"D:\PC ALLEGRETTI COEMI\STORICO SCHEDE\Archivio Schede Elaborate"
                         docker_prefix = "/mnt/archivio_storico"
-                        
                         if windows_prefix in file_path:
                             file_path = file_path.replace(windows_prefix, docker_prefix).replace("\\", "/")
                     
-                    st.markdown(f"**Percorso:** `{file_path}`")
-                    st.markdown(f"**Ultima Modifica:** {display_date}")
-                    
-                    # Debug info se il file non viene trovato
-                    file_exists = os.path.exists(file_path)
-                    
-                    if file_exists:
+                    if os.path.exists(file_path):
                         with open(file_path, "rb") as f:
                             st.download_button(
-                                label="📥 Scarica Excel",
+                                label="📥 Apri Scheda Excel",
                                 data=f,
-                                file_name=row['filename'],
+                                file_name=fname,
                                 mime="application/vnd.ms-excel",
-                                key=f"dl_{row['filename']}_{row['year']}"
+                                key=f"dl_{fname}_{row['year']}_{display_date}",
+                                use_container_width=True
                             )
                     else:
-                        st.error(f"⚠️ File non accessibile. Verifica che il disco D: sia collegato e che il percorso sia corretto.")
-                        st.info(f"Tentativo di accesso a: {file_path}")
+                        st.error(f"⚠️ File momentaneamente non accessibile sul server.")
+                        if st.checkbox("Mostra dettagli errore", key=f"err_{fname}"):
+                            st.code(f"Path: {file_path}")
         else:
-            st.warning("Nessun file trovato con questo nome.")
+            st.warning("Nessun file trovato. Prova con un altro tag.")
     elif search_query:
-        st.info("Inserisci almeno 2 caratteri per iniziare la ricerca.")
+        st.info("Digita almeno 2 caratteri.")
     else:
-        st.info("Digita il tag di uno strumento o parte del nome del file per visualizzare lo storico.")
+        st.markdown("""
+            <div style='background-color: #f8fafc; padding: 20px; border-radius: 10px; text-align: center; border: 1px dashed #cbd5e1;'>
+                <p style='color: #64748b; margin: 0;'>Digita il tag di uno strumento per visualizzare lo storico dei suoi interventi.</p>
+            </div>
+        """, unsafe_allow_html=True)
