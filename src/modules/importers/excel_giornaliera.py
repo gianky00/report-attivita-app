@@ -101,21 +101,16 @@ def _collect_team_info(
             if member not in collezionate[key]["team"]:
                 role = _get_member_role(member, df_contatti)
                 collezionate[key]["team"][member] = {"ruolo": role, "orari": set()}
-            
-            # Calcolo ore per questo membro
+
+            # Recupero ore direttamente dalla colonna M (indice 12)
             try:
-                ora_in = str(r[10]).replace('.', ':')
-                ora_out = str(r[11]).replace('.', ':')
-                fmt = "%H:%M"
-                t1 = datetime.datetime.strptime(ora_in, fmt)
-                t2 = datetime.datetime.strptime(ora_out, fmt)
-                delta = t2 - t1
-                ore_membro = delta.total_seconds() / 3600.0
-            except Exception:
+                # Se il valore è numerico lo prendiamo, altrimenti proviamo a convertirlo
+                ore_membro = float(r[12]) if pd.notna(r[12]) else 0.0
+            except (ValueError, TypeError):
                 ore_membro = 0.0
 
             collezionate[key]["team"][member]["orari"].add(f"{r[10]}-{r[11]}")
-            # Sommiamo le ore totali per l'attività (totale ore-uomo)
+            # Sommiamo le ore totali per l'attività (totale ore-uomo da colonna M)
             collezionate[key]["ore_totali"] = collezionate[key].get("ore_totali", 0.0) + ore_membro
     return collezionate
 
