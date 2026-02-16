@@ -1,8 +1,10 @@
 import sys
 from pathlib import Path
+
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 from modules.importers.excel_giornaliera import _match_partial_name
+
 
 def test_matching():
     cases = [
@@ -20,11 +22,12 @@ def test_matching():
         ("D. Spinali", "Domenico Spinali", True),
         ("S. Riciputo", "Sebastiano Riciputo", True),
     ]
-    
+
     for partial, full, expected in cases:
         result = _match_partial_name(partial, full)
         status = "PASS" if result == expected else "FAIL"
         print(f"[{status}] '{partial}' vs '{full}' -> {result} (Expected: {expected})")
+
 
 if __name__ == "__main__":
     test_matching()

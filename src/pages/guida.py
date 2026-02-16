@@ -19,12 +19,11 @@ def render_guida_tab(ruolo: str) -> None:
     # --- SEZIONE PROFILO ---
     with st.expander("Profilo e Impostazioni", expanded=True):
         st.markdown(
-            f"{render_svg_icon('user', 24)} **Gestione Account Personale**",
-            unsafe_allow_html=True
+            f"{render_svg_icon('user', 24)} **Gestione Account Personale**", unsafe_allow_html=True
         )
         st.markdown("""
         Attraverso il menu **'Impostazioni'** nella sidebar, puoi gestire la tua identità digitale:
-        
+
         - **Profilo:** Visualizza i tuoi dati anagrafici, il ruolo assegnato e la matricola.
         - **Password:** Cambia autonomamente la tua password di accesso.
         - **Sicurezza (2FA):** Attiva o disattiva la protezione con codice temporaneo (OTP).
@@ -33,8 +32,7 @@ def render_guida_tab(ruolo: str) -> None:
     # --- SEZIONE ATTIVITÀ ---
     with st.expander("Attività e Rendicontazione"):
         st.markdown(
-            f"{render_svg_icon('report', 24)} **Rendicontazione Operativa**",
-            unsafe_allow_html=True
+            f"{render_svg_icon('report', 24)} **Rendicontazione Operativa**", unsafe_allow_html=True
         )
         st.markdown("""
         Gestione del flusso di lavoro giornaliero con dati sincronizzati:
@@ -47,8 +45,7 @@ def render_guida_tab(ruolo: str) -> None:
     # --- SEZIONE TURNI ---
     with st.expander("Gestione Turni e Reperibilità"):
         st.markdown(
-            f"{render_svg_icon('calendar', 24)} **Turni e Disponibilità**",
-            unsafe_allow_html=True
+            f"{render_svg_icon('calendar', 24)} **Turni e Disponibilità**", unsafe_allow_html=True
         )
         st.markdown("""
         Pianificazione operativa del team:
@@ -61,8 +58,7 @@ def render_guida_tab(ruolo: str) -> None:
     # --- SEZIONE RICHIESTE ---
     with st.expander("Richieste Materiali e Assenze"):
         st.markdown(
-            f"{render_svg_icon('request', 24)} **Modulistica Digitale**",
-            unsafe_allow_html=True
+            f"{render_svg_icon('request', 24)} **Modulistica Digitale**", unsafe_allow_html=True
         )
         st.markdown("""
         Invio richieste formali:
@@ -75,7 +71,7 @@ def render_guida_tab(ruolo: str) -> None:
         with st.expander("Strumenti Amministrativi"):
             st.markdown(
                 f"{render_svg_icon('settings', 24)} **Area Sistema e Caposquadra**",
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
             st.markdown("""
             Funzionalità riservate:
@@ -87,16 +83,20 @@ def render_guida_tab(ruolo: str) -> None:
             """)
 
     from constants import APP_VERSION, VERSION_DATE
+
     # --- SEZIONE NOVITÀ ---
     with st.expander("Novità e Aggiornamenti", expanded=False):
         from modules.changelog import render_changelog_ui
-        st.markdown(f"{render_svg_icon('bulletin', 24)} **Cosa c'è di nuovo**", unsafe_allow_html=True)
+
+        st.markdown(
+            f"{render_svg_icon('bulletin', 24)} **Cosa c'è di nuovo**", unsafe_allow_html=True
+        )
         render_changelog_ui()
 
     st.divider()
     footer_html = f"""
     <div style='display: flex; align-items: center; gap: 10px; color: gray;'>
-        {render_svg_icon('info', 16)} 
+        {render_svg_icon("info", 16)}
         <span>Horizon Platform v{APP_VERSION} ({VERSION_DATE}) - Technical Operations Hub</span>
     </div>
     """

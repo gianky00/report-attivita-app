@@ -19,10 +19,7 @@ logger = get_logger(__name__)
 
 # --- UTILS PER PATH ---
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
-IS_DOCKER = (
-    Path("/.dockerenv").exists()
-    or os.environ.get("IS_DOCKER", "false").lower() == "true"
-)
+IS_DOCKER = Path("/.dockerenv").exists() or os.environ.get("IS_DOCKER", "false").lower() == "true"
 
 
 def resolve_path(raw_path: str) -> str:
@@ -71,9 +68,7 @@ except FileNotFoundError:
         secrets = {}
 
     else:
-        logger.critical(
-            f"File '{SECRETS_PATH}' non trovato. L'applicazione non può partire."
-        )
+        logger.critical(f"File '{SECRETS_PATH}' non trovato. L'applicazione non può partire.")
 
         sys.exit(1)
 
@@ -99,18 +94,14 @@ def validate_config(conf: dict[str, Any]) -> None:
     missing = [k for k in REQUIRED_CONFIG_KEYS if k not in conf]
 
     if missing:
-        logger.critical(
-            f"Chiavi di configurazione mancanti in 'secrets.toml': {missing}"
-        )
+        logger.critical(f"Chiavi di configurazione mancanti in 'secrets.toml': {missing}")
         sys.exit(1)
 
     # Verifica esistenza percorsi (warning se non esistono, ma non blocca l'avvio)
     for key in REQUIRED_CONFIG_KEYS:
         path = Path(resolve_path(conf[key]))
         if not path.exists():
-            logger.warning(
-                f"Il percorso configurato per '{key}' non esiste (sanitizzato): {path}"
-            )
+            logger.warning(f"Il percorso configurato per '{key}' non esiste (sanitizzato): {path}")
 
 
 validate_config(secrets)
@@ -161,19 +152,19 @@ OUTLOOK_LOCK = threading.Lock()
 def get_attivita_programmate_path() -> str:
     """Restituisce il percorso al file delle attività programmate."""
 
-    return str(PATH_ATTIVITA_PROGRAMMATE)
+    return PATH_ATTIVITA_PROGRAMMATE
 
 
 def get_storico_db_path() -> str:
     """Restituisce il percorso allo storico DB."""
 
-    return str(PATH_STORICO_DB)
+    return PATH_STORICO_DB
 
 
 def get_gestionale_path() -> str:
     """Restituisce il percorso al file gestionale."""
 
-    return str(PATH_GESTIONALE)
+    return PATH_GESTIONALE
 
 
 def check_data_connectivity() -> dict[str, bool]:

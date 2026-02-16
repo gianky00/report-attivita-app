@@ -112,7 +112,7 @@ class TestAuthDeepDive(unittest.TestCase):
             "PasswordHash": hashed,
             "2FA_Secret": None,
         }
-        status, data = auth.authenticate_user("M123", "pass")
+        status, _data = auth.authenticate_user("M123", "pass")
         self.assertEqual(status, "2FA_SETUP_REQUIRED")
 
         # Scenario: Password match, has 2FA secret

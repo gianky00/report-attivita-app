@@ -34,7 +34,14 @@ def render_gestione_turni_tab(matricola_utente: str, ruolo: str) -> None:
     }
 
     from modules.utils import render_svg_icon
-    t1, t2, t3 = st.tabs([f"{render_svg_icon('calendar', 20)} Turni", f"{render_svg_icon('bulletin', 20)} Bacheca", f"{render_svg_icon('swap', 20)} Sostituzioni"])
+
+    t1, t2, t3 = st.tabs(
+        [
+            f"{render_svg_icon('calendar', 20)} Turni",
+            f"{render_svg_icon('bulletin', 20)} Bacheca",
+            f"{render_svg_icon('swap', 20)} Sostituzioni",
+        ]
+    )
 
     with t1:
         st1, st2, st3 = st.tabs(["Assistenza", "Straordinario", "Reperibilità"])

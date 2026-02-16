@@ -182,10 +182,15 @@ def handle_login_and_navigation() -> None:
     if st.session_state.login_state == "logged_in":
         main_app(st.session_state.authenticated_user, st.session_state.ruolo)
     else:
-        st.set_page_config(layout="centered", page_title="Horizon - Technical Operations Platform", page_icon="assets/icons/settings.svg")
+        st.set_page_config(
+            layout="centered",
+            page_title="Horizon - Technical Operations Platform",
+            page_icon="assets/icons/settings.svg",
+        )
 
         # CSS Enterprise per Login
-        st.markdown("""
+        st.markdown(
+            """
             <style>
             [data-testid="stAppViewContainer"] {
                 background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -201,13 +206,18 @@ def handle_login_and_navigation() -> None:
                 border-radius: 8px;
             }
             </style>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         with st.container():
             # Header Professionale con Logo
             st.image("assets/logo.svg", use_container_width=True)
 
-            st.markdown("<p style='text-align: center; color: #64748b; letter-spacing: 2px; margin-bottom: 2rem; font-size: 0.8rem;'>TECHNICAL OPERATIONS ACCESS</p>", unsafe_allow_html=True)
+            st.markdown(
+                "<p style='text-align: center; color: #64748b; letter-spacing: 2px; margin-bottom: 2rem; font-size: 0.8rem;'>TECHNICAL OPERATIONS ACCESS</p>",
+                unsafe_allow_html=True,
+            )
 
             if st.session_state.login_state == "password":
                 _handle_password_login()

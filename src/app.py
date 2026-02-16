@@ -37,7 +37,6 @@ from pages.admin import render_caposquadra_view, render_sistema_view
 from pages.gestione_turni import render_gestione_turni_tab
 from pages.guida import render_guida_tab
 from pages.richieste import render_richieste_tab
-from pages.archivio_view import render_archivio_page
 
 # --- ESEGUI CHECK LICENZA ALL'AVVIO ---
 check_pyarmor_license()
@@ -87,7 +86,12 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
     Gestisce l'interfaccia utente principale dopo l'autenticazione.
     Include sidebar, notifiche, navigazione tra i tab e rendering dei moduli.
     """
-    st.set_page_config(layout="wide", page_title="Horizon - Technical Operations Platform", page_icon="assets/icons/settings.svg", initial_sidebar_state="auto")
+    st.set_page_config(
+        layout="wide",
+        page_title="Horizon - Technical Operations Platform",
+        page_icon="assets/icons/settings.svg",
+        initial_sidebar_state="auto",
+    )
 
     def load_css(file_name: str) -> None:
         with open(file_name) as f:
@@ -119,14 +123,20 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
 
         # Controllo connettività dati
         from config import check_data_connectivity
+
         status = check_data_connectivity()
         if not all(status.values()):
             with st.sidebar:
                 st.error(f"{ICONS['WARNING']} Errore Connessione Dati")
                 for name, available in status.items():
                     color = "green" if available else "red"
-                    st.markdown(f"- {name}: <span style='color:{color}'>{'OK' if available else 'NON DISPONIBILE'}</span>", unsafe_allow_html=True)
-                st.warning("Alcune funzionalità (Recupero Attività) potrebbero non funzionare correttamente.")
+                    st.markdown(
+                        f"- {name}: <span style='color:{color}'>{'OK' if available else 'NON DISPONIBILE'}</span>",
+                        unsafe_allow_html=True,
+                    )
+                st.warning(
+                    "Alcune funzionalità (Recupero Attività) potrebbero non funzionare correttamente."
+                )
 
         st.title(st.session_state.main_tab)
         st.markdown('<div class="main-container">', unsafe_allow_html=True)
@@ -203,6 +213,7 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
             render_storico_tab()
         elif selected_tab == "Impostazioni":
             from pages.impostazioni import render_impostazioni_page
+
             render_impostazioni_page(matricola_utente)
         elif selected_tab == "Guida":
             render_guida_tab(ruolo)

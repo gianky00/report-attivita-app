@@ -49,13 +49,15 @@ def _render_2fa_section(user: dict[str, Any]) -> None:
     st.subheader("Autenticazione a due fattori (2FA)")
     has_2fa = bool(user.get("2FA_Secret"))
 
-    status = f"{render_svg_icon('check', 20)} **ATTIVA**" if has_2fa else f"{render_svg_icon('close', 20)} **NON ATTIVA**"
+    status = (
+        f"{render_svg_icon('check', 20)} **ATTIVA**"
+        if has_2fa
+        else f"{render_svg_icon('close', 20)} **NON ATTIVA**"
+    )
     st.markdown(f"Stato attuale: {status}")
 
     if not has_2fa:
-        st.write(
-            "Attiva la 2FA per proteggere il tuo account con un codice temporaneo (OTP)."
-        )
+        st.write("Attiva la 2FA per proteggere il tuo account con un codice temporaneo (OTP).")
         if st.button("Configura 2FA", type="primary", icon=ICONS["SECURITY"]):
             st.session_state.setup_2fa_mode = True
             st.rerun()

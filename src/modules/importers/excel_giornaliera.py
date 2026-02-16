@@ -47,6 +47,7 @@ def _load_day_sheet(giorno: int, mese: int, anno: int) -> pd.DataFrame | None:
     base_path = Path(base_path_str)
 
     from core.logging import get_logger
+
     logger = get_logger(__name__)
 
     if not base_path.exists():
@@ -160,6 +161,7 @@ def trova_attivita(
         return [t for t in final if f"{t['pdl']}-{t['attivita']}" not in excluded]
     except Exception as e:
         from core.logging import get_logger
+
         get_logger(__name__).error(f"Errore in trova_attivita ({giorno}/{mese}/{anno}): {e}")
         return []
 
@@ -172,7 +174,10 @@ def get_all_assigned_activities(
     base_path = Path(config.get_giornaliera_path())
     if not base_path.exists():
         from core.logging import get_logger
-        get_logger(__name__).error(f"Impossibile recuperare attività: directory {base_path} non accessibile.")
+
+        get_logger(__name__).error(
+            f"Impossibile recuperare attività: directory {base_path} non accessibile."
+        )
         return []
 
     all_act = []

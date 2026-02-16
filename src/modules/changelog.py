@@ -19,6 +19,7 @@ def get_latest_changes() -> str:
     except Exception:
         return "Errore nel caricamento del changelog."
 
+
 def render_changelog_ui() -> None:
     """Renderizza il changelog in formato Streamlit."""
     changes = get_latest_changes()
