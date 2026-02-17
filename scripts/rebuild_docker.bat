@@ -21,7 +21,7 @@ REM --- COSTANTI ---
 set "DOCKER_TIMEOUT=120"
 set "MIN_DISK_MB=2000"
 set "LOG_DIR=logs"
-set "SCRIPT_VERSION=2.1.0"
+set "SCRIPT_VERSION=2.2.1"
 
 REM --- NAVIGAZIONE ALLA ROOT DEL PROGETTO ---
 cd /d "%~dp0.."
@@ -91,9 +91,26 @@ if !errorlevel! neq 0 (
 
 docker info >nul 2>&1
 if !errorlevel! neq 0 (
-    call :FAIL "Docker daemon non risponde. Assicurati che Docker Desktop sia RUNNING."
-    goto ERROR_EXIT
+    call :WARN "Docker daemon non risponde. Tento l'avvio automatico..."
+    if exist "C:\Program Files\Docker\Docker\Docker Desktop.exe" (
+        start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+        for /L %%i in (1,1,12) do (
+            docker info >nul 2>&1
+            if !errorlevel! equ 0 (
+                call :OK "Docker Desktop avviato correttamente"
+                goto :DOCKER_READY
+            )
+            echo  %DIM%  [..] Attesa inizializzazione daemon [%%i/12]...%RESET%
+            timeout /t 10 /nobreak >nul
+        )
+        call :FAIL "Timeout attesa Docker Desktop. Avvialo manualmente."
+        goto ERROR_EXIT
+    ) else (
+        call :FAIL "Docker Desktop non trovato nel percorso standard."
+        goto ERROR_EXIT
+    )
 )
+:DOCKER_READY
 call :OK "Docker daemon attivo"
 echo.
 

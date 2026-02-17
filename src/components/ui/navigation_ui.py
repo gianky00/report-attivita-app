@@ -95,6 +95,13 @@ def _render_nav_buttons() -> None:
         st.session_state.main_tab = "Attività Assegnate"
         _carica_giornaliera_mese.clear()
         st.rerun()
+
+    if st.button(
+        "Programmazione PDL", icon=ICONS["PROGRAMMAZIONE"], use_container_width=True, key="nav_prog"
+    ):
+        st.session_state.main_tab = "Programmazione PDL"
+        st.rerun()
+
     if st.button("Storico", icon=ICONS["STORICO"], use_container_width=True, key="nav_history"):
         st.session_state.main_tab = "Storico"
         st.rerun()

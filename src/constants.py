@@ -94,6 +94,7 @@ ICONS = {
     "USERS": ":material/group:",
     "LOGIN": ":material/login:",
     "SECURITY": ":material/security:",
+    "PROGRAMMAZIONE": ":material/list_alt:",
 }
 
 # --- CONFIGURAZIONE ---

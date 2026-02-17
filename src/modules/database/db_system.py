@@ -107,3 +107,19 @@ def get_table_names() -> list[str]:
     query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
     rows = DatabaseEngine.fetch_all(query)
     return [row["name"] for row in rows if not row["name"].startswith("sqlite_")]
+
+
+def get_pdl_programmazione(data_inizio: str, data_fine: str) -> pd.DataFrame:
+    """Recupera la programmazione dei PDL in un intervallo di date."""
+    query = """
+        SELECT pdl, data_intervento, tecnico_assegnato, descrizione, team, stato, tipo, 
+               timestamp_pianificazione, timestamp_invio_report, timestamp_validazione
+        FROM "pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot"
+        WHERE data_intervento BETWEEN ? AND ?
+        ORDER BY data_intervento DESC, tecnico_assegnato ASC
+    """
+    conn = get_db_connection()
+    try:
+        return pd.read_sql_query(query, conn, params=(data_inizio, data_fine))
+    finally:
+        conn.close()

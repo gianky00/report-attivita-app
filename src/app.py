@@ -36,6 +36,7 @@ from modules.shift_management import sync_oncall_shifts
 from pages.admin import render_caposquadra_view, render_sistema_view
 from pages.gestione_turni import render_gestione_turni_tab
 from pages.guida import render_guida_tab
+from pages.programmazione_view import render_programmazione_pdl_page
 from pages.richieste import render_richieste_tab
 
 # --- ESEGUI CHECK LICENZA ALL'AVVIO ---
@@ -86,6 +87,10 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
     Gestisce l'interfaccia utente principale dopo l'autenticazione.
     Include sidebar, notifiche, navigazione tra i tab e rendering dei moduli.
     """
+    # Avvio sincronizzazione elastica (non bloccante)
+    from modules.data_manager import trigger_smart_sync
+    trigger_smart_sync()
+
     st.set_page_config(
         layout="wide",
         page_title="Horizon - Technical Operations Platform",
@@ -205,6 +210,8 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
 
         elif selected_tab == "Gestione Turni":
             render_gestione_turni_tab(matricola_utente, ruolo)
+        elif selected_tab == "Programmazione PDL":
+            render_programmazione_pdl_page()
         elif selected_tab == "Richieste":
             render_richieste_tab(matricola_utente, ruolo, nome_utente_autenticato)
         elif selected_tab == "Storico":

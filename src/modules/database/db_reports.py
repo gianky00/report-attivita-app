@@ -80,6 +80,14 @@ def process_and_commit_validated_reports(reports: list[dict[str, Any]]) -> bool:
                     f"INSERT INTO notifiche ({cols_n}) VALUES ({placeholders_n})",  # nosec B608
                     tuple(notifica.values()),
                 )
+
+                # --- AGGIORNAMENTO STATO PDL_PROGRAMMAZIONE ---
+                sql_pdl = (
+                    'UPDATE "pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot" SET stato = \'VALIDATO\', '
+                    "timestamp_validazione = ? WHERE pdl = ? AND data_intervento = ?"
+                )
+                conn.execute(sql_pdl, (now, pdl, r.get("data_riferimento_attivita")))
+
         return True
     except sqlite3.Error as e:
         logger.error(f"Errore validazione report: {e}")
@@ -188,10 +196,32 @@ def insert_report(report_data: dict[str, Any], table_name: str) -> bool:
     """Inserisce i dati di un report in una tabella specifica."""
     if table_name not in VALID_REPORT_TABLES:
         return False
-    cols = ", ".join(f'"{k}"' for k in report_data)
-    placeholders = ", ".join("?" for _ in report_data)
-    sql = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"  # nosec B608
-    return DatabaseEngine.execute(sql, tuple(report_data.values()))
+    
+    conn = get_db_connection()
+    now = datetime.datetime.now().isoformat()
+    try:
+        with conn:
+            cols = ", ".join(f'"{k}"' for k in report_data)
+            placeholders = ", ".join("?" for _ in report_data)
+            sql = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"  # nosec B608
+            conn.execute(sql, tuple(report_data.values()))
+
+            # Se stiamo inserendo nella coda di validazione, aggiorniamo pdl_programmazione
+            if table_name == "report_da_validare":
+                pdl = report_data.get("pdl")
+                data_rif = report_data.get("data_riferimento_attivita")
+                if pdl and data_rif:
+                    sql_pdl = (
+                        'UPDATE "pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot" SET stato = \'INVIATO\', '
+                        "timestamp_invio_report = ? WHERE pdl = ? AND data_intervento = ?"
+                    )
+                    conn.execute(sql_pdl, (now, pdl, data_rif))
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Errore inserimento report in {table_name}: {e}")
+        return False
+    finally:
+        conn.close()
 
 
 def move_report_atomically(report_id: str, source_table: str, dest_table: str) -> bool:

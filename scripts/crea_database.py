@@ -222,6 +222,19 @@ def crea_tabelle_se_non_esistono():
                 UtenteSubentrante TEXT,
                 EseguitoDa TEXT
             )""",
+            "pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot": """(
+                pdl TEXT NOT NULL,
+                data_intervento TEXT NOT NULL,
+                tecnico_assegnato TEXT,
+                descrizione TEXT,
+                team TEXT,
+                stato TEXT DEFAULT 'PIANIFICATO',
+                tipo TEXT DEFAULT 'ORDINARIO',
+                timestamp_pianificazione TEXT,
+                timestamp_invio_report TEXT,
+                timestamp_validazione TEXT,
+                PRIMARY KEY (pdl, data_intervento, tecnico_assegnato)
+            )""",
         }
 
         for nome_tabella, schema in tabelle_gestionali.items():

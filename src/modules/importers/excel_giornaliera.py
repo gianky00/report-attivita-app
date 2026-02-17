@@ -123,6 +123,54 @@ def _get_member_role(member_name: str, df_contatti: pd.DataFrame) -> str:
     return "Tecnico"
 
 
+def estrai_tutte_le_attivita_giorno(giorno: int, mese: int, anno: int) -> list[dict[str, Any]]:
+    """Estrae tutte le attività dal file Excel per un dato giorno, senza filtri."""
+    df_range = _load_day_sheet(giorno, mese, anno)
+    if df_range is None:
+        return []
+
+    pdls_totali: set[str] = set()
+    for _, r in df_range.iterrows():
+        if len(r) > 9 and pd.notna(r[9]):
+            pdls_totali.update(re.findall(r"(\d{6}/[CS]|\d{6})", str(r[9])))
+
+    if not pdls_totali:
+        return []
+
+    # Per raccogliere il team, passiamo un df_contatti vuoto o finto se non serve il ruolo esatto qui
+    # Oppure recuperiamo i nomi reali se disponibili
+    collezionate: dict[tuple[str, str], dict[str, Any]] = {}
+    for _, r in df_range.iterrows():
+        if len(r) < 12 or pd.isna(r[9]):
+            continue
+        found_pdls = re.findall(r"(\d{6}/[CS]|\d{6})", str(r[9]))
+        
+        descs = [line.strip() for line in str(r[6]).splitlines() if line.strip()]
+        for p, d in zip(found_pdls, descs, strict=False):
+            key = (p, d)
+            if key not in collezionate:
+                collezionate[key] = {
+                    "pdl": p, 
+                    "attivita": d, 
+                    "tecnico_assegnato": str(r[5]).strip(),
+                    "team": set(),
+                    "ore": 0.0
+                }
+            
+            collezionate[key]["team"].add(str(r[5]).strip())
+            try:
+                collezionate[key]["ore"] += float(r[12]) if pd.notna(r[12]) else 0.0
+            except (ValueError, TypeError):
+                pass
+
+    final = []
+    for v in collezionate.values():
+        v["team"] = ", ".join(sorted(list(v["team"])))
+        final.append(v)
+    
+    return final
+
+
 def trova_attivita(
     matricola: str, giorno: int, mese: int, anno: int, df_contatti: pd.DataFrame
 ) -> list[dict[str, Any]]:
