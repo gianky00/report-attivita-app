@@ -35,7 +35,7 @@ warnings.filterwarnings(
 
 # --- CONFIGURAZIONE ---
 BASE_DIR = Path(__file__).parent.parent
-DB_NAME = BASE_DIR / "schedario.db"
+DB_NAME = BASE_DIR / "report-attivita.db"
 
 
 def crea_tabelle_se_non_esistono():

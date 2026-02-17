@@ -6,7 +6,7 @@ Centralizza stringhe, configurazioni fisse e mappature per facilitare la manuten
 import datetime
 
 # --- DATABASE ---
-DB_NAME = "schedario.db"
+DB_NAME = "report-attivita.db"
 
 # Tabelle consentite per la gestione dei report
 VALID_REPORT_TABLES = {"report_da_validare", "report_interventi"}

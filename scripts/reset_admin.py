@@ -3,7 +3,7 @@ from pathlib import Path
 
 import bcrypt
 
-DB_NAME = "schedario.db"
+DB_NAME = "report-attivita.db"
 
 
 def reset_admin():

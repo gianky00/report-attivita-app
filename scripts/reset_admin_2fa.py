@@ -12,7 +12,7 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-DB_NAME = Path(__file__).parent.parent / "schedario.db"
+DB_NAME = Path(__file__).parent.parent / "report-attivita.db"
 
 
 def reset_user_2fa(matricola: str):

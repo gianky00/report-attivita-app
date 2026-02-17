@@ -5,7 +5,7 @@ Questa è un'applicazione **Streamlit** avanzata progettata per la gestione oper
 
 ### 🛠️ CORE TECH STACK
 - **Frontend/App Framework:** Streamlit (Python)
-- **Database:** SQLite (schedario.db) + Google Sheets (via gspread)
+- **Database:** SQLite (report-attivita.db) + Google Sheets (via gspread)
 - **AI Integration:** Google Generative AI (Gemini Flash)
 - **Auth & Security:** Bcrypt (hashing), PyOTP (2FA), PyArmor (licensing)
 - **Infrastructure:** Docker & Docker Compose, Ngrok (tunneling)
@@ -73,6 +73,6 @@ Il progetto segue una struttura modulare per separare la logica UI dalla busines
 ---
 
 ## 💾 DATA PERSISTENCE
-- **SQLite (`schedario.db`):** Contiene turni, prenotazioni, log di sistema, report da validare e dati utenti. Situato nella root del progetto.
+- **SQLite (`report-attivita.db`):** Contiene turni, prenotazioni, log di sistema, report da validare e dati utenti. Situato nella root del progetto.
 - **Knowledge Core:** `knowledge_core.json` per la memoria locale del sistema. Situato nella root del progetto.
 - **Google Sheets:** Utilizzato come backup o per l'export di risposte ai report.

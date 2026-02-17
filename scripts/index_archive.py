@@ -10,7 +10,7 @@ from pathlib import Path
 
 # Configurazione percorsi
 ARCHIVE_ROOT = r"D:\PC ALLEGRETTI COEMI\STORICO SCHEDE\Archivio Schede Elaborate"
-DB_PATH = Path(__file__).parent.parent / "schedario.db"
+DB_PATH = Path(__file__).parent.parent / "report-attivita.db"
 
 
 def index_archive():

@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-DB_PATH = Path(__file__).parent.parent.parent / "schedario.db"
+DB_PATH = Path(__file__).parent.parent.parent / "report-attivita.db"
 
 
 def search_archive(query: str, limit: int = 50) -> pd.DataFrame:

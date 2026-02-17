@@ -14,7 +14,7 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-DB_NAME = Path(__file__).parent.parent / "schedario.db"
+DB_NAME = Path(__file__).parent.parent / "report-attivita.db"
 
 
 def add_admin_user(matricola: str = "admin", nome: str = "Admin User"):

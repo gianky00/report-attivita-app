@@ -13,7 +13,7 @@ The compose file runs `scripts/crea_database.py` before starting Streamlit, and 
 **Local development:**
 ```bash
 pip install -r requirements.txt
-python scripts/crea_database.py        # Creates/updates schedario.db schema
+python scripts/crea_database.py        # Creates/updates report-attivita.db schema
 streamlit run src/app.py               # Starts the app on :8501
 ```
 
@@ -58,7 +58,7 @@ The app requires files that are **not** in the repo and must be set up manually 
 - `src/components/` — Reusable UI fragments: `render_debriefing_ui` (activity report form with optional AI correction), `render_edit_shift_form`, `render_notification_center`, `disegna_sezione_attivita`.
 - `src/modules/` — All business logic and data access. No Streamlit rendering here (with a few `st.error` fallback prints).
 
-**Database access:** All SQLite queries must go through `src/modules/db_manager.py`. It provides `get_db_connection()` (returns `sqlite3.Row`-backed connections) and typed functions per entity. The database file is `schedario.db` in the project root. Schema is defined and created idempotently by `scripts/crea_database.py`. Never open connections to `schedario.db` directly outside `db_manager.py` and `auth.py`.
+**Database access:** All SQLite queries must go through `src/modules/db_manager.py`. It provides `get_db_connection()` (returns `sqlite3.Row`-backed connections) and typed functions per entity. The database file is `report-attivita.db` in the project root. Schema is defined and created idempotently by `scripts/crea_database.py`. Never open connections to `report-attivita.db` directly outside `db_manager.py` and `auth.py`.
 
 **Configuration:** `src/config.py` reads `.streamlit/secrets.toml` at import time using the `toml` library and exports path constants and email settings. It also creates two `threading.Lock` objects (`EXCEL_LOCK`, `OUTLOOK_LOCK`) used when accessing shared Windows resources (Excel files, Outlook).
 
