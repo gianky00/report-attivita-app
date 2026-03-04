@@ -75,15 +75,11 @@ def render_debriefing_ui(
         height=200,
     )
 
-    c_ore, c_stato = st.columns(2)
-    # Gestione ore (possono venire da 'ore_lavoro' di Excel o 'ore_lavoro' del DB)
-    ore_val = task.get("ore_lavoro", 0.0)
-    c_ore.markdown(f"**Ore Lavoro (Auto):** {ore_val}")
-
+    # Gestione stato finale senza colonna ore
     opts = STATI_ATTIVITA
     current = task.get("stato") or task.get("stato_attivita")
     idx = opts.index(current) if current in opts else 0
-    stato = c_stato.selectbox("Stato Finale", opts, index=idx, key="manual_stato")
+    stato = st.selectbox("Stato Finale", opts, index=idx, key="manual_stato")
 
     c1, c2 = st.columns(2)
     if c1.button("Invia Report", type="primary") and handle_submit(

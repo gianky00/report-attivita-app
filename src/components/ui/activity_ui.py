@@ -8,7 +8,11 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from modules.db_manager import add_assignment_exclusion, get_unvalidated_reports_by_technician
+from modules.db_manager import (
+    add_assignment_exclusion,
+    annulla_invio_report,
+    get_unvalidated_reports_by_technician,
+)
 from modules.utils import merge_time_slots
 
 
@@ -137,13 +141,31 @@ def _render_unvalidated_section(section_key: str) -> None:
                         f"**PdL `{r['pdl']}`** - Inviato il {pd.to_datetime(r['data_compilazione']).strftime('%d/%m/%Y %H:%M')}"
                     )
                     st.info(r["testo_report"])
-                    if st.button(
-                        "Modifica Report",
-                        icon=":material/edit:",
-                        key=f"edit_{section_key}_{r['id_report']}",
-                    ):
-                        task_data = r.to_dict()
-                        task_data["section_key"] = section_key
-                        st.session_state.debriefing_task = task_data
-                        st.session_state.report_mode = "manual"
-                        st.rerun()
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button(
+                            "Modifica Report",
+                            icon=":material/edit:",
+                            key=f"edit_{section_key}_{r['id_report']}",
+                            use_container_width=True,
+                        ):
+                            task_data = r.to_dict()
+                            task_data["section_key"] = section_key
+                            st.session_state.debriefing_task = task_data
+                            st.session_state.report_mode = "manual"
+                            st.rerun()
+                    
+                    with col2:
+                        if st.button(
+                            "Annulla Invio",
+                            icon=":material/undo:",
+                            key=f"undo_{section_key}_{r['id_report']}",
+                            type="secondary",
+                            use_container_width=True,
+                            help="Rimuovi il report e riporta l'attività tra quelle da compilare.",
+                        ):
+                            if annulla_invio_report(r["id_report"], matricola):
+                                st.toast("Invio annullato con successo.")
+                                st.rerun()
+                            else:
+                                st.error("Errore durante l'annullamento dell'invio.")

@@ -6,7 +6,7 @@ Gestisce il flusso di approvazione e il trasferimento dei dati nello storico def
 import pandas as pd
 import streamlit as st
 
-from constants import ICONS
+from constants import ICONS, STATI_ATTIVITA
 from modules.db_manager import (
     delete_reports_by_ids,
     get_reports_to_validate,
@@ -64,12 +64,23 @@ def render_report_validation_tab(user_matricola: str) -> None:
             "descrizione_attivita": st.column_config.Column("Descrizione", width="medium"),
             "matricola_tecnico": None,
             "nome_tecnico": st.column_config.Column("Tecnico", width="small"),
-            "stato_attivita": st.column_config.Column("Stato", width="small"),
+            "stato_attivita": st.column_config.SelectboxColumn(
+                "Stato",
+                width="small",
+                options=STATI_ATTIVITA,
+                required=True,
+            ),
             "testo_report": st.column_config.TextColumn("Report", width="large"),
             "data_compilazione": st.column_config.DatetimeColumn(
                 "Data Compilazione", format="DD/MM/YYYY HH:mm", width="small"
             ),
             "data_riferimento_attivita": None,
+            "nome": None,
+            "cognome": None,
+            "tecnico_nome": None,
+            "tecnico_cognome": None,
+            "team": st.column_config.Column("Team", width="medium"),
+            "ore_lavoro": None,
         },
         disabled=disabled_cols,
     )

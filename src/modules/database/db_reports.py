@@ -258,3 +258,9 @@ def get_unvalidated_reports_by_technician(matricola: str) -> pd.DataFrame:
         return pd.read_sql_query(query, conn, params=(matricola,))
     finally:
         conn.close()
+
+
+def annulla_invio_report(report_id: str, matricola: str) -> bool:
+    """Cancella un report dalla coda di validazione se appartiene al tecnico specificato."""
+    sql = "DELETE FROM report_da_validare WHERE id_report = ? AND matricola_tecnico = ?"
+    return DatabaseEngine.execute(sql, (report_id, matricola))

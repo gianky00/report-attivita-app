@@ -4,6 +4,7 @@ Riesporta le funzioni dai moduli specializzati per mantenere la compatibilità.
 """
 
 from modules.database.db_reports import (
+    annulla_invio_report,
     delete_report_by_id,
     delete_reports_by_ids,
     get_report_by_id,
@@ -78,6 +79,7 @@ __all__ = [
     "add_notification",
     "add_shift_log",
     "add_substitution_request",
+    "annulla_invio_report",
     "check_user_oncall_conflict",
     "count_unread_notifications",
     "create_shift",

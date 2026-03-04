@@ -41,10 +41,7 @@ def scrivi_o_aggiorna_risposta(
             "descrizione_attivita": dati_da_scrivere["descrizione"],
             "matricola_tecnico": matricola,
             "nome_tecnico": nome_completo,  # Mantenuto per compatibilità
-            "tecnico_nome": nome,
-            "tecnico_cognome": cognome,
             "team": dati_da_scrivere.get("team_completo", ""),
-            "ore_lavoro": float(dati_da_scrivere.get("ore", 0.0)),
             "stato_attivita": dati_da_scrivere["stato"],
             "testo_report": dati_da_scrivere["report"],
             "data_compilazione": timestamp_compilazione.isoformat(),
