@@ -20,7 +20,6 @@ def test_config_defaults(mocker):
     full_conf = {
         "general": {"app_name": "Test"},
         "path_storico_db": "test.db",
-        "path_gestionale": "test.db",
         "path_giornaliera_base": ".",
         "path_attivita_programmate": "test.xlsx",
     }

@@ -71,12 +71,21 @@ def _render_user_card(user: Any) -> None:
         col1, col2 = st.columns([3, 1])
         with col1:
             is_placeholder = pd.isna(user.get("PasswordHash"))
-            status = "Da Attivare" if is_placeholder else "Attivo"
+            current_status = user.get("Stato", "Attivo")
+            
+            # Colore e label basati sullo stato
+            status_label = "Attivo" if current_status == "Attivo" else "DISABILITATO"
+            status_color = "green" if current_status == "Attivo" else "red"
+            
+            if is_placeholder:
+                status_display = f"<span style='color:orange'>Da Attivare</span>"
+            else:
+                status_display = f"<span style='color:{status_color}'>{status_label}</span>"
+
             st.markdown(
-                f"**{user_name}** (`{user_matricola}`) - *{user['Ruolo']}* - Stato: **{status}**"
+                f"**{user_name}** (`{user_matricola}`) - *{user['Ruolo']}* - Stato: {status_display}",
+                unsafe_allow_html=True
             )
-            # Debug/Verify
-            # st.caption(f"Nome: {user.get('Nome')} | Cognome: {user.get('Cognome')}")
         with col2:
             st.button(
                 "Modifica",
@@ -85,7 +94,7 @@ def _render_user_card(user: Any) -> None:
                 on_click=start_edit,
             )
 
-        b1, b2, b3 = st.columns(3)
+        b1, b2, b3, b4 = st.columns(4)
         b1.button(
             "Resetta Password",
             icon=":material/key:",
@@ -104,6 +113,25 @@ def _render_user_card(user: Any) -> None:
             ),
             disabled=pd.isna(user.get("2FA_Secret")),
         )
+
+        # Gestione Toggle Stato Account
+        from modules.db_manager import update_user_status
+        is_active = (current_status == "Attivo")
+        toggle_label = "Disabilita" if is_active else "Riabilita"
+        toggle_icon = ":material/person_off:" if is_active else ":material/person_check:"
+        
+        if b3.button(
+            toggle_label,
+            icon=toggle_icon,
+            key=f"toggle_status_{user_matricola}",
+            help=f"{toggle_label} l'accesso per questo utente."
+        ):
+            new_status = "Disabilitato" if is_active else "Attivo"
+            if update_user_status(user_matricola, new_status):
+                st.success(f"Account {user_name} impostato su {new_status}.")
+                st.rerun()
+            else:
+                st.error("Errore durante l'aggiornamento dello stato.")
 
         if st.session_state.deleting_user_matricola == user_matricola:
             st.warning(
@@ -127,7 +155,7 @@ def _render_user_card(user: Any) -> None:
                 st.session_state.deleting_user_matricola = None
                 st.rerun()
         else:
-            b3.button(
+            b4.button(
                 "Elimina Utente",
                 icon=ICONS["DELETE"],
                 key=f"delete_{user_matricola}",

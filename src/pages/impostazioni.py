@@ -18,7 +18,7 @@ from modules.utils import render_svg_icon
 
 def render_impostazioni_page(matricola: str) -> None:
     """Renderizza la pagina delle impostazioni utente."""
-    st.title("Impostazioni")
+    st.header("Impostazioni")
 
     user = get_user_by_matricola(matricola)
     if not user:

@@ -52,7 +52,7 @@ def resolve_path(raw_path: str) -> str:
 
 
 # --- CARICAMENTO CONFIGURAZIONE ---
-SECRETS_PATH = Path(".streamlit/secrets.toml")
+SECRETS_PATH = Path(__file__).parent.parent / ".streamlit" / "secrets.toml"
 
 try:
     secrets = toml.loads(SECRETS_PATH.read_text(encoding="utf-8"))
@@ -108,7 +108,6 @@ validate_config(secrets)
 
 # Esportazione costanti con fallback per i test
 PATH_STORICO_DB = resolve_path(secrets.get("path_storico_db", ""))
-PATH_GESTIONALE = resolve_path(secrets.get("path_gestionale", ""))
 PATH_ATTIVITA_PROGRAMMATE = resolve_path(secrets.get("path_attivita_programmate", ""))
 
 # --- GESTIONE DINAMICA GIORNALIERA ---
@@ -159,12 +158,6 @@ def get_storico_db_path() -> str:
     """Restituisce il percorso allo storico DB."""
 
     return PATH_STORICO_DB
-
-
-def get_gestionale_path() -> str:
-    """Restituisce il percorso al file gestionale."""
-
-    return PATH_GESTIONALE
 
 
 def check_data_connectivity() -> dict[str, bool]:

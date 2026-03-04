@@ -73,6 +73,8 @@ def _handle_password_login() -> None:
                 st.rerun()
             elif res == "FIRST_LOGIN_SETUP":
                 _handle_first_login(m_in, data)
+            elif res == "DISABLED":
+                st.error("Accesso negato: questo account è stato disabilitato dall'amministratore.", icon=":material/block:")
             else:
                 st.error("Credenziali non valide.")
 
@@ -174,6 +176,19 @@ def handle_login_and_navigation() -> None:
     from app import main_app  # import locale per evitare circular import
 
     _init_session_state()
+
+    # Se siamo già loggati, verifichiamo che l'account non sia stato disabilitato nel frattempo
+    if st.session_state.login_state == "logged_in":
+        user = get_user_by_matricola(st.session_state.authenticated_user)
+        if user and user.get("Stato") == "Disabilitato":
+            st.session_state.update({
+                "login_state": "password",
+                "authenticated_user": None,
+                "ruolo": None,
+            })
+            st.query_params.clear()
+            st.error("La tua sessione è stata interrotta: l'account è stato disabilitato dall'amministratore.")
+            st.rerun()
 
     # Se non siamo loggati in session_state, proviamo a recuperare dal token URL
     if st.session_state.login_state != "logged_in":

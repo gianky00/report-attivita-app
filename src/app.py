@@ -143,7 +143,7 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
                     "Alcune funzionalità (Recupero Attività) potrebbero non funzionare correttamente."
                 )
 
-        st.title(st.session_state.main_tab)
+        st.header(st.session_state.main_tab)
         st.markdown('<div class="main-container">', unsafe_allow_html=True)
         st.markdown('<div class="page-content">', unsafe_allow_html=True)
 
@@ -159,7 +159,7 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
                 st.stop()
 
         if selected_tab == "Attività Assegnate":
-            if ruolo in ("Tecnico", "Amministratore"):
+            if ruolo in ("Tecnico", "Aiutante", "Amministratore"):
                 sub_labels = [
                     "Attività di Oggi",
                     "Recupero Attività",
@@ -200,7 +200,7 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
                             st.markdown(f"**Descrizione:** {r['descrizione_attivita']}")
                             st.info(f"**Report:**\n\n{r['testo_report']}")
 
-            if ruolo in ("Tecnico", "Amministratore") and len(sub_tabs) > 3:
+            if ruolo in ("Tecnico", "Aiutante", "Amministratore") and len(sub_tabs) > 3:
                 with sub_tabs[3]:
                     from components.form_handlers import (
                         render_relazione_reperibilita_ui,

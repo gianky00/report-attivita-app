@@ -11,15 +11,15 @@ import bcrypt
 import pyotp
 
 from constants import VALID_USER_COLUMNS
+from core.database import DatabaseEngine
 from core.logging import get_logger
-from modules.db_manager import get_db_connection
 
 logger = get_logger(__name__)
 
 
 def get_user_by_matricola(matricola: str) -> dict[str, Any] | None:
     """Recupera un utente dal database tramite la sua matricola."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         cursor = conn.cursor()
         query = "SELECT * FROM contatti WHERE Matricola = ?"
@@ -50,7 +50,7 @@ def create_user(user_data: dict[str, Any]) -> bool:
     if not filtered_data:
         return False
 
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         with conn:
             cols = ", ".join(f'"{k}"' for k in filtered_data)
@@ -75,7 +75,7 @@ def update_user(matricola: str, update_data: dict[str, Any]) -> bool:
     if not filtered_data:
         return False
 
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         with conn:
             set_clause = ", ".join(f'"{k}" = ?' for k in filtered_data)
@@ -93,7 +93,7 @@ def update_user(matricola: str, update_data: dict[str, Any]) -> bool:
 
 def delete_user(matricola: str) -> bool:
     """Cancella un utente dal database."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         with conn:
             sql = "DELETE FROM contatti WHERE Matricola = ?"
@@ -171,7 +171,7 @@ def authenticate_user(matricola: str, password: str) -> tuple[str, Any]:
     if not matricola or not password:
         return "FAILED", None
 
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM contatti")
@@ -185,6 +185,10 @@ def authenticate_user(matricola: str, password: str) -> tuple[str, Any]:
         user_row = get_user_by_matricola(matricola)
         if not user_row:
             return "FAILED", None
+
+        # Controllo stato account
+        if user_row.get("Stato") == "Disabilitato":
+            return "DISABLED", None
 
         nome_completo = str(user_row["Nome Cognome"]).strip()
         ruolo = user_row.get("Ruolo", "Tecnico")
@@ -212,7 +216,7 @@ def authenticate_user(matricola: str, password: str) -> tuple[str, Any]:
 
 def log_access_attempt(username: str, status: str) -> bool:
     """Registra un tentativo di accesso direttamente nel database."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         with conn:
             sql = "INSERT INTO access_logs (timestamp, username, status) VALUES (?, ?, ?)"

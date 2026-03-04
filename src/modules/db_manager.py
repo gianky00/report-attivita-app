@@ -20,13 +20,9 @@ from modules.database.db_reports import (
     salva_report_intervento,
 )
 from modules.database.db_requests import (
-    add_leave_request,
     add_material_request,
-    get_leave_requests,
     get_material_requests,
-    get_storico_richieste_assenze,
     get_storico_richieste_materiali,
-    salva_storico_assenze,
     salva_storico_materiali,
 )
 from modules.database.db_shifts import (
@@ -71,13 +67,13 @@ from modules.database.db_users import (
     get_db_connection,
     get_last_login,
     get_substitution_request_by_id,
+    update_user_status,
 )
 
 __all__ = [
     "add_assignment_exclusion",
     "add_bacheca_item",
     "add_booking",
-    "add_leave_request",
     "add_material_request",
     "add_notification",
     "add_shift_log",
@@ -104,7 +100,6 @@ __all__ = [
     "get_excluded_activities_for_user",
     "get_globally_excluded_activities",
     "get_last_login",
-    "get_leave_requests",
     "get_material_requests",
     "get_notifications_for_user",
     "get_pdl_programmazione",
@@ -112,7 +107,6 @@ __all__ = [
     "get_reports_to_validate",
     "get_shift_by_id",
     "get_shifts_by_type",
-    "get_storico_richieste_assenze",
     "get_storico_richieste_materiali",
     "get_substitution_request_by_id",
     "get_table_data",
@@ -127,7 +121,6 @@ __all__ = [
     "process_and_commit_validated_reports",
     "salva_relazione",
     "salva_report_intervento",
-    "salva_storico_assenze",
     "salva_storico_materiali",
     "save_table_data",
     "update_bacheca_item",

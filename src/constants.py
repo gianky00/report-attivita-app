@@ -21,6 +21,7 @@ VALID_USER_COLUMNS = {
     "Ruolo",
     "PasswordHash",
     "2FA_Secret",
+    "Stato",
     "Email",
     "Telefono",
 }
@@ -103,7 +104,6 @@ VERSION_DATE = "Febbraio 2026"
 PATH_KNOWLEDGE_CORE = "knowledge_core.json"
 REQUIRED_CONFIG_KEYS = [
     "path_storico_db",
-    "path_gestionale",
     "path_giornaliera_base",
     "path_attivita_programmate",
 ]

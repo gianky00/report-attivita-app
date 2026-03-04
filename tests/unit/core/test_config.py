@@ -29,7 +29,6 @@ def test_validate_config_success(mocker):
 
     good_conf = {
         "path_storico_db": "p1",
-        "path_gestionale": "p2",
         "path_giornaliera_base": "p3",
         "path_attivita_programmate": "p4",
     }

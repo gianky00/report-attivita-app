@@ -7,7 +7,6 @@ import streamlit as st
 from config import (
     IS_DOCKER,
     PATH_ATTIVITA_PROGRAMMATE,
-    PATH_GESTIONALE,
     PATH_GIORNALIERA_BASE,
     PATH_STORICO_DB,
     check_data_connectivity,
@@ -37,8 +36,6 @@ def render_system_status_tab() -> None:
             path_val = PATH_GIORNALIERA_BASE
         elif name == "Storico DB":
             path_val = PATH_STORICO_DB
-        elif name == "Gestione":
-            path_val = PATH_GESTIONALE
         elif name == "Attività Programmate":
             path_val = PATH_ATTIVITA_PROGRAMMATE
 
