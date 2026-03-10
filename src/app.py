@@ -89,6 +89,7 @@ def main_app(matricola_utente: str, ruolo: str) -> None:
     """
     # Avvio sincronizzazione elastica (non bloccante)
     from modules.data_manager import trigger_smart_sync
+
     trigger_smart_sync()
 
     st.set_page_config(

@@ -128,4 +128,5 @@ __all__ = [
     "update_bacheca_item",
     "update_booking_user",
     "update_shift",
+    "update_user_status",
 ]

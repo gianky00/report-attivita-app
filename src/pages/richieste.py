@@ -76,7 +76,9 @@ def render_richieste_tab(matricola_utente: str, ruolo: str, nome_utente_autentic
             df_richieste_con_nome["Nome Cognome"] = df_richieste_con_nome["Nome Cognome"].fillna(
                 "Sconosciuto"
             )
-            df_richieste_con_nome["Timestamp"] = pd.to_datetime(df_richieste_con_nome["Timestamp"]).dt.strftime("%d/%m/%Y %H:%M")
+            df_richieste_con_nome["Timestamp"] = pd.to_datetime(
+                df_richieste_con_nome["Timestamp"]
+            ).dt.strftime("%d/%m/%Y %H:%M")
             st.dataframe(
                 df_richieste_con_nome[
                     ["Timestamp", "Nome Cognome", "Dettagli", "Stato"]

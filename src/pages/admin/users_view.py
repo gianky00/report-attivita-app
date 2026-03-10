@@ -72,19 +72,19 @@ def _render_user_card(user: Any) -> None:
         with col1:
             is_placeholder = pd.isna(user.get("PasswordHash"))
             current_status = user.get("Stato", "Attivo")
-            
+
             # Colore e label basati sullo stato
             status_label = "Attivo" if current_status == "Attivo" else "DISABILITATO"
             status_color = "green" if current_status == "Attivo" else "red"
-            
+
             if is_placeholder:
-                status_display = f"<span style='color:orange'>Da Attivare</span>"
+                status_display = "<span style='color:orange'>Da Attivare</span>"
             else:
                 status_display = f"<span style='color:{status_color}'>{status_label}</span>"
 
             st.markdown(
                 f"**{user_name}** (`{user_matricola}`) - *{user['Ruolo']}* - Stato: {status_display}",
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
         with col2:
             st.button(
@@ -116,15 +116,16 @@ def _render_user_card(user: Any) -> None:
 
         # Gestione Toggle Stato Account
         from modules.db_manager import update_user_status
-        is_active = (current_status == "Attivo")
+
+        is_active = current_status == "Attivo"
         toggle_label = "Disabilita" if is_active else "Riabilita"
         toggle_icon = ":material/person_off:" if is_active else ":material/person_check:"
-        
+
         if b3.button(
             toggle_label,
             icon=toggle_icon,
             key=f"toggle_status_{user_matricola}",
-            help=f"{toggle_label} l'accesso per questo utente."
+            help=f"{toggle_label} l'accesso per questo utente.",
         ):
             new_status = "Disabilitato" if is_active else "Attivo"
             if update_user_status(user_matricola, new_status):

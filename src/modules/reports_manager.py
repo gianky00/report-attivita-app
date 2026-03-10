@@ -13,10 +13,15 @@ from modules.db_manager import get_db_connection
 
 
 def scrivi_o_aggiorna_risposta(
-    dati_da_scrivere: dict[str, str], matricola: str, data_riferimento: datetime.date
+    dati_da_scrivere: dict[str, str],
+    matricola: str,
+    data_riferimento: datetime.date,
+    id_report: str | None = None,
 ) -> bool:
-    """Scrive un report nel DB e invia notifica email."""
+    """Scrive un report nel DB (o lo aggiorna se id_report è fornito) e invia notifica email."""
     timestamp_compilazione = datetime.datetime.now()
+    from modules.database.db_reports import insert_report
+
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -27,20 +32,15 @@ def scrivi_o_aggiorna_risposta(
             return False
         nome_completo = user_result[0]
 
-        # Divisione Nome e Cognome
-        parts = nome_completo.split(maxsplit=1)
-        nome = parts[0] if len(parts) > 0 else ""
-        cognome = parts[1] if len(parts) > 1 else ""
-
         pdl_match = re.search(r"PdL (\d{6}/[CS]|\d{6})", dati_da_scrivere["descrizione"])
         pdl = pdl_match.group(1) if pdl_match else "N/D"
 
         report_data = {
-            "id_report": str(uuid.uuid4()),
+            "id_report": id_report if id_report else str(uuid.uuid4()),
             "pdl": pdl,
             "descrizione_attivita": dati_da_scrivere["descrizione"],
             "matricola_tecnico": matricola,
-            "nome_tecnico": nome_completo,  # Mantenuto per compatibilità
+            "nome_tecnico": nome_completo,
             "team": dati_da_scrivere.get("team_completo", ""),
             "stato_attivita": dati_da_scrivere["stato"],
             "testo_report": dati_da_scrivere["report"],
@@ -48,19 +48,15 @@ def scrivi_o_aggiorna_risposta(
             "data_riferimento_attivita": data_riferimento.isoformat(),
         }
 
-        with conn:
-            cols = ", ".join(f'"{k}"' for k in report_data)
-            placeholders = ", ".join("?" for _ in report_data)
-            cursor.execute(
-                f"INSERT INTO report_da_validare ({cols}) VALUES ({placeholders})",  # nosec B608
-                list(report_data.values()),
+        # Utilizziamo la funzione centralizzata in db_reports per l'inserimento/update
+        # che gestisce anche l'aggiornamento della tabella di programmazione PDL
+        if insert_report(report_data, "report_da_validare"):
+            _send_validation_email(
+                nome_completo, data_riferimento, timestamp_compilazione, dati_da_scrivere
             )
-
-        _send_validation_email(
-            nome_completo, data_riferimento, timestamp_compilazione, dati_da_scrivere
-        )
-        st.cache_data.clear()
-        return True
+            st.cache_data.clear()
+            return True
+        return False
     except (sqlite3.Error, Exception) as e:
         st.error(f"Errore salvataggio report: {e}")
         return False

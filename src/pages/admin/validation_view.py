@@ -36,9 +36,25 @@ def render_report_validation_tab(user_matricola: str) -> None:
         st.success("Nessun nuovo report da validare al momento.", icon=ICONS["CHECK"])
         return
 
-    reports_df.insert(0, "delete", False)
+    reports_df.insert(0, "valida", True)
+    reports_df.insert(1, "delete", False)
     st.markdown("---")
     st.markdown(f"**Ci sono {len(reports_df)} report in attesa di validazione.**")
+
+    # Funzione per colorare le righe in base allo stato
+    def color_rows(row: pd.Series) -> list[str]:
+        stato = row["stato_attivita"]
+        color = ""
+        if stato == "TERMINATA":
+            color = "background-color: rgba(40, 167, 69, 0.2)"  # Verde trasparente
+        elif stato == "IN CORSO":
+            color = "background-color: rgba(255, 193, 7, 0.2)"  # Giallo trasparente
+        elif stato == "SOSPESA":
+            color = "background-color: rgba(111, 66, 193, 0.2)"  # Viola trasparente
+        elif stato == "NON SVOLTA":
+            color = "background-color: rgba(220, 53, 69, 0.2)"  # Rosso trasparente
+
+        return [color] * len(row)
 
     disabled_cols = [
         "id_report",
@@ -50,12 +66,18 @@ def render_report_validation_tab(user_matricola: str) -> None:
         "data_riferimento_attivita",
     ]
 
+    # Applichiamo lo stile prima del data_editor
+    styled_df = reports_df.style.apply(color_rows, axis=1)
+
     edited_df = st.data_editor(
-        reports_df,
+        styled_df,
         key="validation_editor",
         num_rows="dynamic",
         width="stretch",
         column_config={
+            "valida": st.column_config.CheckboxColumn(
+                "Valida", help="Seleziona per validare il report.", default=True
+            ),
             "delete": st.column_config.CheckboxColumn(
                 "Cancella", help="Seleziona per cancellare il report.", default=False
             ),
@@ -86,17 +108,18 @@ def render_report_validation_tab(user_matricola: str) -> None:
     )
 
     st.markdown("---")
-    col1, col2, _ = st.columns([2, 2, 5])
+    col1, col2, _ = st.columns([2.5, 2.5, 4])
 
     with col1:
-        reports_to_validate_df = edited_df[~edited_df["delete"]]
+        # Validiamo solo quelli selezionati per la validazione e NON selezionati per la cancellazione
+        reports_to_validate_df = edited_df[edited_df["valida"] & ~edited_df["delete"]]
         if not reports_to_validate_df.empty and st.button(
-            "Valida e Salva Modifiche",
+            f"Valida {len(reports_to_validate_df)} Report Selezionati",
             type="primary",
             use_container_width=True,
             icon=ICONS["CHECK"],
         ):
-            reports_to_process = reports_to_validate_df.drop(columns=["delete"])
+            reports_to_process = reports_to_validate_df.drop(columns=["delete", "valida"])
             with st.spinner("Salvataggio dei report validati in corso..."):
                 if process_and_commit_validated_reports(reports_to_process.to_dict("records")):  # type: ignore[arg-type]
                     st.success("Report validati e salvati con successo!", icon=ICONS["CHECK"])

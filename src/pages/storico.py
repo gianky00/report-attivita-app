@@ -1,13 +1,14 @@
 import datetime
+
 import pandas as pd
 import streamlit as st
 
 from constants import ICONS
 from modules.db_manager import (
+    get_pdl_programmazione,
     get_storico_richieste_materiali,
     get_validated_intervention_reports,
     get_validated_reports,
-    get_pdl_programmazione,
 )
 from pages.archivio_view import render_archivio_page
 
@@ -18,7 +19,7 @@ def render_storico_tab() -> None:
     le relazioni validate e le schede tecniche.
     """
     st.header(f"{ICONS['STORICO']} Storico")
-    
+
     tab1, tab2, tab3, tab4, tab5 = st.tabs(
         [
             f"{ICONS['STORICO']} Attività",
@@ -92,53 +93,82 @@ def render_storico_tab() -> None:
         st.subheader("Archivio Programmazione PDL")
         c1, c2, c3 = st.columns([1, 1, 1])
         today = datetime.date.today()
-        
+
         with c1:
-            data_inizio = st.date_input("Dalla data", today - datetime.timedelta(days=30), format="DD/MM/YYYY")
+            data_inizio = st.date_input(
+                "Dalla data", today - datetime.timedelta(days=30), format="DD/MM/YYYY"
+            )
         with c2:
             data_fine = st.date_input("Alla data", today, format="DD/MM/YYYY")
-        
+
         df_prog = get_pdl_programmazione(data_inizio.isoformat(), data_fine.isoformat())
-        
+
         if df_prog.empty:
             st.warning("Nessun PDL trovato per il periodo selezionato.")
         else:
             with c3:
-                search_prog = st.text_input("Cerca (Team, PDL o Descrizione)", "", key="search_storico_prog")
+                search_prog = st.text_input(
+                    "Cerca (Team, PDL o Descrizione)", "", key="search_storico_prog"
+                )
 
             if search_prog:
                 df_prog = df_prog[
-                    df_prog['pdl'].str.contains(search_prog, case=False, na=False) | 
-                    df_prog['team'].str.contains(search_prog, case=False, na=False) |
-                    df_prog['descrizione'].str.contains(search_prog, case=False, na=False)
+                    df_prog["pdl"].str.contains(search_prog, case=False, na=False)
+                    | df_prog["team"].str.contains(search_prog, case=False, na=False)
+                    | df_prog["descrizione"].str.contains(search_prog, case=False, na=False)
                 ]
 
             display_df = df_prog.copy()
             display_df.columns = [
-                "PDL", "Data Intervento", "Tecnico", "Descrizione", "Team", "Stato", "Tipo",
-                "Pianificato il", "Report Inviato", "Validato il"
+                "PDL",
+                "Data Intervento",
+                "Tecnico",
+                "Descrizione",
+                "Team",
+                "Stato",
+                "Tipo",
+                "Pianificato il",
+                "Report Inviato",
+                "Validato il",
             ]
 
             for col in ["Pianificato il", "Report Inviato", "Validato il"]:
-                display_df[col] = pd.to_datetime(display_df[col], errors='coerce').dt.strftime('%d/%m/%Y - %H:%M')
+                display_df[col] = pd.to_datetime(display_df[col], errors="coerce").dt.strftime(
+                    "%d/%m/%Y - %H:%M"
+                )
                 display_df[col] = display_df[col].fillna("-")
 
-            def color_status(val):
-                color = 'black'
-                if val == 'PIANIFICATO': color = '#6c757d'
-                elif val == 'INVIATO': color = '#ffc107'
-                elif val == 'VALIDATO': color = '#28a745'
-                return f'color: {color}; font-weight: bold'
+            def color_rows(row: pd.Series) -> list[str]:
+                val = row["Stato"]
+                color = "black"
+                bg_color = "transparent"
+                if val == "PIANIFICATO":
+                    color = "#6c757d"
+                elif val == "INVIATO":
+                    color = "#856404"  # Darker yellow for text
+                    bg_color = "rgba(255, 193, 7, 0.2)"
+                elif val == "VALIDATO":
+                    color = "#155724"  # Darker green for text
+                    bg_color = "rgba(40, 167, 69, 0.2)"
+                elif val == "NON SVOLTA":
+                    color = "#721c24"  # Darker red for text
+                    bg_color = "rgba(220, 53, 69, 0.2)"
+                elif val == "SOSPESA":
+                    color = "#383d41"
+                    bg_color = "rgba(111, 66, 193, 0.2)"
+
+                style = f"color: {color}; background-color: {bg_color}; font-weight: bold"
+                return [style] * len(row)
 
             st.dataframe(
-                display_df.style.map(color_status, subset=['Stato']),
+                display_df.style.apply(color_rows, axis=1),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
                     "PDL": st.column_config.TextColumn("PDL", width="small"),
                     "Data Intervento": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
                     "Stato": st.column_config.TextColumn("Stato", width="small"),
-                }
+                },
             )
 
     with tab3:

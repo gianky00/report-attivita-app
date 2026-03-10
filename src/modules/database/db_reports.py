@@ -83,7 +83,7 @@ def process_and_commit_validated_reports(reports: list[dict[str, Any]]) -> bool:
 
                 # --- AGGIORNAMENTO STATO PDL_PROGRAMMAZIONE ---
                 sql_pdl = (
-                    'UPDATE "pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot" SET stato = \'VALIDATO\', '
+                    "UPDATE \"pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot\" SET stato = 'VALIDATO', "
                     "timestamp_validazione = ? WHERE pdl = ? AND data_intervento = ?"
                 )
                 conn.execute(sql_pdl, (now, pdl, r.get("data_riferimento_attivita")))
@@ -193,29 +193,52 @@ def delete_report_by_id(report_id: str, table_name: str) -> bool:
 
 
 def insert_report(report_data: dict[str, Any], table_name: str) -> bool:
-    """Inserisce i dati di un report in una tabella specifica."""
+    """Inserisce i dati di un report in una tabella specifica o aggiorna se già esistente (Upsert)."""
     if table_name not in VALID_REPORT_TABLES:
         return False
-    
+
     conn = get_db_connection()
     now = datetime.datetime.now().isoformat()
     try:
         with conn:
-            cols = ", ".join(f'"{k}"' for k in report_data)
-            placeholders = ", ".join("?" for _ in report_data)
-            sql = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"  # nosec B608
-            conn.execute(sql, tuple(report_data.values()))
+            # Controllo se il report esiste già per fare UPDATE invece di INSERT
+            report_id = report_data.get("id_report")
+            exists = False
+            if report_id:
+                cursor = conn.execute(
+                    f"SELECT 1 FROM {table_name} WHERE id_report = ?", (report_id,)
+                )
+                exists = cursor.fetchone() is not None
 
-            # Se stiamo inserendo nella coda di validazione, aggiorniamo pdl_programmazione
+            if exists:
+                # UPDATE
+                update_data = {k: v for k, v in report_data.items() if k != "id_report"}
+                set_clause = ", ".join([f'"{k}" = ?' for k in update_data])
+                sql = f"UPDATE {table_name} SET {set_clause} WHERE id_report = ?"
+                params = [*list(update_data.values()), report_id]
+                conn.execute(sql, params)
+            else:
+                # INSERT
+                cols = ", ".join(f'"{k}"' for k in report_data)
+                placeholders = ", ".join("?" for _ in report_data)
+                sql = f"INSERT INTO {table_name} ({cols}) VALUES ({placeholders})"  # nosec B608
+                conn.execute(sql, tuple(report_data.values()))
+
+            # Se stiamo lavorando sulla coda di validazione, aggiorniamo pdl_programmazione
             if table_name == "report_da_validare":
                 pdl = report_data.get("pdl")
                 data_rif = report_data.get("data_riferimento_attivita")
                 if pdl and data_rif:
+                    # Rimuoviamo eventuali prefissi come "PdL " se presenti
+                    import re
+
+                    pdl_clean = re.sub(r"^PdL\s+", "", str(pdl))
+
                     sql_pdl = (
-                        'UPDATE "pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot" SET stato = \'INVIATO\', '
-                        "timestamp_invio_report = ? WHERE pdl = ? AND data_intervento = ?"
+                        "UPDATE \"pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot\" SET stato = 'INVIATO', "
+                        "timestamp_invio_report = ? WHERE (pdl = ? OR pdl = ?) AND data_intervento = ?"
                     )
-                    conn.execute(sql_pdl, (now, pdl, data_rif))
+                    conn.execute(sql_pdl, (now, pdl_clean, f"PdL {pdl_clean}", data_rif))
         return True
     except sqlite3.Error as e:
         logger.error(f"Errore inserimento report in {table_name}: {e}")

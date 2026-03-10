@@ -144,30 +144,30 @@ def estrai_tutte_le_attivita_giorno(giorno: int, mese: int, anno: int) -> list[d
         if len(r) < 12 or pd.isna(r[9]):
             continue
         found_pdls = re.findall(r"(\d{6}/[CS]|\d{6})", str(r[9]))
-        
+
         descs = [line.strip() for line in str(r[6]).splitlines() if line.strip()]
         for p, d in zip(found_pdls, descs, strict=False):
             key = (p, d)
             if key not in collezionate:
                 collezionate[key] = {
-                    "pdl": p, 
-                    "attivita": d, 
+                    "pdl": p,
+                    "attivita": d,
                     "tecnico_assegnato": str(r[5]).strip(),
                     "team": set(),
-                    "ore": 0.0
+                    "ore": 0.0,
                 }
-            
+
             collezionate[key]["team"].add(str(r[5]).strip())
-            try:
+            import contextlib
+
+            with contextlib.suppress(ValueError, TypeError):
                 collezionate[key]["ore"] += float(r[12]) if pd.notna(r[12]) else 0.0
-            except (ValueError, TypeError):
-                pass
 
     final = []
     for v in collezionate.values():
-        v["team"] = ", ".join(sorted(list(v["team"])))
+        v["team"] = ", ".join(sorted(v["team"]))
         final.append(v)
-    
+
     return final
 
 

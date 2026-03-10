@@ -112,7 +112,7 @@ def get_table_names() -> list[str]:
 def get_pdl_programmazione(data_inizio: str, data_fine: str) -> pd.DataFrame:
     """Recupera la programmazione dei PDL in un intervallo di date."""
     query = """
-        SELECT pdl, data_intervento, tecnico_assegnato, descrizione, team, stato, tipo, 
+        SELECT pdl, data_intervento, tecnico_assegnato, descrizione, team, stato, tipo,
                timestamp_pianificazione, timestamp_invio_report, timestamp_validazione
         FROM "pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot"
         WHERE data_intervento BETWEEN ? AND ?

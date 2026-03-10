@@ -89,4 +89,3 @@ def update_user_status(matricola: str, stato: str) -> bool:
     """Aggiorna lo stato di un utente (es. 'Attivo' o 'Disabilitato')."""
     sql = "UPDATE contatti SET Stato = ? WHERE Matricola = ?"
     return DatabaseEngine.execute(sql, (stato, matricola))
-

@@ -40,7 +40,10 @@ def handle_submit(
         "team_completo": team_string,
     }
 
-    if scrivi_o_aggiorna_risposta(dati, matricola_utente, data_riferimento):
+    # Passiamo l'id_report se presente nel task (caso di modifica report esistente)
+    id_report = task.get("id_report")
+
+    if scrivi_o_aggiorna_risposta(dati, matricola_utente, data_riferimento, id_report=id_report):
         _update_completed_tasks(task, report_text, stato, task["section_key"])
         st.success("Report inviato con successo!")
         del st.session_state.debriefing_task

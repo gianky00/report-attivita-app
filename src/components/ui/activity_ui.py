@@ -154,7 +154,7 @@ def _render_unvalidated_section(section_key: str) -> None:
                             st.session_state.debriefing_task = task_data
                             st.session_state.report_mode = "manual"
                             st.rerun()
-                    
+
                     with col2:
                         if st.button(
                             "Annulla Invio",

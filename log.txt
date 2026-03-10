@@ -1,0 +1,258 @@
+========================================================
+     INTELLEO PDF SPLITTER - LOCAL RELEASE (NO DEPLOY)
+========================================================
+[1/5] Checking Environment (.venv)...
+Updating dependencies...
+Requirement already satisfied: pip in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (25.0.1)
+Collecting pip
+  Using cached pip-26.0.1-py3-none-any.whl.metadata (4.7 kB)
+Using cached pip-26.0.1-py3-none-any.whl (1.8 MB)
+
+[notice] A new release of pip is available: 25.0.1 -> 26.0.1
+[notice] To update, run: python.exe -m pip install --upgrade pip
+ERROR: To modify pip, please run the following command:
+C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\Scripts\python.exe -m pip install --upgrade pip
+Requirement already satisfied: PyMuPDF in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 1)) (1.26.7)
+Requirement already satisfied: Pillow in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 2)) (12.0.0)
+Requirement already satisfied: pytesseract in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 3)) (0.3.13)
+Requirement already satisfied: cryptography in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 4)) (46.0.3)
+Requirement already satisfied: pyarmor in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 5)) (9.2.2)
+Requirement already satisfied: pyinstaller in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 6)) (6.17.0)
+Requirement already satisfied: numpy in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 7)) (2.3.5)
+Requirement already satisfied: pytest in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 8)) (9.0.2)
+Requirement already satisfied: pytest-cov in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 9)) (7.0.0)
+Requirement already satisfied: requests in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 10)) (2.32.5)
+Requirement already satisfied: packaging in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 11)) (25.0)
+Requirement already satisfied: PySide6 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from -r src/requirements.txt (line 12)) (6.10.2)
+Requirement already satisfied: cffi>=2.0.0 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from cryptography->-r src/requirements.txt (line 4)) (2.0.0)
+Requirement already satisfied: pyarmor.cli.core~=8.1.0 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pyarmor->-r src/requirements.txt (line 5)) (8.1.0)
+Requirement already satisfied: altgraph in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pyinstaller->-r src/requirements.txt (line 6)) (0.17.5)
+Requirement already satisfied: pefile>=2022.5.30 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pyinstaller->-r src/requirements.txt (line 6)) (2024.8.26)
+Requirement already satisfied: pyinstaller-hooks-contrib>=2025.9 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pyinstaller->-r src/requirements.txt (line 6)) (2025.10)
+Requirement already satisfied: pywin32-ctypes>=0.2.1 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pyinstaller->-r src/requirements.txt (line 6)) (0.2.3)
+Requirement already satisfied: setuptools>=42.0.0 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pyinstaller->-r src/requirements.txt (line 6)) (80.9.0)
+Requirement already satisfied: colorama>=0.4 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pytest->-r src/requirements.txt (line 8)) (0.4.6)
+Requirement already satisfied: iniconfig>=1.0.1 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pytest->-r src/requirements.txt (line 8)) (2.3.0)
+Requirement already satisfied: pluggy<2,>=1.5 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pytest->-r src/requirements.txt (line 8)) (1.6.0)
+Requirement already satisfied: pygments>=2.7.2 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from pytest->-r src/requirements.txt (line 8)) (2.19.2)
+Requirement already satisfied: coverage>=7.10.6 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from coverage[toml]>=7.10.6->pytest-cov->-r src/requirements.txt (line 9)) (7.13.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from requests->-r src/requirements.txt (line 10)) (3.4.4)
+Requirement already satisfied: idna<4,>=2.5 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from requests->-r src/requirements.txt (line 10)) (3.11)
+Requirement already satisfied: urllib3<3,>=1.21.1 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from requests->-r src/requirements.txt (line 10)) (2.6.2)
+Requirement already satisfied: certifi>=2017.4.17 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from requests->-r src/requirements.txt (line 10)) (2025.11.12)
+Requirement already satisfied: shiboken6==6.10.2 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from PySide6->-r src/requirements.txt (line 12)) (6.10.2)
+Requirement already satisfied: PySide6_Essentials==6.10.2 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from PySide6->-r src/requirements.txt (line 12)) (6.10.2)
+Requirement already satisfied: PySide6_Addons==6.10.2 in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from PySide6->-r src/requirements.txt (line 12)) (6.10.2)
+Requirement already satisfied: pycparser in c:\users\coemi\desktop\script\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\lib\site-packages (from cffi>=2.0.0->cryptography->-r src/requirements.txt (line 4)) (2.23)
+
+[notice] A new release of pip is available: 25.0.1 -> 26.0.1
+[notice] To update, run: python.exe -m pip install --upgrade pip
+
+[2/5] Running Unit Tests...
+================================================= test session starts =================================================
+platform win32 -- Python 3.12.10, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+PySide6 6.10.2 -- Qt runtime 6.10.2 -- Qt compiled 6.10.2
+rootdir: C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab
+configfile: pyproject.toml
+testpaths: tests
+plugins: cov-7.0.0, qt-4.5.0
+collected 56 items
+
+tests/test_app_logger.py::TestAppLogger::test_exception_handler_logs_error PASSED                                [  1%]
+tests/test_app_logger.py::TestAppLogger::test_get_app_directory_frozen PASSED                                    [  3%]
+tests/test_app_logger.py::TestAppLogger::test_get_app_directory_not_frozen PASSED                                [  5%]
+tests/test_app_logger.py::TestAppLogger::test_get_log_directory_linux PASSED                                     [  7%]
+tests/test_app_logger.py::TestAppLogger::test_get_log_directory_windows PASSED                                   [  8%]
+tests/test_app_logger.py::TestAppLogger::test_immediate_write PASSED                                             [ 10%]
+tests/test_app_logger.py::TestAppLogger::test_initialize PASSED                                                  [ 12%]
+tests/test_app_logger.py::TestAppLogger::test_log_startup_info PASSED                                            [ 14%]
+tests/test_app_logger.py::TestAppLogger::test_logging_writes_to_file PASSED                                      [ 16%]
+tests/test_app_logger.py::TestAppLogger::test_safe_print_no_exception PASSED                                     [ 17%]
+tests/test_app_logger.py::TestAppLogger::test_setup_exception_handler PASSED                                     [ 19%]
+tests/test_app_logger.py::TestAppLogger::test_setup_logging_creates_file PASSED                                  [ 21%]
+tests/test_app_logger.py::TestAppLogger::test_setup_logging_filename_format PASSED                               [ 23%]
+tests/test_app_logger.py::TestAppLoggerExceptionHandler::test_exception_handler_keyboard_interrupt PASSED        [ 25%]
+tests/test_app_logger.py::TestAppLoggerExceptionHandler::test_exception_handler_logs_error PASSED                [ 26%]
+tests/test_config_manager.py::TestConfigManager::test_atomic_save_failure PASSED                                 [ 28%]
+tests/test_config_manager.py::TestConfigManager::test_corrupted_config PASSED                                    [ 30%]
+tests/test_config_manager.py::TestConfigManager::test_corrupted_config_rename_fail PASSED                        [ 32%]
+tests/test_config_manager.py::TestConfigManager::test_load_config_defaults PASSED                                [ 33%]
+tests/test_config_manager.py::TestConfigManager::test_save_and_load_config PASSED                                [ 35%]
+tests/test_license_updater.py::TestLicenseUpdater::test_check_grace_period_expired PASSED                        [ 37%]
+tests/test_license_updater.py::TestLicenseUpdater::test_check_grace_period_valid PASSED                          [ 39%]
+tests/test_license_updater.py::TestLicenseUpdater::test_run_update_offline PASSED                                [ 41%]
+tests/test_license_updater.py::TestLicenseUpdater::test_run_update_online_incomplete PASSED                      [ 42%]
+tests/test_license_updater.py::TestLicenseUpdater::test_run_update_online_success PASSED                         [ 44%]
+tests/test_license_validator.py::TestLicenseValidator::test_get_hardware_id_linux_lsblk PASSED                   [ 46%]
+tests/test_license_validator.py::TestLicenseValidator::test_get_hardware_id_windows_powershell PASSED            [ 48%]
+tests/test_license_validator.py::TestLicenseValidator::test_get_hardware_id_windows_uuid_fallback PASSED         [ 50%]
+tests/test_license_validator.py::TestLicenseValidator::test_get_hardware_id_windows_wmic PASSED                  [ 51%]
+tests/test_license_validator.py::TestLicenseValidator::test_get_license_info_no_file PASSED                      [ 53%]
+tests/test_license_validator.py::TestLicenseValidator::test_verify_license_invalid_key PASSED                    [ 55%]
+tests/test_license_validator.py::TestLicenseValidator::test_verify_license_missing_files PASSED                  [ 57%]
+tests/test_license_validator.py::TestLicenseValidator::test_verify_license_success PASSED                        [ 58%]
+tests/test_main.py::test_odc_validation PASSED                                                                   [ 60%]
+tests/test_main.py::test_odc_validation_empty PASSED                                                             [ 62%]
+tests/test_main.py::test_no_pdf_selected PASSED                                                                  [ 64%]
+tests/test_main.py::test_add_log_message_progress PASSED                                                         [ 66%]
+tests/test_main.py::test_on_drop_single_file PASSED                                                              [ 67%]
+tests/test_main.py::test_check_for_updates_signal PASSED                                                         [ 69%]
+tests/test_main.py::test_unknown_files_signal PASSED                                                             [ 71%]
+tests/test_main.py::test_unknown_dialog_empty_files PASSED                                                       [ 73%]
+tests/test_pdf_processor.py::TestPdfProcessor::test_invalid_roi_coords PASSED                                    [ 75%]
+tests/test_pdf_processor.py::TestPdfProcessor::test_move_retry_logic PASSED                                      [ 76%]
+tests/test_pdf_processor.py::TestPdfProcessor::test_ocr_rotation_logic PASSED                                    [ 78%]
+tests/test_pdf_processor.py::TestPdfProcessor::test_process_pdf_bad_tesseract_path PASSED                        [ 80%]
+tests/test_pdf_processor.py::TestPdfProcessor::test_process_pdf_match PASSED                                     [ 82%]
+tests/test_pdf_processor.py::TestPdfProcessor::test_process_pdf_no_match PASSED                                  [ 83%]
+tests/test_pdf_processor.py::TestPdfProcessor::test_process_pdf_roi_error_continue PASSED                        [ 85%]
+tests/test_roi_utility.py::test_init PASSED                                                                      [ 87%]
+tests/test_roi_utility.py::test_has_no_initial_pdf PASSED                                                        [ 89%]
+tests/test_roi_utility.py::test_prev_next_page PASSED                                                            [ 91%]
+tests/test_roi_utility.py::test_save_and_refresh PASSED                                                          [ 92%]
+tests/test_session_management.py::TestSessionManagement::test_button_disabled_if_no_session_file PASSED          [ 94%]
+tests/test_session_management.py::TestSessionManagement::test_check_for_restore_when_user_accepts PASSED         [ 96%]
+tests/test_session_management.py::TestSessionManagement::test_check_for_restore_when_user_declines PASSED        [ 98%]
+tests/test_session_management.py::TestSessionManagement::test_clear_session_deletes_file PASSED                  [100%]
+
+================================================= 56 passed in 2.10s ==================================================
+Tests passed.
+Cleaned previous build artifacts.
+
+[3/5] Incrementing Patch Version...
+Version bumped to 2.1.2
+
+[4/5] Building Application and Installer (LOCAL ONLY)...
+This may take a few minutes...
+Starting Build Process with PyInstaller...
+--- Step 0/7: Cleaning active processes ---
+Killed active Intelleo PDF Splitter.exe instances (if any).
+--- Step 1/7: Environment Diagnostics ---
+Running with Python: C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\Scripts\python.exe
+PyInstaller verified: 6.17.0
+Inno Setup Compiler found: C:\Program Files (x86)\Inno Setup 6\ISCC.exe
+
+--- Step 3/7: Obfuscating Entire SRC recursively with PyArmor ---
+Running: C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\Scripts\python.exe -m pyarmor.cli gen -r -O C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\src
+INFO     Python 3.12.10
+INFO     Pyarmor 9.2.2 (basic), 009329, licenza_armor_basic
+INFO     Platform windows.x86_64
+INFO     search inputs ...
+INFO     find package at C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\src
+INFO     find 1 top resources
+INFO     start to generate runtime files
+INFO     target platforms {'windows.amd64'}
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\pyarmor_runtime_009329\pyarmor_runtime.pyd
+INFO     generate runtime files OK
+INFO     start to obfuscate scripts
+INFO     process resource "src"
+INFO     obfuscating file app_launcher.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\app_launcher.py
+INFO     obfuscating file app_logger.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\app_logger.py
+INFO     obfuscating file app_updater.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\app_updater.py
+INFO     obfuscating file config_manager.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\config_manager.py
+INFO     obfuscating file generate_icon.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\generate_icon.py
+INFO     obfuscating file license_updater.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\license_updater.py
+INFO     obfuscating file license_validator.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\license_validator.py
+INFO     obfuscating file main.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\main.py
+INFO     obfuscating file roi_utility.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\roi_utility.py
+INFO     obfuscating file version.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\version.py
+INFO     obfuscating file analysis_service.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\analysis_service.py
+INFO     obfuscating file app_controller.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\app_controller.py
+INFO     obfuscating file archive_service.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\archive_service.py
+INFO     obfuscating file classifier.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\classifier.py
+INFO     obfuscating file file_service.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\file_service.py
+INFO     obfuscating file notification_manager.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\notification_manager.py
+INFO     obfuscating file ocr_engine.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\ocr_engine.py
+INFO     obfuscating file path_manager.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\path_manager.py
+INFO     obfuscating file pdf_manager.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\pdf_manager.py
+INFO     obfuscating file pdf_processor.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\pdf_processor.py
+INFO     obfuscating file pdf_splitter.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\pdf_splitter.py
+INFO     obfuscating file processing_worker.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\processing_worker.py
+INFO     obfuscating file roi_controller.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\roi_controller.py
+INFO     obfuscating file roi_manager.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\roi_manager.py
+INFO     obfuscating file rule_service.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\rule_service.py
+INFO     obfuscating file session_manager.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\session_manager.py
+INFO     obfuscating file tesseract_manager.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\tesseract_manager.py
+INFO     obfuscating file __init__.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\core\__init__.py
+INFO     obfuscating file theme.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\theme.py
+INFO     obfuscating file ui_factory.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\ui_factory.py
+INFO     obfuscating file __init__.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\__init__.py
+INFO     obfuscating file roi_selector_dialog.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\dialogs\roi_selector_dialog.py
+INFO     obfuscating file rule_editor.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\dialogs\rule_editor.py
+INFO     obfuscating file unknown_review.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\dialogs\unknown_review.py
+INFO     obfuscating file __init__.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\dialogs\__init__.py
+INFO     obfuscating file config_tab.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\tabs\config_tab.py
+INFO     obfuscating file dashboard_tab.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\tabs\dashboard_tab.py
+INFO     obfuscating file help_tab.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\tabs\help_tab.py
+INFO     obfuscating file processing_tab.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\tabs\processing_tab.py
+INFO     obfuscating file __init__.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\tabs\__init__.py
+INFO     obfuscating file drop_frame.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\widgets\drop_frame.py
+INFO     obfuscating file pdf_graphics_view.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\widgets\pdf_graphics_view.py
+INFO     obfuscating file preview_view.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\widgets\preview_view.py
+INFO     obfuscating file roi_renderer.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\widgets\roi_renderer.py
+INFO     obfuscating file __init__.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\gui\widgets\__init__.py
+INFO     obfuscating file constants.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\shared\constants.py
+INFO     obfuscating file __init__.py
+INFO     write C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\src\shared\__init__.py
+INFO     obfuscate scripts OK
+
+--- Step 4/7: Preparing Assets for Packaging ---
+
+--- Step 5/7: Packaging with PyInstaller ---
+Using icon: C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\src\resources\icon.ico
+Running: C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --name=Intelleo PDF Splitter --distpath=C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist --workpath=C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\build --paths=C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated --onedir --collect-all=PySide6 --collect-all=pymupdf --additional-hooks-dir=C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\admin\Crea Setup\hooks --uac-admin --add-data=C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\src\resources\icon.ico;resources --windowed --icon=C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\src\resources\icon.ico --hidden-import=fitz --hidden-import=PIL --hidden-import=pytesseract --hidden-import=cffi --hidden-import=cryptography --hidden-import=cryptography.fernet --hidden-import=numpy --hidden-import=requests --hidden-import=logging --hidden-import=traceback --hidden-import=uuid --hidden-import=platform --hidden-import=hashlib --hidden-import=shutil --hidden-import=PySide6 --hidden-import=PySide6.QtCore --hidden-import=PySide6.QtGui --hidden-import=PySide6.QtWidgets --hidden-import=PySide6.QtSvgWidgets --hidden-import=pymupdf --hidden-import=app_logger --hidden-import=config_manager --hidden-import=pdf_processor --hidden-import=roi_utility --hidden-import=license_validator --hidden-import=license_updater --hidden-import=app_updater --hidden-import=version --hidden-import=notification_manager --hidden-import=pyarmor_runtime_009329 C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\dist\obfuscated\app_launcher.py
+1027 INFO: PyInstaller: 6.17.0, contrib hooks: 2025.10
+1028 INFO: Python: 3.12.10
+1145 INFO: Platform: Windows-11-10.0.22621-SP0
+1145 INFO: Python environment: C:\Users\Coemi\Desktop\SCRIPT\rilevamento-allegati-isab\rilevamento-allegati-isab\.venv
+ERROR: Script file 'C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\dist\\obfuscated\\app_launcher.py' does not exist.
+Error running command: ['C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\.venv\\Scripts\\python.exe', '-m', 'PyInstaller', '--noconfirm', '--clean', '--name=Intelleo PDF Splitter', '--distpath=C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\dist', '--workpath=C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\dist\\build', '--paths=C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\dist\\obfuscated', '--onedir', '--collect-all=PySide6', '--collect-all=pymupdf', '--additional-hooks-dir=C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\admin\\Crea Setup\\hooks', '--uac-admin', '--add-data=C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\src\\resources\\icon.ico;resources', '--windowed', '--icon=C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\src\\resources\\icon.ico', '--hidden-import=fitz', '--hidden-import=PIL', '--hidden-import=pytesseract', '--hidden-import=cffi', '--hidden-import=cryptography', '--hidden-import=cryptography.fernet', '--hidden-import=numpy', '--hidden-import=requests', '--hidden-import=logging', '--hidden-import=traceback', '--hidden-import=uuid', '--hidden-import=platform', '--hidden-import=hashlib', '--hidden-import=shutil', '--hidden-import=PySide6', '--hidden-import=PySide6.QtCore', '--hidden-import=PySide6.QtGui', '--hidden-import=PySide6.QtWidgets', '--hidden-import=PySide6.QtSvgWidgets', '--hidden-import=pymupdf', '--hidden-import=app_logger', '--hidden-import=config_manager', '--hidden-import=pdf_processor', '--hidden-import=roi_utility', '--hidden-import=license_validator', '--hidden-import=license_updater', '--hidden-import=app_updater', '--hidden-import=version', '--hidden-import=notification_manager', '--hidden-import=pyarmor_runtime_009329', 'C:\\Users\\Coemi\\Desktop\\SCRIPT\\rilevamento-allegati-isab\\rilevamento-allegati-isab\\dist\\obfuscated\\app_launcher.py']
+Error during build process!
+Premere un tasto per continuare . . .
