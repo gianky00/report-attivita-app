@@ -12,8 +12,8 @@ COPY requirements.txt .
 # 2. Installa tutto il resto
 # 3. Forza l'installazione di streamlit per sicurezza
 RUN sed -i '/pywin32/d' requirements.txt && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir streamlit==1.49.1
+    pip install --no-cache-dir --default-timeout=1000 --retries 10 -r requirements.txt && \
+    pip install --no-cache-dir --default-timeout=1000 --retries 10 streamlit==1.49.1
 
 # Copia tutto il codice dell'applicazione
 COPY . .

@@ -116,8 +116,10 @@ def render_archivio_page() -> None:
                     # Gestione Path per Docker
                     file_path = row["full_path"]
                     if os.environ.get("IS_DOCKER") == "true":
-                        windows_prefix = (
-                            r"D:\PC ALLEGRETTI COEMI\STORICO SCHEDE\Archivio Schede Elaborate"
+                        # Tenta di leggere il prefisso dinamico dall'ambiente
+                        windows_prefix = os.environ.get(
+                            "ARCHIVE_PATH",
+                            r"D:\PC ALLEGRETTI COEMI\STORICO SCHEDE\Archivio Schede Elaborate",
                         )
                         docker_prefix = "/mnt/archivio_storico"
                         if windows_prefix in file_path:

@@ -59,6 +59,21 @@ echo.
 
 REM --- FASE 0: PRE-FLIGHT ---
 call :PHASE "0" "Pre-flight checks"
+
+REM --- Rilevamento Archivio Storico (Fallback D: -> C:) ---
+set "ARCHIVE_PATH=D:/PC ALLEGRETTI COEMI/STORICO SCHEDE/Archivio Schede Elaborate"
+if not exist "!ARCHIVE_PATH!" (
+    call :WARN "Percorso D: non trovato. Uso fallback su C:..."
+    set "ARCHIVE_PATH=C:/Users/Coemi/Desktop/PC STRUMENTALE/STORICO SCHEDE/Archivio Schede Elaborate"
+    
+    if not exist "!ARCHIVE_PATH!" (
+        call :WARN "Sottocartella specifica non trovata. Uso root PC STRUMENTALE..."
+        set "ARCHIVE_PATH=C:/Users/Coemi/Desktop/PC STRUMENTALE"
+    )
+)
+call :OK "Archivio Storico: !ARCHIVE_PATH!"
+echo.
+
 if not exist ".env" (
     call :WARN "File .env non trovato!"
 ) else (
