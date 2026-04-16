@@ -1,0 +1,17 @@
+[11:59:03] Avvio script v2.0.0 
+[11:59:03] Directory progetto: C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app 
+[11:59:03] FASE 0: Pre-flight checks 
+  [OK]  .env trovato 
+  [OK]  File compose trovato 
+  [OK]  Check spazio disco saltato 
+[11:59:03] FASE 1: Sincronizzazione dati Excel 
+  [OK]  Dati sincronizzati 
+[11:59:03] FASE 2: Rilevamento Docker Compose 
+  [OK]  docker compose v2 (plugin) 
+[11:59:03] FASE 2: Verifica Docker daemon 
+  []  Docker daemon non attivo. Avvio automatico... 
+[11:59:06] Avvio: C:\Program Files\Docker\Docker\Docker Desktop.exe 
+  [OK]  Docker daemon avviato (9s) 
+[11:59:25] FASE 3: Arresto container 
+  [OK]  Container arrestati 
+[11:59:26] FASE 4: Ricostruzione e avvio 

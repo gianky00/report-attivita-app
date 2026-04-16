@@ -1,0 +1,11 @@
+[15:11:41] Avvio script v2.0.0 
+[15:11:41] Directory progetto: C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app 
+[15:11:41] FASE 0: Pre-flight checks 
+  [OK]  .env trovato 
+  [OK]  File compose trovato 
+  [OK]  Check spazio disco saltato 
+[15:11:41] FASE 1: Sincronizzazione dati Excel 
+  [OK]  Dati sincronizzati 
+[15:11:41] FASE 2: Rilevamento Docker Compose 
+  [OK]  docker compose v2 (plugin) 
+[15:11:41] FASE 2: Verifica Docker daemon 

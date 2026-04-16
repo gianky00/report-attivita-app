@@ -3,13 +3,13 @@ __pycache__/
 *.pyo
 *.pyd
 .streamlit/config.toml
-.streamlit/secrets.toml
+# .streamlit/secrets.toml  <-- RIMANE SEGRETO (trasferito manualmente)
 sessions/
-*.db
+# *.db  <-- ORA INCLUSO
 *.db.backup*
-*.log
+# *.log <-- ORA INCLUSO
 *.lock
-data_sync/
+# data_sync/ <-- ORA INCLUSO
 WhatsApp Image *
 ~$*
 .env
@@ -17,5 +17,5 @@ WhatsApp Image *
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-logs/*.json
-logs/*.log
+# logs/*.json <-- ORA INCLUSO
+# logs/*.log <-- ORA INCLUSO

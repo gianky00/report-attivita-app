@@ -1,0 +1,32 @@
+[11:46:33] Avvio script v2.0.0 
+[11:46:33] Directory progetto: C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app 
+[11:46:33] FASE 0: Pre-flight checks 
+  [OK]  .env trovato 
+  [OK]  File compose trovato 
+  [OK]  Check spazio disco saltato 
+[11:46:33] FASE 1: Sincronizzazione dati Excel 
+  [OK]  Dati sincronizzati 
+[11:46:34] FASE 2: Rilevamento Docker Compose 
+  [OK]  docker compose v2 (plugin) 
+[11:46:34] FASE 2: Verifica Docker daemon 
+  [OK]  Docker daemon attivo 
+[11:46:35] FASE 3: Arresto container 
+ Container report-attivita-app-ngrok-1 Stopping 
+ Container report-attivita-app-ngrok-1 Stopped 
+ Container report-attivita-app-ngrok-1 Removing 
+ Container report-attivita-app-ngrok-1 Removed 
+ Container report-attivita-app-proxy-1 Stopping 
+ Container report-attivita-app-proxy-1 Stopped 
+ Container report-attivita-app-proxy-1 Removing 
+ Container report-attivita-app-proxy-1 Removed 
+ Container report-attivita-app-app-1 Stopping 
+ Container report-attivita-app-app-1 Stopped 
+ Container report-attivita-app-app-1 Removing 
+ Container report-attivita-app-app-1 Removed 
+ Network report-attivita-app_default Removing 
+ Network report-attivita-app_default Removed 
+  [OK]  Container arrestati 
+[11:46:39] FASE 4: Ricostruzione e avvio 
+  [OK]  Build e avvio completati 
+[12:44:42] FASE 6: Verifica stato container 
+  [OK]  3 container in esecuzione 
