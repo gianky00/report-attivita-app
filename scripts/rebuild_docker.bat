@@ -84,13 +84,8 @@ call :OK "File compose trovato"
 echo.
 
 REM --- FASE 1: SYNC ---
-call :PHASE "1" "Sincronizzazione dati Excel"
-python scripts\sync_data.py
-if !errorlevel! neq 0 (
-    call :WARN "Sincronizzazione fallita."
-) else (
-    call :OK "Dati sincronizzati"
-)
+call :PHASE "1" "Sincronizzazione dati Excel (Gestita da Docker)"
+echo  %DIM%La sincronizzazione avverrà all'interno del container all'avvio.%RESET%
 echo.
 
 REM --- FASE 2: DOCKER CHECK ---

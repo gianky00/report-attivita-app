@@ -9,7 +9,7 @@ services:
       - IS_DOCKER=true
       - TZ=Europe/Rome
       - ARCHIVE_PATH=${ARCHIVE_PATH}
-    command: sh -c "python scripts/crea_database.py && python -m streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0"
+    command: sh -c "python scripts/sync_data.py && python scripts/crea_database.py && python -m streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0"
 
   proxy:
     image: nginx:alpine
