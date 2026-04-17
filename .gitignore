@@ -9,6 +9,7 @@ sessions/
 *.db.backup*
 # *.log <-- ORA INCLUSO
 *.lock
+!poetry.lock
 # data_sync/ <-- ORA INCLUSO
 WhatsApp Image *
 ~$*
