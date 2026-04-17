@@ -19,3 +19,4 @@ WhatsApp Image *
 .ruff_cache/
 # logs/*.json <-- ORA INCLUSO
 # logs/*.log <-- ORA INCLUSO
+/logs

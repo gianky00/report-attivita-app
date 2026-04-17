@@ -1,296 +1,52 @@
-[project]
+[tool.poetry]
 name = "report-attivita-app"
-version = "0.1.0"
-description = "Gestione Turni e Report Attività"
-requires-python = ">=3.12"
-dependencies = [
-    "streamlit",
-    "pandas",
-    "openpyxl",
-    "gspread",
-    "oauth2client",
-    "google-auth",
-    "bcrypt",
-    "pyotp",
-    "qrcode",
-    "fpdf2",
-    "matplotlib",
-    "python-docx",
-    "nltk",
-    "scikit-learn",
-    "google-generativeai",
-    "pywin32",
-    "pillow",
-]
+version = "3.1.0"
+description = "Gestione operativa team tecnici con integrazione AI"
+authors = ["Giancarlo Allegretti <gianky.allegretti@gmail.com>"]
+readme = "README.md"
+packages = [{include = "src"}]
 
-[project.optional-dependencies]
-dev = [
-    # === Linting & Formatting ===
-    "ruff",
-    # === Type Checking ===
-    "mypy",
-    # === Type Stubs ===
-    "types-requests",
-    "pandas-stubs",
-    "types-PyYAML",
-    "types-python-dateutil",
-    "types-openpyxl",
-    "types-Pillow",
-    "types-pytz",
-    # === Security ===
-    "bandit",
-    # === Dependencies ===
-    "deptry",
-    # === Spelling ===
-    "codespell",
-    # === Modernization ===
-    "refurb",
-    # === Dead Code ===
-    "vulture",
-    # === Complexity ===
-    "xenon",
-    # === Docstrings ===
-    "interrogate",
-    # === Git Hooks ===
-    "pre-commit",
-    # === Testing ===
-    "pytest",
-    "pytest-cov",
-    "pytest-mock",
-    "pyfakefs",
-]
+[tool.poetry.dependencies]
+python = "^3.11"
+streamlit = "1.49.1"
+gspread = "6.2.1"
+oauth2client = "4.1.3"
+pandas = "2.3.2"
+requests = "2.32.5"
+google-generativeai = "0.8.5"
+pywin32 = { version = "311", markers = "sys_platform == 'win32'" }
+matplotlib = "3.10.6"
+openpyxl = "3.1.5"
+passlib = "1.7.4"
+bcrypt = "4.3.0"
+pyotp = "2.9.0"
+qrcode = "7.4.2"
+pillow = "*"
+python-docx = "1.1.2"
+scikit-learn = "1.6.0"
+nltk = "3.8.1"
+fpdf2 = "*"
+toml = "*"
 
-# =============================================================================
-# RUFF — Linter + Formatter (sostituisce Black, Isort, Flake8, pyupgrade)
-# =============================================================================
+[tool.poetry.group.dev.dependencies]
+ruff = "*"
+mypy = "*"
+types-openpyxl = "*"
+types-requests = "*"
+types-Pillow = "*"
+bandit = "*"
+deptry = "*"
+codespell = "*"
+refurb = "*"
+vulture = "*"
+xenon = "*"
+interrogate = "*"
+pre-commit = "*"
+pytest = "*"
+pytest-cov = "*"
+pytest-mock = "*"
+pip-audit = "*"
 
-[tool.ruff]
-line-length = 100
-target-version = "py312"
-src = ["src"]
-
-exclude = [
-    ".git", ".venv", "venv", "__pycache__",
-    "build", "dist", "*.egg-info",
-    "logs", "sessions", "assets", "prompt",
-]
-
-[tool.ruff.lint]
-select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort (sostituisce isort standalone)
-    "N",    # pep8-naming
-    "UP",   # pyupgrade (modernizza sintassi al target-version)
-    "B",    # flake8-bugbear
-    "C4",   # flake8-comprehensions
-    "SIM",  # flake8-simplify
-    "RUF",  # regole Ruff-specifiche
-    "PERF", # perflint
-    "T20",  # flake8-print (cattura print() in produzione)
-]
-
-ignore = [
-    "E501",   # line too long — gestito dal formatter
-    "E402",   # import non al top — necessario per Streamlit in alcuni file
-    "UP047",  # PEP 695 type params — non ancora adottato nel progetto
-]
-
-fixable = ["ALL"]
-unfixable = []
-
-[tool.ruff.lint.isort]
-known-first-party = ["src"]
-combine-as-imports = true
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["T20", "B011", "PLR2004"]
-"scripts/**/*.py" = ["T20"]
-"src/app.py" = ["T20"]  # file principale Streamlit con print diagnostici
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-line-ending = "auto"
-docstring-code-format = true
-
-# =============================================================================
-# MYPY — Type Checking (strict, override per-module)
-# =============================================================================
-
-[tool.mypy]
-python_version = "3.12"
-mypy_path = "src"
-explicit_package_bases = true
-namespace_packages = true
-
-# STRICT CORE
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-
-# ANTI-ANY
-disallow_any_generics = true
-disallow_subclassing_any = true
-warn_return_any = true
-
-# NONE SAFETY
-no_implicit_optional = true
-strict_optional = true
-
-# WARNINGS
-warn_unused_configs = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unreachable = true
-
-# OUTPUT
-show_error_codes = true
-show_error_context = true
-pretty = true
-
-# IMPORT: MAI globale, solo per-module
-ignore_missing_imports = false
-
-exclude = [
-    "venv", ".venv", "tests", "scripts",
-]
-
-# --- Override per librerie SENZA stubs ---
-[[tool.mypy.overrides]]
-module = [
-    "streamlit.*",
-    "gspread.*",
-    "oauth2client.*",
-    "passlib.*",
-    "bcrypt.*",
-    "pyotp.*",
-    "qrcode.*",
-    "sklearn.*",
-    "nltk.*",
-    "fpdf.*",
-    "toml.*",
-    "win32com.*",
-    "pythoncom.*",
-    "google.generativeai.*",
-    "google.oauth2.*",
-    "google.auth.*",
-]
-ignore_missing_imports = true
-
-# --- Override per moduli che usano decoratori/classi da librerie senza stubs ---
-[[tool.mypy.overrides]]
-module = [
-    "modules.pdf_utils",
-    "modules.knowledge_base",
-    "modules.importers.excel_giornaliera",
-]
-disallow_untyped_decorators = false
-disallow_subclassing_any = false
-
-# --- Test con regole rilassate ---
-[[tool.mypy.overrides]]
-module = "tests.*"
-ignore_errors = true
-
-# =============================================================================
-# BANDIT — Security
-# =============================================================================
-
-[tool.bandit]
-exclude_dirs = ["tests", "scripts", ".venv", "venv"]
-skips = ["B101", "B403", "B404", "B603"]  # assert, pickle/subprocess import warnings
-
-# =============================================================================
-# DEPTRY — Dependency Hygiene
-# =============================================================================
-
-[tool.deptry]
-extend_exclude = ["tests", "scripts"]
-known_first_party = ["src"]
-
-[tool.deptry.package_module_name_map]
-# Pacchetti il cui nome pip != nome import
-"python-docx" = "docx"
-"google-generativeai" = "google"
-"scikit-learn" = "sklearn"
-"pillow" = "PIL"
-"pywin32" = "win32com"
-"beautifulsoup4" = "bs4"
-"fpdf2" = "fpdf"
-
-[tool.deptry.per_rule_ignores]
-DEP002 = [
-    # CLI tools (mai importati nel codice sorgente)
-    "mypy",
-    "ruff",
-    "bandit",
-    "vulture",
-    "xenon",
-    "interrogate",
-    "codespell",
-    "refurb",
-    "deptry",
-    "pre-commit",
-    "pip-audit",
-    "pytest",
-    "pytest-cov",
-    "pytest-mock",
-    "pyfakefs",
-    # Type stubs
-    "types-openpyxl",
-    "types-requests",
-    "types-Pillow",
-    "types-pytz",
-    "pandas-stubs",
-    "types-PyYAML",
-    "types-python-dateutil",
-    # Pacchetti usati come engine/backend (non importati direttamente)
-    "openpyxl",       # engine pandas per Excel
-    "requests",       # usato da gspread e altri
-    "matplotlib",     # backend plotting
-    "pillow",         # PIL, usato indirettamente
-    "passlib",        # hashing password in auth
-    "pywin32",        # import condizionale win32com
-]
-DEP003 = [
-    # Import transitivi verificati come necessari
-    "PIL",
-    "pytz",
-    "toml",           # importato da streamlit config.py
-]
-
-# =============================================================================
-# INTERROGATE — Docstring Coverage
-# =============================================================================
-
-[tool.interrogate]
-ignore-init-method = true
-ignore-init-module = true
-ignore-magic = true
-ignore-semiprivate = true
-ignore-private = true
-ignore-property-decorators = true
-ignore-module = true
-ignore-nested-functions = true
-fail-under = 0  # Parti da 0, alza gradualmente
-exclude = ["tests", "venv", ".venv", "build", "scripts"]
-
-# =============================================================================
-# PYTEST
-# =============================================================================
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
-filterwarnings = [
-    "ignore:Type google._upb._message.*:DeprecationWarning",
-    "ignore:.*uses PyType_Spec with a metaclass.*:DeprecationWarning",
-    "ignore:Substituting font arial by core font helvetica:DeprecationWarning",
-    "ignore:The parameter \"ln\" is deprecated:DeprecationWarning",
-    "ignore:Exception ignored in atexit callback.*cleanup_numbered_dir:pytest.PytestWarning",
-    "ignore:pandas only supports SQLAlchemy connectable.*:UserWarning",
-    "ignore:Mocks returned by pytest-mock do not need to be used as context managers.*:pytest_mock.plugin.PytestMockWarning",
-]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

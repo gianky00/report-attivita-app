@@ -4,16 +4,15 @@ FROM python:3.11-slim
 # Imposta la directory di lavoro nel container
 WORKDIR /app
 
-# Copia il file delle dipendenze
-COPY requirements.txt .
+# Installa Poetry
+RUN pip install --no-cache-dir poetry
 
-# Installa le dipendenze:
-# 1. Rimuove pywin32 (solo Windows)
-# 2. Installa tutto il resto
-# 3. Forza l'installazione di streamlit per sicurezza
-RUN sed -i '/pywin32/d' requirements.txt && \
-    pip install --no-cache-dir --default-timeout=1000 --retries 10 -r requirements.txt && \
-    pip install --no-cache-dir --default-timeout=1000 --retries 10 streamlit==1.49.1
+# Copia i file delle dipendenze
+COPY pyproject.toml poetry.lock* ./
+
+# Configura Poetry per non creare un ambiente virtuale nel container e installa le dipendenze
+RUN poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-ansi --without dev
 
 # Copia tutto il codice dell'applicazione
 COPY . .

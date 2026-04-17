@@ -2,6 +2,7 @@
 title Servizio Sincronizzazione Horizon
 color 0B
 mode con cols=80 lines=25
+set PYTHONUTF8=1
 
 :: Percorso assoluto allo script di sincronizzazione
 set SCRIPT_PATH=%~dp0\sync_data.py
@@ -18,7 +19,7 @@ echo.
 
 :loop
 echo [%date% %time%] Avvio ciclo di sincronizzazione...
-python "%SCRIPT_PATH%" >> "%LOG_FILE%" 2>&1
+python -m poetry run python "%SCRIPT_PATH%" >> "%LOG_FILE%" 2>&1
 if errorlevel 2 (
     echo [%date% %time%] Nessuna modifica rilevata in rete.
 ) else if errorlevel 1 (
