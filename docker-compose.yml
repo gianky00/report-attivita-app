@@ -4,7 +4,7 @@ services:
     volumes:
       - .:/app
       - ./data_sync:/mnt/network:ro
-      - "${ARCHIVE_PATH}:/mnt/archivio_storico:ro"
+      - "${ARCHIVE_PATH:-./archive}:/mnt/archivio_storico:ro"
     environment:
       - IS_DOCKER=true
       - TZ=Europe/Rome

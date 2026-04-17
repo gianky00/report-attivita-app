@@ -164,7 +164,7 @@ def sync():
     if not files_updated:
         logger.info("Nessun file aggiornato sulla rete. Salto l'estrazione dati.")
         logger.info("--- FINE SINCRONIZZAZIONE (NESSUNA MODIFICA) ---")
-        sys.exit(2)
+        sys.exit(0)
 
     # --- ESTRAZIONE PDL NELLA TABELLA DI PROGRAMMAZIONE ---
     logger.info("Estrazione PDL in corso...")
