@@ -32,7 +32,7 @@ def test_move_report_atomically_failure_middle(mocker):
 
     # Mock connessione reale per testare il rollback indirettamente tramite eccezione
     mock_conn = mocker.MagicMock()
-    mocker.patch("modules.database.db_reports.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.database.db_reports.DatabaseEngine.get_connection", return_value=mock_conn)
 
     # Simula errore durante l'esecuzione nel context manager
     mock_conn.__enter__.return_value = mock_conn

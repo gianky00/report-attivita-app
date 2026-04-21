@@ -14,15 +14,11 @@ from core.logging import get_logger, measure_time
 logger = get_logger(__name__)
 
 
-def get_db_connection() -> sqlite3.Connection:
-    """Restituisce una connessione al database core."""
-    return DatabaseEngine.get_connection()
-
 
 @measure_time
 def get_shifts_by_type(shift_type: str) -> pd.DataFrame:
     """Carica i turni filtrati per tipologia (es. Assistenza, Reperibilità)."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         query = "SELECT * FROM turni WHERE Tipo = ? ORDER BY Data DESC"
         return pd.read_sql_query(query, conn, params=(shift_type,))
@@ -65,7 +61,7 @@ def add_shift_log(log_data: dict[str, Any]) -> bool:
 
 def get_all_shift_logs() -> pd.DataFrame:
     """Recupera la cronologia completa delle modifiche ai turni."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         query = "SELECT * FROM shift_logs ORDER BY Timestamp DESC"
         return pd.read_sql_query(query, conn)
@@ -75,7 +71,7 @@ def get_all_shift_logs() -> pd.DataFrame:
 
 def get_bookings_for_shift(shift_id: str) -> pd.DataFrame:
     """Recupera tutte le prenotazioni del personale associate a un turno."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         query = "SELECT * FROM prenotazioni WHERE ID_Turno = ?"
         return pd.read_sql_query(query, conn, params=(shift_id,))
@@ -130,7 +126,7 @@ def update_booking_user(turno_id: str, vecchia_mat: str, nuova_mat: str) -> bool
 @measure_time
 def get_all_bookings() -> pd.DataFrame:
     """Carica l'elenco completo di tutte le prenotazioni attive nel sistema."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM prenotazioni", conn)
     finally:
@@ -162,7 +158,7 @@ def add_bacheca_item(item_data: dict[str, Any]) -> bool:
 @measure_time
 def get_all_bacheca_items() -> pd.DataFrame:
     """Recupera tutti gli annunci presenti in bacheca, inclusi quelli già assegnati."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM bacheca", conn)
     finally:

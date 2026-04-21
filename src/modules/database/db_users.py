@@ -11,16 +11,16 @@ import pandas as pd
 from core.database import DatabaseEngine
 from core.logging import measure_time
 
-
 def get_db_connection() -> sqlite3.Connection:
-    """Restituisce una connessione al database core."""
+    """Restituisce una connessione al database core tramite DatabaseEngine (Legacy wrapper)."""
     return DatabaseEngine.get_connection()
+
 
 
 @measure_time
 def get_all_users() -> pd.DataFrame:
     """Carica l'intero elenco utenti registrati nel sistema, rimuovendo duplicati accidentali."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         df = pd.read_sql_query("SELECT * FROM contatti", conn)
         # Rimuove duplicati per Matricola mantenendo l'ultimo record inserito
@@ -48,7 +48,7 @@ def get_last_login(matricola: str) -> str | None:
 @measure_time
 def get_access_logs() -> pd.DataFrame:
     """Recupera la cronologia integrale dei tentativi di accesso."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM access_logs", conn)
     finally:
@@ -78,7 +78,7 @@ def add_substitution_request(data: dict[str, Any]) -> bool:
 @measure_time
 def get_all_substitutions() -> pd.DataFrame:
     """Carica tutte le richieste di sostituzione pendenti."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM sostituzioni", conn)
     finally:

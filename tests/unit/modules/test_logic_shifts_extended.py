@@ -47,7 +47,7 @@ def test_pubblica_in_bacheca_success(mocker):
     )
 
     # Mock DB transaction
-    mocker.patch("modules.shifts.logic_market.get_db_connection")
+    mocker.patch("modules.shifts.logic_market.DatabaseEngine.get_connection")
     mocker.patch("modules.shifts.logic_market.add_bacheca_item", return_value=True)
     mocker.patch("modules.shifts.logic_market.log_shift_change")
     mocker.patch("modules.shifts.logic_market.get_shift_by_id", return_value=None)

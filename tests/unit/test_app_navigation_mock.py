@@ -137,7 +137,10 @@ class TestAppNavigationMock(unittest.TestCase):
         self.app.main_app("U1", "Tecnico")
 
         self.mocks["set_page_config"].assert_called_with(
-            layout="wide", page_title="Gestionale", initial_sidebar_state="collapsed"
+            layout="wide", 
+            page_title="Horizon - Technical Operations Platform", 
+            page_icon="assets/icons/settings.svg",
+            initial_sidebar_state="auto"
         )
         # check_pyarmor_license is called at module level, not inside main_app
         self.mocks["sync_oncall_shifts"].assert_called()

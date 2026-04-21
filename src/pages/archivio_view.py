@@ -76,81 +76,85 @@ def render_archivio_page() -> None:
         key="archive_search_input",
     )
 
-    if len(search_query) >= 2:
-        results = search_archive(search_query)
+    @st.fragment
+    def display_archive_results(query: str):
+        if len(query) >= 2:
+            results = search_archive(query)
 
-        if not results.empty:
+            if not results.empty:
+                st.markdown(
+                    f"<p style='color: #64748b; font-size: 0.9rem;'>Trovate {len(results)} corrispondenze</p>",
+                    unsafe_allow_html=True,
+                )
+
+                for _, row in results.iterrows():
+                    # Formattazione data GG/MM/AAAA
+                    try:
+                        raw_date = row["last_modified"].split("T")[0]
+                        dt = datetime.datetime.strptime(raw_date, "%Y-%m-%d")
+                        display_date = dt.strftime("%d/%m/%Y")
+                    except Exception:
+                        display_date = row["last_modified"]
+
+                    # Estrazione Tag
+                    fname = row["filename"]
+                    tag_part = (
+                        fname.split(" ")[0].split("(")[0].replace(".xls", "").replace(".xlsm", "")
+                    )
+
+                    with st.expander(f"📄 {fname}"):
+                        # Layout pulito
+                        st.markdown(
+                            f"""
+                            <div style='margin-bottom: 10px;'>
+                                <div style='font-size: 0.9rem;'><b>Tag:</b> <span class='tag-highlight'>{tag_part}</span></div>
+                                <div style='font-size: 0.85rem; color: #64748b;'><b>Periodo:</b> {row["month"]} {row["year"]}</div>
+                                <div style='font-size: 0.85rem; color: #64748b;'><b>Ultima Modifica:</b> {display_date}</div>
+                            </div>
+                        """,
+                            unsafe_allow_html=True,
+                        )
+
+                        # Gestione Path per Docker
+                        file_path = row["full_path"]
+                        if os.environ.get("IS_DOCKER") == "true":
+                            # Tenta di leggere il prefisso dinamico dall'ambiente
+                            windows_prefix = os.environ.get(
+                                "ARCHIVE_PATH",
+                                r"D:\PC ALLEGRETTI COEMI\STORICO SCHEDE\Archivio Schede Elaborate",
+                            )
+                            docker_prefix = "/mnt/archivio_storico"
+                            if windows_prefix in file_path:
+                                file_path = file_path.replace(windows_prefix, docker_prefix).replace(
+                                    "\\", "/"
+                                )
+
+                        if Path(file_path).exists():
+                            with open(file_path, "rb") as f:
+                                st.download_button(
+                                    label="📥 Apri Scheda Excel",
+                                    data=f,
+                                    file_name=fname,
+                                    mime="application/vnd.ms-excel",
+                                    key=f"dl_{fname}_{row['year']}_{display_date}",
+                                    use_container_width=True,
+                                )
+                        else:
+                            st.error("⚠️ File momentaneamente non accessibile sul server.")
+                            if st.checkbox("Mostra dettagli errore", key=f"err_{fname}"):
+                                st.code(f"Path: {file_path}")
+            else:
+                st.warning("Nessun file trovato. Prova con un altro tag.")
+        elif query:
+            st.info("Digita almeno 2 caratteri.")
+        else:
             st.markdown(
-                f"<p style='color: #64748b; font-size: 0.9rem;'>Trovate {len(results)} corrispondenze</p>",
+                """
+                <div style='background-color: #f8fafc; padding: 20px; border-radius: 10px; text-align: center; border: 1px dashed #cbd5e1;'>
+                    <p style='color: #64748b; margin: 0;'>Digita il tag di uno strumento per visualizzare lo storico dei suoi interventi.</p>
+                </div>
+            """,
                 unsafe_allow_html=True,
             )
 
-            for _, row in results.iterrows():
-                # Formattazione data GG/MM/AAAA
-                try:
-                    raw_date = row["last_modified"].split("T")[0]
-                    dt = datetime.datetime.strptime(raw_date, "%Y-%m-%d")
-                    display_date = dt.strftime("%d/%m/%Y")
-                except Exception:
-                    display_date = row["last_modified"]
-
-                # Estrazione Tag
-                fname = row["filename"]
-                tag_part = (
-                    fname.split(" ")[0].split("(")[0].replace(".xls", "").replace(".xlsm", "")
-                )
-
-                with st.expander(f"📄 {fname}"):
-                    # Layout pulito
-                    st.markdown(
-                        f"""
-                        <div style='margin-bottom: 10px;'>
-                            <div style='font-size: 0.9rem;'><b>Tag:</b> <span class='tag-highlight'>{tag_part}</span></div>
-                            <div style='font-size: 0.85rem; color: #64748b;'><b>Periodo:</b> {row["month"]} {row["year"]}</div>
-                            <div style='font-size: 0.85rem; color: #64748b;'><b>Ultima Modifica:</b> {display_date}</div>
-                        </div>
-                    """,
-                        unsafe_allow_html=True,
-                    )
-
-                    # Gestione Path per Docker
-                    file_path = row["full_path"]
-                    if os.environ.get("IS_DOCKER") == "true":
-                        # Tenta di leggere il prefisso dinamico dall'ambiente
-                        windows_prefix = os.environ.get(
-                            "ARCHIVE_PATH",
-                            r"D:\PC ALLEGRETTI COEMI\STORICO SCHEDE\Archivio Schede Elaborate",
-                        )
-                        docker_prefix = "/mnt/archivio_storico"
-                        if windows_prefix in file_path:
-                            file_path = file_path.replace(windows_prefix, docker_prefix).replace(
-                                "\\", "/"
-                            )
-
-                    if Path(file_path).exists():
-                        with open(file_path, "rb") as f:
-                            st.download_button(
-                                label="📥 Apri Scheda Excel",
-                                data=f,
-                                file_name=fname,
-                                mime="application/vnd.ms-excel",
-                                key=f"dl_{fname}_{row['year']}_{display_date}",
-                                use_container_width=True,
-                            )
-                    else:
-                        st.error("⚠️ File momentaneamente non accessibile sul server.")
-                        if st.checkbox("Mostra dettagli errore", key=f"err_{fname}"):
-                            st.code(f"Path: {file_path}")
-        else:
-            st.warning("Nessun file trovato. Prova con un altro tag.")
-    elif search_query:
-        st.info("Digita almeno 2 caratteri.")
-    else:
-        st.markdown(
-            """
-            <div style='background-color: #f8fafc; padding: 20px; border-radius: 10px; text-align: center; border: 1px dashed #cbd5e1;'>
-                <p style='color: #64748b; margin: 0;'>Digita il tag di uno strumento per visualizzare lo storico dei suoi interventi.</p>
-            </div>
-        """,
-            unsafe_allow_html=True,
-        )
+    display_archive_results(search_query)

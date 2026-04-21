@@ -117,7 +117,7 @@ class TestUIFormsMock(unittest.TestCase):
         ):
             # Call private handler directly to test logic
             relazione_oncall_form._handle_submission(
-                datetime.date.today(), "Testo relazione", "User One", "Nessuno", "08:00", "20:00"
+                datetime.date.today(), "Testo relazione", "User One", "Nessuno", "08:00", "20:00", "PDL-123"
             )
 
             mock_save.assert_called()

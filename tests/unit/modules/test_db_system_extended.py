@@ -24,7 +24,7 @@ from modules.database.db_system import (
 def mock_db(mocker):
     mock_conn = mocker.MagicMock()
     mock_conn.__enter__.return_value = mock_conn
-    mocker.patch("modules.database.db_system.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.database.db_system.DatabaseEngine.get_connection", return_value=mock_conn)
     return mock_conn
 
 

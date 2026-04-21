@@ -9,7 +9,7 @@ import uuid
 
 import streamlit as st
 
-from modules.db_manager import get_db_connection
+from core.database import DatabaseEngine
 
 
 def scrivi_o_aggiorna_risposta(
@@ -22,8 +22,9 @@ def scrivi_o_aggiorna_risposta(
     timestamp_compilazione = datetime.datetime.now()
     from modules.database.db_reports import insert_report
 
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = DatabaseEngine.get_connection()
         cursor = conn.cursor()
         cursor.execute('SELECT "Nome Cognome" FROM contatti WHERE Matricola = ?', (matricola,))
         user_result = cursor.fetchone()
@@ -61,7 +62,7 @@ def scrivi_o_aggiorna_risposta(
         st.error(f"Errore salvataggio report: {e}")
         return False
     finally:
-        if conn:
+        if "conn" in locals() and conn:
             conn.close()
 
 

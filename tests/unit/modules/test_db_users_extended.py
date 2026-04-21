@@ -27,7 +27,7 @@ def test_get_last_login_not_found(mocker):
 def test_get_access_logs_dataframe(mocker):
     """Verifica che get_access_logs restituisca un DataFrame pandas."""
     # Mocking get_db_connection per pd.read_sql_query
-    mocker.patch("modules.database.db_users.get_db_connection")
+    mocker.patch("modules.database.db_users.DatabaseEngine.get_connection")
 
     # Prepariamo dati fittizi
     data = {"timestamp": ["2026-01-01"], "username": ["test_user"], "status": ["success"]}

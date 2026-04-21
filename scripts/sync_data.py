@@ -4,6 +4,7 @@ e popolamento della tabella 'pdl_programmazione_syncrojob.SafeWorkProgrammazione
 """
 
 import datetime
+import hashlib
 import shutil
 import sqlite3
 import sys
@@ -26,6 +27,16 @@ LOCAL_SYNC_DIR = Path(__file__).parent.parent / "data_sync"
 DB_NAME = BASE_DIR / "report-attivita.db"
 CURRENT_YEAR = datetime.date.today().year
 
+def get_file_hash(path: Path) -> str:
+    """Calcola l'hash MD5 di un file per verificare cambiamenti reali nel contenuto."""
+    hasher = hashlib.md5()
+    try:
+        with open(path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+    except Exception:
+        return ""
 
 def update_db_pdl_programmazione(attivita: list[dict], data_rif: datetime.date):
     """Aggiorna la tabella pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot nel database."""
@@ -62,8 +73,6 @@ def update_db_pdl_programmazione(attivita: list[dict], data_rif: datetime.date):
         
         count_new = 0
         for task in attivita:
-            # Usiamo INSERT OR IGNORE per non sovrascrivere PDL che hanno già stati avanzati (INVIATO/VALIDATO)
-            # Se il PDL per quel giorno/tecnico esiste già, non facciamo nulla (manteniamo lo stato corrente)
             cursor.execute("""
                 INSERT OR IGNORE INTO "pdl_programmazione_syncrojob.SafeWorkProgrammazioneBot" 
                 (pdl, data_intervento, tecnico_assegnato, descrizione, team, stato, tipo, timestamp_pianificazione)
@@ -80,13 +89,13 @@ def update_db_pdl_programmazione(attivita: list[dict], data_rif: datetime.date):
                 count_new += 1
                 
         conn.commit()
-        logger.info(f"Tabella programmazione aggiornata: {count_new} nuovi PDL, {count_rimossi} PDL rimossi/corretti per il {data_str}.")
+        if count_new > 0 or count_rimossi > 0:
+            logger.info(f"Tabella programmazione aggiornata: {count_new} nuovi PDL, {count_rimossi} PDL rimossi per il {data_str}.")
     except Exception as e:
         logger.error(f"Errore durante l'aggiornamento della tabella programmazione: {e}")
     finally:
         if conn:
             conn.close()
-
 
 def sync():
     logger.info("--- AVVIO SINCRONIZZAZIONE ---")
@@ -107,7 +116,6 @@ def sync():
 
     if net_giornaliere.exists():
         loc_giornaliere.mkdir(parents=True, exist_ok=True)
-        # Escludiamo i file temporanei generati da Excel (iniziano con ~$)
         files = [f for f in net_giornaliere.glob("*.xlsm") if not f.name.startswith("~$")]
         
         for item in files:
@@ -117,26 +125,14 @@ def sync():
             if not dest.exists():
                 needs_update = True
             else:
-                try:
-                    # In Docker con volumi montati, se dest e item sono hardlink/stesso file,
-                    # shutil.copy2 fallirebbe con SameFileError. Evitiamo.
-                    if item.resolve() == dest.resolve() or item.samefile(dest):
-                        continue
-                        
-                    # Controlliamo sia la data di modifica che la dimensione
-                    item_stat = item.stat()
-                    dest_stat = dest.stat()
-                    
-                    if item_stat.st_mtime > dest_stat.st_mtime or item_stat.st_size != dest_stat.st_size:
-                        needs_update = True
-                except Exception:
-                    # In caso di errori strani di stat, forziamo l'aggiornamento
+                # Confronto Hash invece di mtime per evitare falsi positivi
+                if get_file_hash(item) != get_file_hash(dest):
                     needs_update = True
 
             if needs_update:
                 try:
                     shutil.copy2(item, dest)
-                    logger.info(f"File sincronizzato: {item.name}")
+                    logger.info(f"File sincronizzato (Cambio contenuto): {item.name}")
                     files_updated = True
                 except Exception as e:
                     logger.error(f"Errore copia {item.name}: {e}")
@@ -152,7 +148,7 @@ def sync():
         for p in paths:
             if p.exists():
                 dest = LOCAL_SYNC_DIR / f
-                if not dest.exists() or p.stat().st_mtime > dest.stat().st_mtime:
+                if not dest.exists() or get_file_hash(p) != get_file_hash(dest):
                     try:
                         shutil.copy2(p, dest)
                         logger.info(f"File radice sincronizzato: {f}")
@@ -161,15 +157,13 @@ def sync():
                         logger.error(f"Errore copia file radice {f}: {e}")
                 break
 
-    if not files_updated:
-        logger.info("Nessun file aggiornato sulla rete. Salto l'estrazione dati.")
-        logger.info("--- FINE SINCRONIZZAZIONE (NESSUNA MODIFICA) ---")
-        sys.exit(2)
-
-    # --- ESTRAZIONE PDL NELLA TABELLA DI PROGRAMMAZIONE ---
-    logger.info("Estrazione PDL in corso...")
-    # Estraiamo per Oggi e Ieri
-    for i in range(2):
+    # Se non ci sono file aggiornati, controlliamo se il DB ha già i dati futuri necessari
+    # In caso contrario, forziamo comunque l'estrazione per popolare i giorni mancanti.
+    # Questo risolve il problema del "0" in programmazione se il file era già locale ma non estratto.
+    
+    logger.info("Verifica estrazione PDL...")
+    # Estraiamo per un range temporale (2 gg passati, Oggi, 5 gg futuri)
+    for i in range(-5, 3):
         d = today - datetime.timedelta(days=i)
         attivita = estrai_tutte_le_attivita_giorno(d.day, d.month, d.year)
         if attivita:
@@ -177,7 +171,6 @@ def sync():
 
     logger.info("--- FINE SINCRONIZZAZIONE ---")
     return True
-
 
 if __name__ == "__main__":
     sync()

@@ -11,7 +11,7 @@ from modules.auth import authenticate_user
 def test_login_failure_logging_privacy(mocker):
     """Verifica che i tentativi falliti non logghino password o segreti."""
     # 1. Mock DB per fallimento login
-    mocker.patch("modules.auth.get_db_connection")
+    mocker.patch("modules.auth.DatabaseEngine.get_connection")
     mocker.patch("modules.auth.get_user_by_matricola", return_value=None)
 
     # 2. Mock del logger per catturare l'output

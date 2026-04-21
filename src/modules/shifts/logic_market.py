@@ -4,6 +4,7 @@ Gestisce il ciclo di vita degli annunci e le transazioni di subentro nei turni.
 """
 
 import datetime
+from core.database import DatabaseEngine
 import sqlite3
 
 import pandas as pd
@@ -110,7 +111,7 @@ def pubblica_turno_in_bacheca_logic(matricola_richiedente: str, turno_id: str) -
         return False
 
     try:
-        conn = get_db_connection()
+        conn = DatabaseEngine.get_connection()
         with conn:
             delete_sql = "DELETE FROM prenotazioni WHERE ID_Prenotazione = ?"
             conn.execute(delete_sql, (booking_to_publish["ID_Prenotazione"],))
@@ -180,7 +181,7 @@ def prendi_turno_da_bacheca_logic(
         "Timestamp": datetime.datetime.now().isoformat(),
     }
 
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         with conn:
             update_bacheca_item(id_bacheca, update_data)

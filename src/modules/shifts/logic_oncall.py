@@ -3,6 +3,7 @@ Logica di business specifica per la reperibilità.
 """
 
 import datetime
+from core.database import DatabaseEngine
 import sqlite3
 
 import pandas as pd
@@ -78,7 +79,7 @@ def manual_override_logic(
     shift_id: str, new_tech1_matricola: str, new_tech2_matricola: str, admin_matricola: str
 ) -> bool:
     """Sovrascrive manualmente le prenotazioni per un turno di reperibilità."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         conn.execute("BEGIN TRANSACTION")
         # In questo contesto DatabaseEngine gestisce già l'esecuzione,

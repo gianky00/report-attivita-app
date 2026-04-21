@@ -48,7 +48,7 @@ def test_generate_on_call_pdf_integrity(tmp_path, mocker):
 def test_notifications_bulk_operations(mocker):
     """Testa la creazione di notifiche e la logica 'Segna tutte come lette'."""
     mock_add = mocker.patch("modules.notifications.add_notification", return_value=True)
-    mock_db = mocker.patch("modules.notifications.get_db_connection")
+    mock_db = mocker.patch("modules.notifications.DatabaseEngine.get_connection")
     mock_cursor = mock_db.return_value.execute.return_value
     mock_cursor.rowcount = 5  # Simula 5 righe aggiornate
 

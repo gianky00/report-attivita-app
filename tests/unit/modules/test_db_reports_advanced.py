@@ -21,7 +21,7 @@ def setup_db(mocker, tmp_path):
         conn.row_factory = sqlite3.Row
         return conn
 
-    mocker.patch("modules.database.db_reports.get_db_connection", side_effect=get_test_conn)
+    mocker.patch("modules.database.db_reports.DatabaseEngine.get_connection", side_effect=get_test_conn)
     mocker.patch("core.database.DatabaseEngine.get_connection", side_effect=get_test_conn)
 
     conn = get_test_conn()

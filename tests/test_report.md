@@ -1,7 +1,7 @@
 # Test Session Report (Stop-on-Fail Mode)
-**Data:** 2026-02-05 09:08:36
-**Durata sessione:** 222.93s
-**Test Passati:** 74
+**Data:** 2026-04-21 10:48:02
+**Durata sessione:** 133.57s
+**Test Passati:** 96
 **Test Falliti:** 0
 **Test Rimanenti:** 0
 

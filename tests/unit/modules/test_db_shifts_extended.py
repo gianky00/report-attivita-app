@@ -33,7 +33,7 @@ from modules.database.db_shifts import (
 def mock_db(mocker):
     mock_conn = mocker.MagicMock()
     mock_conn.__enter__.return_value = mock_conn
-    mocker.patch("modules.database.db_shifts.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.database.db_shifts.DatabaseEngine.get_connection", return_value=mock_conn)
     return mock_conn
 
 

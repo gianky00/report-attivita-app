@@ -16,9 +16,10 @@ def test_match_partial_name_logic():
 
 def test_scrivi_o_aggiorna_risposta_mock(mocker):
     """Verifica il salvataggio di un report nel database."""
-    # Aggiorniamo i mock per puntare ai nuovi moduli reali dove risiede la logica
-    mock_db = mocker.patch("modules.reports_manager.get_db_connection")
-    mock_cursor = mock_db.return_value.cursor.return_value
+    # Aggiorniamo i mock per puntare al DatabaseEngine usato in reports_manager
+    mock_engine = mocker.patch("modules.reports_manager.DatabaseEngine.get_connection")
+    mock_conn = mock_engine.return_value
+    mock_cursor = mock_conn.cursor.return_value
     mock_cursor.fetchone.return_value = ["Tecnico Test"]  # Nome Cognome
 
     # Patch st.cache_data
@@ -31,4 +32,6 @@ def test_scrivi_o_aggiorna_risposta_mock(mocker):
     success = scrivi_o_aggiorna_risposta(dati, "12345", data_rif)
 
     assert success is True
-    assert mock_db.return_value.__enter__.called  # Transazione aperta
+    # In reports_manager.py, scrivi_o_aggiorna_risposta usa DatabaseEngine.get_connection()
+    # e poi usa la connessione nel context manager 'with conn:'
+    assert mock_conn.__enter__.called

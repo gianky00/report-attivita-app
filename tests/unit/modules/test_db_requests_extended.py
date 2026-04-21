@@ -21,7 +21,7 @@ from modules.database.db_requests import (
 @pytest.fixture
 def mock_db_conn(mocker):
     mock_conn = mocker.MagicMock()
-    mocker.patch("modules.database.db_requests.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.database.db_requests.DatabaseEngine.get_connection", return_value=mock_conn)
     return mock_conn
 
 

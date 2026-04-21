@@ -4,6 +4,7 @@ Le notifiche vengono salvate nel database e possono essere segnate come lette.
 """
 
 import datetime
+from core.database import DatabaseEngine
 import sqlite3
 
 import pandas as pd
@@ -12,7 +13,6 @@ from constants import ICONS
 from core.logging import get_logger
 from modules.db_manager import (
     add_notification,
-    get_db_connection,
     get_notifications_for_user,
 )
 
@@ -56,7 +56,7 @@ def crea_notifica(destinatario: str, messaggio: str, link_azione: str = "") -> b
 
 def segna_notifica_letta(id_notifica: str) -> bool:
     """Segna una notifica specifica come 'letta' nel database."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         with conn:
             sql = "UPDATE notifiche SET Stato = 'letta' WHERE ID_Notifica = ?"
@@ -75,7 +75,7 @@ def segna_notifica_letta(id_notifica: str) -> bool:
 
 def segna_tutte_lette(matricola: str) -> bool:
     """Segna tutte le notifiche di un utente come lette."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         with conn:
             # Nota: nel database la colonna è Destinatario_Matricola per le notifiche

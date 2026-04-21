@@ -52,9 +52,11 @@ def generate_standard_prompt(testo_originale: str) -> str:
     """
 
 
+@st.cache_data(show_spinner="L'IA sta revisionando il testo...", ttl=3600)
 def revisiona_con_ia(testo: str) -> dict[str, Any]:
     """
     Esegue la revisione del testo tramite Gemini, applicando analisi semantica ISA.
+    Utilizza il caching per evitare chiamate identiche.
     """
     try:
         import google.generativeai as genai

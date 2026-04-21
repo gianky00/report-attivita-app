@@ -17,15 +17,10 @@ from core.logging import get_logger, measure_time
 logger = get_logger(__name__)
 
 
-def get_db_connection() -> sqlite3.Connection:
-    """Restituisce una connessione al database core."""
-    return DatabaseEngine.get_connection()
-
-
 @measure_time
 def get_reports_to_validate() -> pd.DataFrame:
     """Recupera tutti i report tecnici in attesa di validazione."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM report_da_validare", conn)
     finally:
@@ -43,7 +38,7 @@ def delete_reports_by_ids(report_ids: list[str]) -> bool:
 
 def process_and_commit_validated_reports(reports: list[dict[str, Any]]) -> bool:
     """Sposta i report validati dalla coda alla tabella definitiva in modo transazionale."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     now = datetime.datetime.now().isoformat()
     try:
         with conn:
@@ -98,7 +93,7 @@ def process_and_commit_validated_reports(reports: list[dict[str, Any]]) -> bool:
 
 def get_unvalidated_relazioni() -> pd.DataFrame:
     """Recupera le relazioni di reperibilità inviate ma non ancora validate."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM relazioni WHERE stato = 'Inviata'", conn)
     finally:
@@ -107,7 +102,7 @@ def get_unvalidated_relazioni() -> pd.DataFrame:
 
 def process_and_commit_validated_relazioni(df: pd.DataFrame, admin_id: str) -> bool:
     """Aggiorna lo stato delle relazioni validate memorizzando il validatore."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     now = datetime.datetime.now().isoformat()
     try:
         with conn:
@@ -146,7 +141,7 @@ def get_validated_reports(table_name: str) -> pd.DataFrame:
     if table_name not in VALID_HISTORY_TABLES:
         logger.warning(f"Tentativo di accesso a tabella non valida: {table_name}")
         return pd.DataFrame()
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         sql = (
             f"SELECT * FROM {table_name} WHERE stato = 'Validata' "  # nosec B608
@@ -161,7 +156,7 @@ def get_validated_intervention_reports(
     matricola_tecnico: str | None = None,
 ) -> pd.DataFrame:
     """Carica i report di intervento validati, opzionalmente filtrati per tecnico."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         if matricola_tecnico:
             query = (
@@ -197,7 +192,7 @@ def insert_report(report_data: dict[str, Any], table_name: str) -> bool:
     if table_name not in VALID_REPORT_TABLES:
         return False
 
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     now = datetime.datetime.now().isoformat()
     try:
         with conn:
@@ -256,7 +251,7 @@ def move_report_atomically(report_id: str, source_table: str, dest_table: str) -
     if not report:
         return False
 
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         with conn:
             cols = ", ".join(f'"{k}"' for k in report)
@@ -275,7 +270,7 @@ def move_report_atomically(report_id: str, source_table: str, dest_table: str) -
 
 def get_unvalidated_reports_by_technician(matricola: str) -> pd.DataFrame:
     """Recupera i report in attesa di validazione per un tecnico specifico."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         query = "SELECT * FROM report_da_validare WHERE matricola_tecnico = ?"
         return pd.read_sql_query(query, conn, params=(matricola,))

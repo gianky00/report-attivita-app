@@ -23,7 +23,7 @@ def setup_db_cascade(mocker, tmp_path):
         conn.execute("PRAGMA foreign_keys = ON;")
         return conn
 
-    mocker.patch("modules.database.db_shifts.get_db_connection", side_effect=get_test_conn)
+    mocker.patch("modules.database.db_shifts.DatabaseEngine.get_connection", side_effect=get_test_conn)
     mocker.patch("core.database.DatabaseEngine.get_connection", side_effect=get_test_conn)
 
     conn = get_test_conn()

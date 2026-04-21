@@ -67,7 +67,7 @@ def test_pubblica_bacheca_db_error(mocker, mock_st_shifts):
     )
 
     # Simula errore sqlite3 nella transazione
-    mock_conn = mocker.patch("modules.shifts.logic_market.get_db_connection")
+    mock_conn = mocker.patch("modules.shifts.logic_market.DatabaseEngine.get_connection")
     mock_conn.side_effect = sqlite3.Error("Transaction failed")
 
     success = pubblica_turno_in_bacheca_logic("M1", "T1")

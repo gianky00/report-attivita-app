@@ -15,10 +15,6 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
-def get_db_connection() -> sqlite3.Connection:
-    """Restituisce una connessione al database core."""
-    return DatabaseEngine.get_connection()
-
 
 def add_assignment_exclusion(matricola_tecnico: str, id_attivita: str) -> bool:
     """Registra un blocco per un determinato assegnamento di attività."""
@@ -52,7 +48,7 @@ def get_all_exclusions() -> pd.DataFrame:
         JOIN contatti c ON e.matricola_tecnico = c.Matricola
         ORDER BY e.timestamp DESC
     """
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query(query, conn)
     finally:
@@ -82,7 +78,7 @@ def count_unread_notifications(matricola: str) -> int:
 
 def save_table_data(df: pd.DataFrame, table_name: str) -> bool:
     """Sincronizza integralmente una tabella del DB partendo da un DataFrame Pandas."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         df.to_sql(table_name, conn, if_exists="replace", index=False)
         return True
@@ -95,7 +91,7 @@ def save_table_data(df: pd.DataFrame, table_name: str) -> bool:
 
 def get_table_data(table_name: str) -> pd.DataFrame:
     """Scarica il contenuto integrale di una tabella in un DataFrame."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)  # nosec B608
     finally:
@@ -118,7 +114,7 @@ def get_pdl_programmazione(data_inizio: str, data_fine: str) -> pd.DataFrame:
         WHERE data_intervento BETWEEN ? AND ?
         ORDER BY data_intervento DESC, tecnico_assegnato ASC
     """
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query(query, conn, params=(data_inizio, data_fine))
     finally:

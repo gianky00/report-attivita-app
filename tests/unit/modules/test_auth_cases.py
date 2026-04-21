@@ -18,7 +18,7 @@ def mock_auth_db(mocker):
     """Fixture per mockare la connessione al database in auth.py."""
     mock_conn = mocker.MagicMock()
     mock_conn.__enter__.return_value = mock_conn
-    mocker.patch("modules.auth.get_db_connection", return_value=mock_conn)
+    mocker.patch("modules.auth.DatabaseEngine.get_connection", return_value=mock_conn)
     return mock_conn
 
 

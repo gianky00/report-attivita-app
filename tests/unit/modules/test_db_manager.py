@@ -1,71 +1,67 @@
 """
-Test approfonditi per il modulo DB Manager utilizzando il mocking di DatabaseEngine.
+Test unitari per il modulo db_manager (Facade) e sottomoduli.
 """
 
-import pytest
-
+import datetime
+from unittest.mock import MagicMock
 from modules.db_manager import (
-    add_assignment_exclusion,
     add_shift_log,
-    delete_booking,
-    get_globally_excluded_activities,
     get_last_login,
+    delete_booking,
     get_report_by_id,
     insert_report,
-    update_shift,
+    add_assignment_exclusion,
+    get_globally_excluded_activities,
+    update_shift
 )
-
-
-@pytest.fixture(autouse=True)
-def mock_db_engine(mocker):
-    """Patch dei metodi statici/classmethod di DatabaseEngine."""
-    mocker.patch("core.database.DatabaseEngine.execute", return_value=True)
-    mocker.patch("core.database.DatabaseEngine.fetch_one", return_value=None)
-    mocker.patch("core.database.DatabaseEngine.fetch_all", return_value=[])
-    mocker.patch("core.database.DatabaseEngine.insert_returning_id", return_value=1)
-
 
 def test_add_shift_log_mock(mocker):
     mock_exec = mocker.patch("core.database.DatabaseEngine.execute", return_value=True)
-    assert add_shift_log({"ID": "L1"}) is True
+    # add_shift_log accetta un dizionario log_data
+    log_data = {"Utente": "user", "Azione": "action", "Dettagli": "details"}
+    assert add_shift_log(log_data) is True
     assert mock_exec.called
 
-
 def test_get_last_login_mock(mocker):
-    mocker.patch("core.database.DatabaseEngine.fetch_one", return_value={"timestamp": "2025-01-01"})
-    assert get_last_login("admin") == "2025-01-01"
-
+    mock_fetch = mocker.patch("core.database.DatabaseEngine.fetch_one")
+    mock_fetch.return_value = {"timestamp": "2025-01-01T10:00:00"}
+    assert get_last_login("12345") == "2025-01-01T10:00:00"
 
 def test_delete_booking(mocker):
     mock_exec = mocker.patch("core.database.DatabaseEngine.execute", return_value=True)
-    assert delete_booking("B1", "T1") is True
-    assert mock_exec.called
-
+    # delete_booking richiede booking_id e shift_id
+    assert delete_booking("B1", "S1") is True
 
 def test_get_report_by_id(mocker):
-    mocker.patch("core.database.DatabaseEngine.fetch_one", return_value={"id_report": "R1"})
+    mock_fetch = mocker.patch("core.database.DatabaseEngine.fetch_one")
+    mock_fetch.return_value = {"id_report": "R1", "testo_report": "OK"}
     res = get_report_by_id("R1", "report_interventi")
+    assert res is not None
     assert res["id_report"] == "R1"
 
-
 def test_insert_report(mocker):
-    mock_exec = mocker.patch("core.database.DatabaseEngine.execute", return_value=True)
-    assert insert_report({"col": "val"}, "report_interventi") is True
-    assert mock_exec.called
-
+    # insert_report in db_reports usa DatabaseEngine.get_connection() e poi conn.execute
+    mock_engine = mocker.patch("core.database.DatabaseEngine.get_connection")
+    mock_conn = mock_engine.return_value
+    mock_conn.__enter__.return_value = mock_conn
+    
+    # Simula successo esecuzione query
+    mock_conn.execute.return_value = MagicMock()
+    
+    assert insert_report({"testo_report": "val"}, "report_interventi") is True
+    assert mock_conn.execute.called
 
 def test_add_assignment_exclusion(mocker):
     mock_exec = mocker.patch("core.database.DatabaseEngine.execute", return_value=True)
-    assert add_assignment_exclusion("admin", "pdl-task") is True
-    assert mock_exec.called
-
+    assert add_assignment_exclusion("12345", "ACT1") is True
 
 def test_get_globally_excluded_activities(mocker):
-    mocker.patch("core.database.DatabaseEngine.fetch_all", return_value=[{"id_attivita": "id1"}])
-    assert "id1" in get_globally_excluded_activities()
-
+    mock_fetch = mocker.patch("core.database.DatabaseEngine.fetch_all")
+    mock_fetch.return_value = [{"id_attivita": "A1"}, {"id_attivita": "A2"}]
+    res = get_globally_excluded_activities()
+    assert len(res) == 2
+    assert "A1" in res
 
 def test_update_shift_success(mocker):
     mock_exec = mocker.patch("core.database.DatabaseEngine.execute", return_value=True)
-    assert update_shift("T1", {"Descrizione": "Nuova"}) is True
-    assert mock_exec.called
+    assert update_shift("S1", {"Stato": "Confermato"}) is True

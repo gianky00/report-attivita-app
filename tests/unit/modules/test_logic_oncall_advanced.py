@@ -50,7 +50,7 @@ def test_sync_oncall_shifts_new_dates(mocker, mock_st_oncall):
 
 def test_manual_override_logic_success(mocker, mock_st_oncall):
     """Verifica il successo della sovrascrittura manuale dei turni."""
-    mock_conn = mocker.patch("modules.shifts.logic_oncall.get_db_connection")
+    mock_conn = mocker.patch("modules.shifts.logic_oncall.DatabaseEngine.get_connection")
 
     mocker.patch(
         "modules.shifts.logic_oncall.get_user_by_matricola", return_value={"Ruolo": "Tecnico"}
@@ -65,7 +65,7 @@ def test_manual_override_logic_success(mocker, mock_st_oncall):
 
 def test_manual_override_logic_db_error(mocker, mock_st_oncall):
     """Verifica la gestione errore (rollback) durante l'override manuale."""
-    mock_conn = mocker.patch("modules.shifts.logic_oncall.get_db_connection")
+    mock_conn = mocker.patch("modules.shifts.logic_oncall.DatabaseEngine.get_connection")
     mock_conn.return_value.execute.side_effect = sqlite3.Error("Transaction error")
 
     success = manual_override_logic("REP_T1", "M1", "M2", "ADMIN1")

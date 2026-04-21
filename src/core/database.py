@@ -52,9 +52,12 @@ class DatabaseEngine:
 
     @staticmethod
     def get_connection() -> sqlite3.Connection:
-        """Restituisce una connessione configurata con row_factory."""
+        """Restituisce una connessione configurata con row_factory e performance PRAGMAs."""
         conn = sqlite3.connect(DB_NAME, timeout=20)
         conn.row_factory = sqlite3.Row
+        # Ottimizzazioni per performance e concorrenza
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
         return conn
 
     @classmethod

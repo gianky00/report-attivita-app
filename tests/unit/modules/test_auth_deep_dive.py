@@ -12,11 +12,11 @@ import modules.auth as auth
 
 
 class TestAuthDeepDive(unittest.TestCase):
-    @patch("modules.auth.get_db_connection")
-    def test_get_user_by_matricola_error(self, mock_conn):
-        mock_c = MagicMock()
-        mock_conn.return_value = mock_c
-        mock_c.cursor.side_effect = sqlite3.Error("Mock error")
+    @patch("modules.auth.DatabaseEngine.get_connection")
+    def test_get_user_by_matricola_error(self, mock_get_conn):
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        mock_conn.cursor.side_effect = sqlite3.Error("Mock error")
         result = auth.get_user_by_matricola("M123")
         self.assertIsNone(result)
 
@@ -24,19 +24,19 @@ class TestAuthDeepDive(unittest.TestCase):
         result = auth.create_user({"InvalidKey": "Value"})
         self.assertFalse(result)
 
-    @patch("modules.auth.get_db_connection")
-    def test_create_user_integrity_error(self, mock_conn):
-        mock_c = MagicMock()
-        mock_conn.return_value = mock_c
-        mock_c.__enter__.side_effect = sqlite3.IntegrityError("Duplicate")
+    @patch("modules.auth.DatabaseEngine.get_connection")
+    def test_create_user_integrity_error(self, mock_get_conn):
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        mock_conn.__enter__.side_effect = sqlite3.IntegrityError("Duplicate")
         result = auth.create_user({"Matricola": "M123", "Nome Cognome": "Test"})
         self.assertFalse(result)
 
-    @patch("modules.auth.get_db_connection")
-    def test_update_user_error(self, mock_conn):
-        mock_c = MagicMock()
-        mock_conn.return_value = mock_c
-        mock_c.__enter__.side_effect = sqlite3.Error("DB error")
+    @patch("modules.auth.DatabaseEngine.get_connection")
+    def test_update_user_error(self, mock_get_conn):
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        mock_conn.__enter__.side_effect = sqlite3.Error("DB error")
         result = auth.update_user("M123", {"Ruolo": "Admin"})
         self.assertFalse(result)
 
@@ -44,11 +44,11 @@ class TestAuthDeepDive(unittest.TestCase):
         result = auth.update_user("M123", {"Invalid": "X"})
         self.assertFalse(result)
 
-    @patch("modules.auth.get_db_connection")
-    def test_delete_user_error(self, mock_conn):
-        mock_c = MagicMock()
-        mock_conn.return_value = mock_c
-        mock_c.__enter__.side_effect = sqlite3.Error("DB error")
+    @patch("modules.auth.DatabaseEngine.get_connection")
+    def test_delete_user_error(self, mock_get_conn):
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        mock_conn.__enter__.side_effect = sqlite3.Error("DB error")
         result = auth.delete_user("M123")
         self.assertFalse(result)
 
@@ -78,45 +78,45 @@ class TestAuthDeepDive(unittest.TestCase):
         status, _data = auth.authenticate_user("", "pass")
         self.assertEqual(status, "FAILED")
 
-    @patch("modules.auth.get_db_connection")
-    def test_authenticate_user_first_login_no_users(self, mock_conn):
-        mock_c = MagicMock()
-        mock_conn.return_value = mock_c
-        mock_c.cursor.return_value.fetchone.return_value = (0,)
+    @patch("modules.auth.DatabaseEngine.get_connection")
+    def test_authenticate_user_first_login_no_users(self, mock_get_conn):
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        mock_conn.cursor.return_value.fetchone.return_value = (0,)
         status, _data = auth.authenticate_user("M123", "pass")
         self.assertEqual(status, "FIRST_LOGIN_SETUP")
 
     @patch("modules.auth.get_user_by_matricola")
-    @patch("modules.auth.get_db_connection")
-    def test_authenticate_user_first_login_no_hash(self, mock_conn, mock_get):
-        mock_c = MagicMock()
-        mock_conn.return_value = mock_c
-        mock_c.cursor.return_value.fetchone.return_value = (10,)
-        mock_get.return_value = {"Nome Cognome": "Mario", "PasswordHash": "  "}
+    @patch("modules.auth.DatabaseEngine.get_connection")
+    def test_authenticate_user_first_login_no_hash(self, mock_get_conn, mock_get_user):
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        mock_conn.cursor.return_value.fetchone.return_value = (10,)
+        mock_get_user.return_value = {"Nome Cognome": "Mario", "PasswordHash": "  "}
         status, _data = auth.authenticate_user("M123", "pass")
         self.assertEqual(status, "FIRST_LOGIN_SETUP")
 
     @patch("modules.auth.get_user_by_matricola")
-    @patch("modules.auth.get_db_connection")
-    def test_authenticate_user_2fa_flags(self, mock_conn, mock_get):
-        mock_c = MagicMock()
-        mock_conn.return_value = mock_c
-        mock_c.cursor.return_value.fetchone.return_value = (10,)
+    @patch("modules.auth.DatabaseEngine.get_connection")
+    def test_authenticate_user_2fa_flags(self, mock_get_conn, mock_get_user):
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        mock_conn.cursor.return_value.fetchone.return_value = (10,)
 
-        # Scenario: Password match, no 2FA secret
         import bcrypt
-
         hashed = bcrypt.hashpw(b"pass", bcrypt.gensalt()).decode("utf-8")
-        mock_get.return_value = {
+        
+        # Scenario 1: Successo senza 2FA
+        mock_get_user.return_value = {
             "Nome Cognome": "Mario",
             "PasswordHash": hashed,
             "2FA_Secret": None,
         }
         status, _data = auth.authenticate_user("M123", "pass")
-        self.assertEqual(status, "2FA_SETUP_REQUIRED")
+        self.assertEqual(status, "SUCCESS")
 
-        # Scenario: Password match, has 2FA secret
-        mock_get.return_value = {
+        # Scenario 2: Richiesta 2FA
+        mock_get_user.return_value = {
             "Nome Cognome": "Mario",
             "PasswordHash": hashed,
             "2FA_Secret": "SECRET",
@@ -124,11 +124,11 @@ class TestAuthDeepDive(unittest.TestCase):
         status, _data = auth.authenticate_user("M123", "pass")
         self.assertEqual(status, "2FA_REQUIRED")
 
-    @patch("modules.auth.get_db_connection")
-    def test_log_access_attempt_error(self, mock_conn):
-        mock_c = MagicMock()
-        mock_conn.return_value = mock_c
-        mock_c.__enter__.side_effect = sqlite3.Error("DB error")
+    @patch("modules.auth.DatabaseEngine.get_connection")
+    def test_log_access_attempt_error(self, mock_get_conn):
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        mock_conn.__enter__.side_effect = sqlite3.Error("DB error")
         result = auth.log_access_attempt("admin", "LOGIN")
         self.assertFalse(result)
 

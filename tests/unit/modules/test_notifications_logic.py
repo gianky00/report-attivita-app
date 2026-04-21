@@ -24,7 +24,7 @@ class TestNotificationsLogic(unittest.TestCase):
         result = notifications.leggi_notifiche("M1")
         self.assertTrue(result.empty)
 
-    @patch("modules.notifications.get_db_connection")
+    @patch("modules.notifications.DatabaseEngine.get_connection")
     def test_segna_notifica_letta_error(self, mock_conn):
         mock_c = MagicMock()
         mock_conn.return_value = mock_c

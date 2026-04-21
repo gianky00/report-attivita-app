@@ -12,10 +12,6 @@ from core.database import DatabaseEngine
 from core.logging import measure_time
 
 
-def get_db_connection() -> sqlite3.Connection:
-    """Restituisce una connessione al database core."""
-    return DatabaseEngine.get_connection()
-
 
 def add_material_request(request_data: dict[str, Any]) -> bool:
     """Inserisce una nuova richiesta di materiali nel database."""
@@ -36,7 +32,7 @@ def add_leave_request(request_data: dict[str, Any]) -> bool:
 @measure_time
 def get_material_requests() -> pd.DataFrame:
     """Recupera l'elenco di tutte le richieste materiali correnti."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM richieste_materiali", conn)
     finally:
@@ -46,7 +42,7 @@ def get_material_requests() -> pd.DataFrame:
 @measure_time
 def get_leave_requests() -> pd.DataFrame:
     """Recupera l'elenco di tutte le richieste di assenza correnti."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM richieste_assenze", conn)
     finally:
@@ -72,7 +68,7 @@ def salva_storico_assenze(dati: dict[str, Any]) -> bool:
 @measure_time
 def get_storico_richieste_materiali() -> pd.DataFrame:
     """Recupera l'intero storico delle richieste materiali archiviate."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM storico_richieste_materiali", conn)
     finally:
@@ -82,7 +78,7 @@ def get_storico_richieste_materiali() -> pd.DataFrame:
 @measure_time
 def get_storico_richieste_assenze() -> pd.DataFrame:
     """Recupera l'intero storico delle richieste assenze archiviate."""
-    conn = get_db_connection()
+    conn = DatabaseEngine.get_connection()
     try:
         return pd.read_sql_query("SELECT * FROM storico_richieste_assenze", conn)
     finally:
