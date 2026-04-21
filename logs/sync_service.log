@@ -8169,3 +8169,39 @@
 {"timestamp": "2026-03-13T10:04:56.712784", "level": "INFO", "logger": "__main__", "message": "--- AVVIO SINCRONIZZAZIONE ---", "module": "sync_data", "func": "sync", "line": 92}
 {"timestamp": "2026-03-13T10:04:56.829005", "level": "INFO", "logger": "__main__", "message": "Nessun file aggiornato sulla rete. Salto l'estrazione dati.", "module": "sync_data", "func": "sync", "line": 165}
 {"timestamp": "2026-03-13T10:04:56.829515", "level": "INFO", "logger": "__main__", "message": "--- FINE SINCRONIZZAZIONE (NESSUNA MODIFICA) ---", "module": "sync_data", "func": "sync", "line": 166}
+Traceback (most recent call last):
+  File "C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app\scripts\\sync_data.py", line 16, in <module>
+    import config
+  File "C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app\src\config.py", line 13, in <module>
+    import toml
+ModuleNotFoundError: No module named 'toml'
+2026-04-21 08:19:37.474 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+{"timestamp": "2026-04-21T08:19:37.474525", "level": "INFO", "logger": "__main__", "message": "--- AVVIO SINCRONIZZAZIONE ---", "module": "sync_data", "func": "sync", "line": 92}
+{"timestamp": "2026-04-21T08:19:37.654083", "level": "INFO", "logger": "__main__", "message": "File sincronizzato: Giornaliera 03-2026.xlsm", "module": "sync_data", "func": "sync", "line": 139}
+{"timestamp": "2026-04-21T08:19:37.809545", "level": "INFO", "logger": "__main__", "message": "File sincronizzato: Giornaliera 04-2026.xlsm", "module": "sync_data", "func": "sync", "line": 139}
+{"timestamp": "2026-04-21T08:19:37.982242", "level": "INFO", "logger": "__main__", "message": "File radice sincronizzato: ATTIVITA_PROGRAMMATE.xlsm", "module": "sync_data", "func": "sync", "line": 158}
+{"timestamp": "2026-04-21T08:19:37.982242", "level": "INFO", "logger": "__main__", "message": "Estrazione PDL in corso...", "module": "sync_data", "func": "sync", "line": 170}
+{"timestamp": "2026-04-21T08:19:37.989188", "level": "INFO", "logger": "modules.importers.excel_giornaliera", "message": "Caricamento file giornaliera: \\\\192.168.11.251\\Database_Tecnico_SMI\\Giornaliere\\Giornaliere 2026\\Giornaliera 04-2026.xlsm", "module": "excel_giornaliera", "func": "_load_day_sheet", "line": 63}
+2026-04-21 08:19:37.989 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2026-04-21 08:19:37.989 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:38.126 
+  [33m[1mWarning:[0m to view this Streamlit app on a browser, run it with the following
+  command:
+
+    streamlit run C:\Users\Coemi\Desktop\SCRIPT\report-attivita-app\scripts\\sync_data.py [ARGUMENTS]
+2026-04-21 08:19:38.126 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:38.126 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:38.126 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:38.642 Thread 'Thread-1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:38.642 Thread 'Thread-1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:38.643 Thread 'Thread-1': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:47.341 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:47.343 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-04-21 08:19:47.344 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+{"timestamp": "2026-04-21T08:19:47.467165", "level": "INFO", "logger": "modules.importers.excel_giornaliera", "message": "Caricamento file giornaliera: \\\\192.168.11.251\\Database_Tecnico_SMI\\Giornaliere\\Giornaliere 2026\\Giornaliera 04-2026.xlsm", "module": "excel_giornaliera", "func": "_load_day_sheet", "line": 63}
+{"timestamp": "2026-04-21T08:19:50.807553", "level": "INFO", "logger": "__main__", "message": "Tabella programmazione aggiornata: 0 nuovi PDL, 0 PDL rimossi/corretti per il 2026-04-20.", "module": "sync_data", "func": "update_db_pdl_programmazione", "line": 83}
+{"timestamp": "2026-04-21T08:19:50.807553", "level": "INFO", "logger": "__main__", "message": "--- FINE SINCRONIZZAZIONE ---", "module": "sync_data", "func": "sync", "line": 178}
+2026-04-21 08:24:54.298 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+{"timestamp": "2026-04-21T08:24:54.298607", "level": "INFO", "logger": "__main__", "message": "--- AVVIO SINCRONIZZAZIONE ---", "module": "sync_data", "func": "sync", "line": 92}
+{"timestamp": "2026-04-21T08:24:54.346535", "level": "INFO", "logger": "__main__", "message": "Nessun file aggiornato sulla rete. Salto l'estrazione dati.", "module": "sync_data", "func": "sync", "line": 165}
+{"timestamp": "2026-04-21T08:24:54.346535", "level": "INFO", "logger": "__main__", "message": "--- FINE SINCRONIZZAZIONE (NESSUNA MODIFICA) ---", "module": "sync_data", "func": "sync", "line": 166}
