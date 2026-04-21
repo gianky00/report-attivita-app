@@ -12,7 +12,7 @@ COPY pyproject.toml poetry.lock* ./
 
 # Configura Poetry per non creare un ambiente virtuale nel container e installa le dipendenze
 RUN poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi --without dev
+    poetry install --no-root --no-interaction --no-ansi --without dev
 
 # Copia tutto il codice dell'applicazione
 COPY . .
